@@ -1,62 +1,125 @@
-; screen_hello_fill.asm
-; Tayttaa koko nayttomuistin (0xF800-0xFF7F, 1920 sanaa) toistuvalla
-; merkkijonolla "HELLO! ". Jokainen merkki kirjoitetaan valkoisena (vari 7).
+; =============================================================================
+; screen_hello_fill.asm - Näytön täyttäminen tekstillä
+; =============================================================================
 ;
-; Muuttujat:
-;   R0 = nayttopointteri (VRAM-osoite)
-;   R1 = jaljella olevat ruudut (1920)
-;   R2 = pattern-pointteri
-;   R3 = vakio 1
-;   FP = valiaikainen merkki
-;   SP = pattern-end (0x0207)
+; KUVAUS:
+;   Täyttää koko näyttömuistin (VRAM) toistuvalla tekstillä "HELLO! ".
+;   Demonstroi näyttömuistin (Video RAM) käyttöä ja silmukkarakennetta.
 ;
-; Tulos: VRAM taynna tekstiA "HELLO! HELLO! ..."
+; NÄYTTÖMUISTI (VRAM):
+;   Osoitteet: $F800 - $FF7F (1920 sanaa)
+;   Koko: 80 saraketta x 24 riviä = 1920 merkkiä
+;   Jokainen sana = merkki + attribuutit
+;
+; MERKKISANAN RAKENNE (16 bittiä):
+;   Bitit 0-7:   ASCII-merkki
+;   Bitit 8-12:  Attribuutit (lihavointi, kursiivi, jne.)
+;   Bitit 13-15: Värikoodi (0-7)
+;
+;   Esimerkki: 0xE048 = 1110 0000 0100 1000
+;     Väri = 7 (valkoinen), ASCII = 0x48 = 'H'
+;
+; ALGORITMI:
+;   1. Tallenna merkkijono "HELLO! " RAM-muistiin (pattern)
+;   2. Käy läpi kaikki 1920 näyttöpaikkaa
+;   3. Kopioi kullakin kierroksella yksi merkki patternista
+;   4. Kun pattern loppuu, aloita alusta (wrap around)
+;
+; REKISTERIEN KÄYTTÖ:
+;   R0 = Näyttöpointteri (VRAM-osoite, $F800 -> $FF7F)
+;   R1 = Jäljellä olevat näyttöpaikat (1920 -> 0)
+;   R2 = Pattern-pointteri (nykyinen merkki patternissa)
+;   R3 = Vakio 1 (osoittimien kasvatukseen)
+;   FP = Väliaikainen merkki
+;   SP = Pattern-loppu (vertailuun)
+;
+; TULOS:
+;   Näyttö täynnä tekstiä: "HELLO! HELLO! HELLO! ..."
+;
+; =============================================================================
 
-        ; Alusta pattern RAM-alueelle 0x0200-0x0206
-        ; 0xE000 = vari 7, ASCII alimmat bitit
-        LOAD  R0, 0xE048      ; 'H'
-        STORE R0, 0x0200
-        LOAD  R0, 0xE045      ; 'E'
+        ; -----------------------------------------------
+        ; Vaihe 1: Tallenna pattern RAM-alueelle
+        ; Pattern: "HELLO! " (7 merkkiä)
+        ; Tallennetaan osoitteisiin $0200-$0206
+        ;
+        ; Merkkiformat: 0xE0XX = valkoinen väri + ASCII
+        ; -----------------------------------------------
+        LOAD  R0, 0xE048      ; 'H' (ASCII 0x48)
+        STORE R0, 0x0200      ; [0x0200] = 'H'
+
+        LOAD  R0, 0xE045      ; 'E' (ASCII 0x45)
         STORE R0, 0x0201
-        LOAD  R0, 0xE04C      ; 'L'
+
+        LOAD  R0, 0xE04C      ; 'L' (ASCII 0x4C)
         STORE R0, 0x0202
+
         LOAD  R0, 0xE04C      ; 'L'
         STORE R0, 0x0203
-        LOAD  R0, 0xE04F      ; 'O'
+
+        LOAD  R0, 0xE04F      ; 'O' (ASCII 0x4F)
         STORE R0, 0x0204
-        LOAD  R0, 0xE021      ; '!'
+
+        LOAD  R0, 0xE021      ; '!' (ASCII 0x21)
         STORE R0, 0x0205
-        LOAD  R0, 0xE020      ; ' '
+
+        LOAD  R0, 0xE020      ; ' ' (välilyönti, ASCII 0x20)
         STORE R0, 0x0206
 
-        ; Alusta kirjoitussilmukka
-        LOAD  R0, 0xF800      ; VRAM alku
-        LOAD  R1, 1920        ; 80 x 24
-        LOAD  R2, 0x0200      ; pattern alku
-        LOAD  R3, 1
-        LOAD  SP, 0x0207      ; pattern loppu (exclusive)
+        ; -----------------------------------------------
+        ; Vaihe 2: Alusta kirjoitussilmukka
+        ; -----------------------------------------------
+        LOAD  R0, 0xF800      ; R0 = VRAM alku
+        LOAD  R1, 1920        ; R1 = 80 x 24 = 1920 paikkaa
+        LOAD  R2, 0x0200      ; R2 = pattern alku
+        LOAD  R3, 1           ; R3 = vakio 1
+        LOAD  SP, 0x0207      ; SP = pattern loppu (exclusive)
 
-        ; Ajon aloitusmerkki
-        LOAD  FP, 0xE053      ; 'S'
-        STORE FP, 0xF8A0
+        ; -----------------------------------------------
+        ; Merkitse ajon aloitus kirjoittamalla 'S'
+        ; (debug-tarkoituksiin)
+        ; -----------------------------------------------
+        LOAD  FP, 0xE053      ; 'S' (Start)
+        STORE FP, 0xF8A0      ; Kirjoita rivin 2 alkuun
 
+; =============================================================================
+; TÄYTTÖSILMUKKA - Kirjoita "HELLO! " toistuvasti
+; =============================================================================
 fill_loop:
-        READ_IND FP, R2       ; FP = [R2]
-        STORE_IND R0, FP      ; [R0] = FP
+        ; -----------------------------------------------
+        ; Lue merkki patternista ja kirjoita näytölle
+        ; -----------------------------------------------
+        READ_IND FP, R2       ; FP = [R2] (pattern-merkki)
+        STORE_IND R0, FP      ; [R0] = FP (kirjoita näyttöön)
 
-        ADD   R0, R3          ; seuraava nayttosolu
-        ADD   R2, R3          ; seuraava pattern-merkki
+        ; -----------------------------------------------
+        ; Siirry seuraavaan näyttöpaikkaan ja pattern-merkkiin
+        ; -----------------------------------------------
+        ADD   R0, R3          ; R0++ (seuraava VRAM-osoite)
+        ADD   R2, R3          ; R2++ (seuraava pattern-merkki)
 
+        ; -----------------------------------------------
+        ; Tarkista onko pattern lopussa
+        ; Jos R2 == SP (0x0207), aloita pattern alusta
+        ; -----------------------------------------------
         CMP   R2, SP
-        JNZ   no_wrap
-        LOAD  R2, 0x0200
+        JNZ   no_wrap         ; Jos ei lopussa, ohita wrap
+        LOAD  R2, 0x0200      ; Aloita pattern alusta
 
 no_wrap:
-        SUB   R1, R3
-        JNZ   fill_loop
+        ; -----------------------------------------------
+        ; Vähennä laskuria ja jatka kunnes kaikki 1920 tehty
+        ; -----------------------------------------------
+        SUB   R1, R3          ; R1-- (jäljellä olevat paikat)
+        JNZ   fill_loop       ; Jos R1 != 0, jatka
 
-        ; Ajon lopetusmerkki
+        ; -----------------------------------------------
+        ; Merkitse ajon lopetus kirjoittamalla 'D' (Done)
+        ; -----------------------------------------------
         LOAD  FP, 0xE044      ; 'D'
         STORE FP, 0xF8A1
 
+        ; -----------------------------------------------
+        ; Valmis! Näyttö on nyt täynnä "HELLO! " -tekstiä
+        ; -----------------------------------------------
         HALT

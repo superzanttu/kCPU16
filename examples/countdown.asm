@@ -1,40 +1,94 @@
-; countdown.asm
-; Laske R0 alaspain 10:sta 0:aan SUB+JNZ-silmukalla.
-; Tulos: R0 = 0
+; =============================================================================
+; countdown.asm - Laskuri alaspäin silmukalla
+; =============================================================================
+;
+; KUVAUS:
+;   Demonstroi silmukkarakennetta (loop) käyttäen SUB ja JNZ -käskyjä.
+;   Laskee R0:n arvon 10:stä 0:aan ja tulostaa jokaisen arvon näytölle.
+;
+; SILMUKKARAKENNE:
+;   loop:
+;       SUB R0, R1          ; Vähennä laskurista 1
+;       ... (tulosta arvo)
+;       CMP R0, FP          ; Vertaa: onko R0 == 0?
+;       JNZ loop            ; Jos ei, hyppää takaisin loop-labeliin
+;
+; REKISTERIEN KÄYTTÖ:
+;   R0 = Laskuri (10 -> 0)
+;   R1 = Askelkoko (1)
+;   R2 = Näyttöpointteri (kasvaa jokaisella tulostuksella)
+;   R3 = Väliaikainen merkki
+;   FP = Väliaikainen vertailuarvo
+;
+; NÄYTTÖ:
+;   Tulostaa: "10 9 8 7 6 5 4 3 2 1 0 "
+;   Jokainen numero on erillinen merkki + välilyönti
+;
+; TULOS:
+;   R0 = 0 (laskuri on nollassa kun silmukka päättyy)
+;
+; =============================================================================
 
-        LOAD  R0, 10      ; R0 = laskuri
-        LOAD  R1, 1       ; R1 = askelkoko
-        LOAD  R2, 0xF810  ; R2 = nayttopointteri
+        ; -----------------------------------------------
+        ; Alusta rekisterit
+        ; -----------------------------------------------
+        LOAD  R0, 10      ; R0 = laskuri, aloita arvosta 10
+        LOAD  R1, 1       ; R1 = askelkoko (vähennetään 1 kerrallaan)
+        LOAD  R2, 0xF810  ; R2 = näyttöpointteri (rivi 0, sarake 16)
 
-        ; Tulosta aloitusarvo "10 "
-        LOAD  R3, 0xE031  ; '1'
-        STORE_IND R2, R3
-        ADD   R2, R1
-        LOAD  R3, 0xE030  ; '0'
-        STORE_IND R2, R3
-        ADD   R2, R1
-        LOAD  R3, 0xE020  ; ' '
-        STORE_IND R2, R3
-        ADD   R2, R1
+        ; -----------------------------------------------
+        ; Tulosta aloitusarvo "10 " (kaksinumeroinen erikoistapaus)
+        ; -----------------------------------------------
+        LOAD  R3, 0xE031  ; R3 = '1' (valkoinen)
+        STORE_IND R2, R3  ; [R2] = '1'
+        ADD   R2, R1      ; R2++ (seuraava näyttöpaikka)
 
+        LOAD  R3, 0xE030  ; R3 = '0'
+        STORE_IND R2, R3  ; [R2] = '0'
+        ADD   R2, R1      ; R2++
+
+        LOAD  R3, 0xE020  ; R3 = ' ' (välilyönti)
+        STORE_IND R2, R3  ; [R2] = ' '
+        ADD   R2, R1      ; R2++
+
+; =============================================================================
+; PÄÄSILMUKKA - Laske 9:stä 0:aan
+; =============================================================================
 loop:
-        SUB   R0, R1      ; R0--
+        ; -----------------------------------------------
+        ; Vähennä laskuria yhdellä
+        ; -----------------------------------------------
+        SUB   R0, R1      ; R0 = R0 - 1
 
-        ; Tulosta nykyinen arvo yhtena numerona (9..0)
-        CPY   R3, R0
-        LOAD  FP, 0xE030
-        ADD   R3, FP
-        STORE_IND R2, R3
-        ADD   R2, R1
+        ; -----------------------------------------------
+        ; Tulosta nykyinen arvo (9..0) yhtenä numerona
+        ; Muunnetaan numero merkiksi: '0' + R0
+        ; ASCII '0' = 0x30, joten numero + 0x30 = merkki
+        ; Valkoinen väri: 0xE000, joten 0xE030 + numero
+        ; -----------------------------------------------
+        CPY   R3, R0      ; R3 = R0 (laskurin kopio)
+        LOAD  FP, 0xE030  ; FP = valkoinen '0' -pohja
+        ADD   R3, FP      ; R3 = 0xE030 + numero = merkki
+        STORE_IND R2, R3  ; [R2] = merkki
+        ADD   R2, R1      ; R2++ (seuraava näyttöpaikka)
 
-        ; Erotin
-        LOAD  R3, 0xE020  ; ' '
-        STORE_IND R2, R3
-        ADD   R2, R1
+        ; -----------------------------------------------
+        ; Tulosta välilyönti erottimeksi
+        ; -----------------------------------------------
+        LOAD  R3, 0xE020  ; R3 = ' ' (valkoinen välilyönti)
+        STORE_IND R2, R3  ; [R2] = ' '
+        ADD   R2, R1      ; R2++
 
-        ; Jatka kunnes laskuri on 0
-        LOAD  FP, 0
-        CMP   R0, FP
-        JNZ   loop
+        ; -----------------------------------------------
+        ; Jatka silmukkaa kunnes laskuri on 0
+        ; CMP asettaa Zero-lipun (Z) jos R0 == FP
+        ; JNZ hyppää takaisin jos Z == 0 (ei ollut sama)
+        ; -----------------------------------------------
+        LOAD  FP, 0       ; FP = 0 (vertailuarvo)
+        CMP   R0, FP      ; Vertaa: R0 - 0, aseta liput
+        JNZ   loop        ; Jos Z=0 (R0 != 0), hyppää loop
 
+        ; -----------------------------------------------
+        ; Silmukka päättyi, laskuri on nyt 0
+        ; -----------------------------------------------
         HALT
