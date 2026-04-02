@@ -1,19 +1,49 @@
 # pyright: reportMissingImports=false
 """Ammattimainen Textual TUI kCPU16-emulaattorille.
 
-Debuggeri-tyylinen käyttöliittymä: editori, disassembly, rekisterit,
-liput, breakpointit, muistinäkymä, pinonäkymä ja VRAM-näyttö.
+Tämä moduuli toteuttaa kCPU16-emulaattorin päätason käyttöliittymän.
+Se on debuggeri-tyylinen TUI (Text User Interface), joka yhdistää
+lähdekoodieditorin, reaaliaikaisen disassemblyn, rekisterinäkymän,
+muistinäkymän ja VRAM-näytön yhteen interaktiiviseen sovellukseen.
 
 Inspiroitu MARS/RARS, GDB TUI, Turbo Debugger ja emu8086 -ohjelmistoista.
 
+Tärkeimmät luokat:
+    KCPU16TUI       -- Päätason Textual App -sovellus (koko käyttöliittymä).
+    CommandResult   -- Komentotulkin paluuarvo (ok/virhe + viesti).
+
+Tärkeimmät funktiot:
+    _build_addr_to_line  -- Rakentaa konekieliosoite → lähdekoodirivi -mapin.
+    run_tui              -- Käynnistää TUI:n (entry point).
+
+Riippuvuudet:
+    Textual >= 0.80 (testattu 0.82.1): App, TextArea, TabbedContent, RichLog
+    Rich (Textual sisältää): Rich-markup värikoodeihin
+
+Tietovirta:
+    1. Käyttäjä kirjoittaa assembly-koodin editoriin (TextArea)
+    2. Ctrl+B → _do_assemble() kutsuu Assembler.assemble() → konekielisanat
+    3. Machine.cold_reset() + load_program() → sanat muistiin osoitteesta 0x0100
+    4. _build_addr_to_line() → osoite→rivi -mappi kursoria varten
+    5. F7/Step → machine.step() → _refresh_all() päivittää kaikki paneelit
+    6. Disassembler lukee muistia PC:n ympäriltä ja näyttää disassemblyn
+
 Layout:
-  ┌─ Toolbar ──────────────────────────────────────────────────────────┐
+  ┌─ Toolbar (Open|Save|New | Assemble ^B | Step F7|Run F5|Reset ^R | BP F2)
   ├────────────────────┬─────────────────────┬─────────────────────────┤
-  │ SOURCE EDITOR      │ DISASSEMBLY         │ REGISTERS + FLAGS + CPU │
+  │ SOURCE EDITOR      │ DISASSEMBLY         │ REGISTERS               │
+  │ (TextArea, muokk.) │ (Static, värikood.) │ (muuttuneet=punainen)   │
+  │ rivinumerot        │ ●=breakpoint        │                         │
+  │ kursori seuraa PC  │ ▶=nykyinen PC       ├─────────────────────────┤
+  │ width: 2fr         │ width: 2fr          │ FLAGS  Z N C V I P      │
+  │                    │                     │ (vihreä=1, dim=0)       │
+  │                    │                     ├─────────────────────────┤
+  │                    │                     │ CPU: READY/HALTED/EXIT  │
+  │                    │                     │ Cycles: N  BP: lista    │
   ├────────────────────┴─────────────────────┴─────────────────────────┤
-  │ [Log] [Screen] [Memory] [Stack]   (TabbedContent)                  │
+  │ [Log] [Screen] [Memory] [Stack]   (TabbedContent, height: 14)      │
   ├────────────────────────────────────────────────────────────────────┤
-  │ > command input                                              Footer│
+  │ > komentosyöte                                              Footer│
   └────────────────────────────────────────────────────────────────────┘
 """
 
@@ -56,18 +86,25 @@ from .specs import format_arch_spec_report
 
 # ---------------------------------------------------------------------------
 # Rekisteri-indeksi -> nimi
+#
+# Disassembler palauttaa operandit numeerisina arvoina (esim. "0, 42").
+# Ihmisen on vaikea lukea "LOAD 0, 42" - paljon selkeämpi on "LOAD R0, #42".
+# REG_NAMES muuntaa konekielen rekisteri-indeksit luettaviksi nimiksi.
+# _REG_FIRST ja _REG_SECOND kertovat, mitkä käskyt odottavat rekisteriä
+# missäkin operandipositiossa, jotta _fmt_operands() osaa päätellä
+# onko numero rekisteri-indeksi vai välitön arvo.
 # ---------------------------------------------------------------------------
 
 REG_NAMES = {0: "R0", 1: "R1", 2: "R2", 3: "R3", 4: "FP", 5: "SP"}
 
-# Käskyt joissa 1. operandi on rekisteri-indeksi
+# Käskyt joissa 1. operandi on rekisteri-indeksi (esim. LOAD R0, ...)
 _REG_FIRST = {
     "LOAD", "CPY", "READ", "STORE", "READ_IND", "STORE_IND",
     "ADD", "SUB", "MUL", "DIV", "CMP",
     "AND", "OR", "XOR", "NOT", "SHL", "SHR",
     "PUSH", "POP", "SMPR", "STMR", "DREAD", "DWRITE",
 }
-# Käskyt joissa 2. operandi on myös rekisteri-indeksi
+# Käskyt joissa myös 2. operandi on rekisteri-indeksi (esim. ADD R0, R1)
 _REG_SECOND = {
     "CPY", "ADD", "SUB", "MUL", "DIV", "CMP",
     "AND", "OR", "XOR", "SHL", "SHR",
@@ -77,6 +114,16 @@ _REG_SECOND = {
 
 @dataclass
 class CommandResult:
+    """Komentotulkin (_execute_command) paluuarvo.
+
+    Kapseloi komennon onnistumisen ja käyttäjälle näytettävän viestin.
+    Viesti voi sisältää Rich-markupia (esim. [red]virhe[/red]).
+
+    Attribuutit:
+        ok:      True = komento onnistui, False = virhe.
+        message: Käyttäjälle näytettävä teksti (Rich-markup sallittu).
+                 Tyhjä merkkijono = ei näytetä mitään.
+    """
     ok: bool
     message: str
 
@@ -86,7 +133,36 @@ class CommandResult:
 # ---------------------------------------------------------------------------
 
 def _build_addr_to_line(source: str, assembler: Assembler) -> dict[int, int]:
-    """Rakenna osoite -> lähdekoodirivi -mappi assembloidusta koodista."""
+    """Rakenna osoite → lähdekoodirivi -mappi assembloidusta koodista.
+
+    Tarkoitus: Kun käyttäjä steppaa koodia (F7), editorin kursori siirtyy
+    automaattisesti sille riville, joka vastaa nykyistä PC-osoitetta.
+    Tämä funktio rakentaa mapin joka mahdollistaa tuon yhteyden.
+
+    Makrotuki - miksi kaksi vaihetta:
+        1. Pass 0 (expand macros): Assemblerin makrot laajennetaan, jolloin
+           yksi lähdekoodirivi voi tuottaa useita expanded-rivejä.
+           Expanded-koodin rivinumerot EI vastaa alkuperäisiä.
+        2. exp_to_orig -mappi: Yhdistää jokaisen expanded-rivin takaisin
+           alkuperäiseen lähdekoodirivinumeroon vertaamalla rivien sisältöä.
+           Jos vastaavuutta ei löydy (makroista syntyneet rivit), käytetään
+           edellisen vastanneen rivin numeroa.
+
+    Osoite→rivi -mapin rakentaminen:
+        - Käy expanded-koodin läpi rivi kerrallaan
+        - Ohittaa tyhjät rivit ja labelit (eivät tuota konekieltä)
+        - Tunnistaa mnemoniikin ja hakee sen opcode-taulusta
+        - Laskee osoitteen: addr += 1 + operandien_määrä (käskysana + operandit)
+        - Tallentaa result[addr] = alkuperäinen rivinumero
+
+    Parametrit:
+        source:    Alkuperäinen lähdekoodi (editorin sisältö).
+        assembler: Assembler-instanssi (tarvitaan makrolaajennukseen).
+
+    Palauttaa:
+        dict[int, int]: Mappi {konekieliosoite: lähdekoodirivinumero (1-pohjainen)}.
+        Tyhjä dict jos makrolaajennus epäonnistuu.
+    """
     try:
         expanded, start_addr = assembler._pass0_expand_macros_and_origin(
             source, 0x0100
@@ -141,11 +217,54 @@ def _build_addr_to_line(source: str, assembler: Assembler) -> dict[int, int]:
 
 
 class KCPU16TUI(App[None]):
-    """Ammattimainen kCPU16 emulaattori-debuggeri."""
+    """Päätason Textual-sovellus: kCPU16 emulaattori-debuggeri.
+
+    Tämä on koko TUI:n juuriluokka. Se luo kaikki widgetit (editori,
+    disassembly, rekisterit, jne.), hallinnoi koneen tilaa ja välittää
+    käyttäjän syötteet (näppäimet, painikkeet, komennot) oikeille toiminnoille.
+
+    Instanssimuuttujat:
+        machine       -- KCPU16Machine: CPU + muisti + laitteet.
+        assembler     -- Assembler: kääntää assembly → konekieli.
+        disassembler  -- Disassembler: konekieli → luettava assembly.
+        dbg           -- DebugState: breakpointit + rekisterimuutosten seuranta.
+                         HUOM: self.dbg (EI self.debug), koska Textual App:ssa
+                         on sisäänrakennettu debug-property.
+        current_file  -- Avatun tiedoston polku (None = ei tallennettu).
+        mem_view_addr -- Memory-näkymän aloitusosoite (oletus 0x0100).
+        addr_to_line  -- Osoite → lähdekoodirivi -mappi (_build_addr_to_line).
+        is_assembled  -- True kun koodi on assembloitu ja ladattu muistiin.
+
+    Widget-hierarkia:
+        Header → Toolbar (Horizontal + Buttonit) → main-area (Horizontal):
+            editor-pane (TextArea) | disasm-pane (Static) | right-sidebar:
+                regs-pane | flags-pane | cpu-pane
+        → bottom-tabs (TabbedContent): Log | Screen | Memory | Stack
+        → cmd-input (Input) → Footer
+
+    Päivityslogiikka:
+        _refresh_all() kutsutaan jokaisen muutoksen jälkeen (step, run, reset,
+        assemble). Se päivittää kaikki paneelit synkronisesti. Timer-pollausta
+        ei käytetä, paitsi Screen-välilehti päivittyy 0.5s välein (VRAM voi
+        muuttua IO-operaatioilla ilman explisiittistä refreshiä).
+    """
 
     TITLE = "kCPU16 Debugger v1.0"
     SUB_TITLE = "16-bit CPU Emulator"
 
+    # Textual CSS: Määrittelee koko sovelluksen visuaalisen layoutin.
+    #
+    # Rakenne ylhäältä alas:
+    #   1. #toolbar          - Yläpalkki: painikkeet (dock: top, height: 3)
+    #   2. #main-area        - Kolmen sarakkeen pääalue (height: 1fr, joustava):
+    #      - #editor-pane    - Lähdekoodi-editori (width: 2fr, vasemmalla)
+    #      - #disasm-pane    - Disassembly-näkymä (width: 2fr, keskellä)
+    #      - #right-sidebar  - Oikea sivupalkki (width: 30, kiinteä):
+    #          #regs-pane, #flags-pane, #cpu-pane päällekkäin
+    #   3. #bottom-tabs      - Alatason välilehdet (dock: bottom, height: 14):
+    #      Log, Screen, Memory, Stack
+    #   4. #cmd-input        - Komentosyöte (dock: bottom, height: 3)
+    #   5. Footer            - Textual Footer (näppäinsidonnaisuudet)
     CSS = """
     Screen {
         layout: vertical;
@@ -257,6 +376,10 @@ class KCPU16TUI(App[None]):
     }
     """
 
+    # Näppäinsidonnaisuudet (Textual Binding).
+    # priority=True tarkoittaa, että nämä toimivat myös TextArea:n ollessa
+    # aktiivinen (muuten TextArea kaappaisi näppäimen).
+    # Sidonnaisuudet näkyvät myös Footerissa automaattisesti.
     BINDINGS = [
         Binding("ctrl+q", "quit", "Quit", priority=True),
         Binding("f2", "toggle_breakpoint", "BP F2", priority=True),
@@ -272,6 +395,22 @@ class KCPU16TUI(App[None]):
     ]
 
     def __init__(self) -> None:
+        """Alusta TUI-sovellus ja sen sisäinen tila.
+
+        Luo emulaattorikomponentit (machine, assembler, disassembler, dbg)
+        ja asettaa oletusarvot. Tässä vaiheessa widgettejä ei vielä ole
+        luotu - ne syntyvät compose()-metodissa.
+
+        Instanssimuuttujat:
+            machine       -- CPU-emulaattori (muisti, rekisterit, laitteet).
+            assembler     -- Assembly → konekieli -kääntäjä.
+            disassembler  -- Konekieli → assembly -purkaja.
+            dbg           -- Debug-tila (breakpointit, rekisterisnapshot).
+            current_file  -- Avoinna oleva tiedostopolku (None aluksi).
+            mem_view_addr -- Memory-tabin näyttöosoite (oletus 0x0100).
+            addr_to_line  -- PC-osoite → editorin rivinumero -mappi.
+            is_assembled  -- Onko koodi assembloitu muistiin.
+        """
         super().__init__()
         self.machine = KCPU16Machine()
         self.assembler = Assembler()
@@ -287,6 +426,30 @@ class KCPU16TUI(App[None]):
     # ------------------------------------------------------------------
 
     def compose(self) -> ComposeResult:
+        """Rakenna sovelluksen widget-puu (Textual compose -pattern).
+
+        Palauttaa kaikki widgetit yield-lauseilla. Textual kutsuu tätä
+        kerran sovelluksen käynnistyessä.
+
+        Widget-hierarkia:
+            Header (kellonaika)
+            Toolbar (#toolbar): Open, Save, New, Assemble, Step, Run, Reset,
+                                BP, Clear, Help -painikkeet
+            Main area (#main-area, Horizontal):
+                #editor-pane: TextArea (language=None, ei tree-sitter ASM:lle)
+                #disasm-pane: Static (päivitetään _refresh_disassembly():lla)
+                #right-sidebar:
+                    #regs-pane: Rekisterit (Static)
+                    #flags-pane: Liput (Static)
+                    #cpu-pane: CPU-tila (Static)
+            Bottom tabs (#bottom-tabs, TabbedContent):
+                Log (RichLog, max 500 riviä)
+                Screen (Static, VRAM-renderöinti)
+                Memory (Static, hex dump)
+                Stack (Static, pinonäkymä)
+            #cmd-input: Komentosyöte (Input)
+            Footer: Näppäinsidonnaisuudet
+        """
         yield Header(show_clock=True)
 
         # Toolbar
@@ -348,6 +511,17 @@ class KCPU16TUI(App[None]):
     # ------------------------------------------------------------------
 
     def on_mount(self) -> None:
+        """Alusta sovellus kun DOM on valmis (Textual lifecycle).
+
+        Suoritetaan kerran kun kaikki widgetit ovat luotu ja kiinnitetty
+        DOM-puuhun. Tässä:
+        1. Asetetaan paneelien otsikot (border_title)
+        2. Resetoidaan kone (cold_reset) ja otetaan rekisterisnapshot
+        3. Asetetaan oletuskoodi editoriin (esimerkki-kommentit)
+        4. Kirjoitetaan tervetuloa-viestit lokiin
+        5. Päivitetään kaikki näkymät (_refresh_all)
+        6. Käynnistetään Screen-tabin 0.5s päivitystimer
+        """
         self.query_one("#editor-pane").border_title = "Source Editor"
         self.query_one("#disasm-pane").border_title = "Disassembly"
         self.query_one("#regs-pane").border_title = "Registers"
@@ -383,6 +557,12 @@ class KCPU16TUI(App[None]):
     # ------------------------------------------------------------------
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
+        """Käsittele toolbar-painikkeiden klikkaukset.
+
+        Yhdistää painikkeen id:n (esim. "btn-step") vastaavaan
+        action-metodiin dict-lookupin kautta. Tämä välttää pitkän
+        if/elif-ketjun ja tekee uusien painikkeiden lisäämisestä helppoa.
+        """
         actions = {
             "btn-open": self.action_open_file,
             "btn-save": self.action_save_file,
@@ -404,6 +584,12 @@ class KCPU16TUI(App[None]):
     # ------------------------------------------------------------------
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
+        """Käsittele komentosyöte (Enter-painallus #cmd-input -kentässä).
+
+        Lukee komennon, tyhjentää kentän, logittaa komennon, suorittaa
+        sen _execute_command():lla ja näyttää tuloksen. Virheelliset
+        komennot näytetään punaisella. Päivittää kaikki näkymät lopuksi.
+        """
         cmd = event.value.strip()
         event.input.value = ""
         if not cmd:
@@ -422,6 +608,12 @@ class KCPU16TUI(App[None]):
     # ------------------------------------------------------------------
 
     def action_step_once(self) -> None:
+        """Suorita yksi konekielikäsky (F7/F10 tai Step-painike).
+
+        Tarkistaa ensin onko CPU pysähtynyt (HALT/EXIT). Jos ei,
+        suorittaa yhden käskyn, siirtää editorikursorin vastaavalle
+        riville, logittaa käskyn tiedot ja päivittää näkymät.
+        """
         if self.machine.cpu.halted or self.machine.process_exited:
             self._log("[yellow]CPU stopped. Reset to continue.[/yellow]")
             self._refresh_all()
@@ -432,12 +624,24 @@ class KCPU16TUI(App[None]):
         self._refresh_all()
 
     def action_run_program(self) -> None:
+        """Suorita ohjelma breakpointiin tai max 10000 sykliin asti (F5).
+
+        Käyttää _run_with_breakpoints()-metodia, joka steppaa yksi käsky
+        kerrallaan ja tarkistaa breakpointit jokaisen jälkeen. Logittaa
+        tuloksen ja päivittää näkymät.
+        """
         result = self._run_with_breakpoints(10000)
         self._log(result)
         self._update_exec_line()
         self._refresh_all()
 
     def action_reset_machine(self) -> None:
+        """Resetoi kone alkutilaan (Ctrl+R tai Reset-painike).
+
+        Cold reset nollaa CPU:n, muistin ja laitteet. Asettaa
+        is_assembled=False ja tyhjentää addr_to_line-mapin. Ottaa
+        uuden rekisterisnapshot vertailua varten.
+        """
         self.machine.cold_reset()
         self.is_assembled = False
         self.addr_to_line = {}
@@ -446,6 +650,12 @@ class KCPU16TUI(App[None]):
         self._refresh_all()
 
     def action_toggle_breakpoint(self) -> None:
+        """Aseta tai poista breakpoint nykyiseen PC-osoitteeseen (F2).
+
+        Kutsuu dbg.toggle_breakpoint() joka palauttaa True jos lisättiin,
+        False jos poistettiin. Logittaa tuloksen ja päivittää näkymät
+        (disassembly näyttää ● breakpointatuille riveille).
+        """
         addr = self.machine.regs.pc
         added = self.dbg.toggle_breakpoint(addr)
         if added:
@@ -455,6 +665,12 @@ class KCPU16TUI(App[None]):
         self._refresh_all()
 
     def action_open_file(self) -> None:
+        """Avaa assembly-tiedosto editoriin (Ctrl+O).
+
+        Jos komentosyötteessä ei ole polkua, asettaa fokuksen syötekenttään
+        ja kirjoittaa "open " alkuun. Käyttäjä kirjoittaa polun ja painaa
+        Enter, jolloin on_input_submitted → _execute_command käsittelee sen.
+        """
         cmd_input = self.query_one("#cmd-input", Input)
         path_str = cmd_input.value.strip()
         if not path_str or path_str.startswith("open "):
@@ -465,6 +681,11 @@ class KCPU16TUI(App[None]):
         self._do_open(Path(path_str))
 
     def action_save_file(self) -> None:
+        """Tallenna editorin sisältö tiedostoon (Ctrl+S).
+
+        Jos tiedosto on jo avattu (current_file), tallennetaan suoraan.
+        Muuten ohjataan käyttäjä kirjoittamaan polku komentosyötteeseen.
+        """
         if self.current_file:
             self._do_save(self.current_file)
         else:
@@ -474,14 +695,29 @@ class KCPU16TUI(App[None]):
             self._log("Type file path after 'save' and press Enter.")
 
     def action_assemble_code(self) -> None:
+        """Assembloi editorin koodi ja lataa se muistiin (Ctrl+B).
+
+        Delegoi _do_assemble()-metodille. Tämä on vain action-wrapperi
+        joka mahdollistaa kutsumisen sekä näppäimellä että painikkeella.
+        """
         self._do_assemble()
 
     def action_clear_screen(self) -> None:
+        """Tyhjennä VRAM-näyttömuisti (F9).
+
+        Nollaa kaikki VRAM-osoitteet (0xF800-0xFFCF). Hyödyllistä
+        kun haluaa aloittaa piirron puhtaalta ruudulta ilman resettiä.
+        """
         self.machine.clear_screen_memory()
         self._log("VRAM cleared.")
         self._refresh_all()
 
     def action_show_help(self) -> None:
+        """Näytä ohje-teksti lokissa (F1).
+
+        Tulostaa loki-widgettiin listan kaikista näppäinsidonnaisuuksista
+        ja komennoista Rich-muotoiltuna.
+        """
         self._log("")
         self._log("[bold]--- kCPU16 Debugger Help ---[/bold]")
         self._log("[bold]Keyboard:[/bold]")
@@ -502,6 +738,11 @@ class KCPU16TUI(App[None]):
     # ------------------------------------------------------------------
 
     def _do_new(self) -> None:
+        """Luo uusi tyhjä dokumentti editoriin.
+
+        Tyhjentää editorin, nollaa tiedostopolun ja assembly-tilan.
+        Ei resetoi konetta - kone jää edelliseen tilaan.
+        """
         self.query_one("#editor", TextArea).text = ""
         self.current_file = None
         self.is_assembled = False
@@ -509,6 +750,12 @@ class KCPU16TUI(App[None]):
         self._log("New document.")
 
     def _do_open(self, path: Path) -> None:
+        """Avaa tiedosto ja lataa sen sisältö editoriin.
+
+        Lukee tiedoston UTF-8-enkoodauksella. Onnistuessa asettaa
+        current_file = path ja is_assembled = False (koodi pitää
+        assembloida uudelleen). Virhetilanteessa logittaa virheen.
+        """
         try:
             content = path.read_text(encoding="utf-8")
             self.query_one("#editor", TextArea).text = content
@@ -519,6 +766,12 @@ class KCPU16TUI(App[None]):
             self._log(f"[red]Error: {e}[/red]")
 
     def _do_save(self, path: Path) -> None:
+        """Tallenna editorin sisältö tiedostoon.
+
+        Kirjoittaa editorin tekstin UTF-8-tiedostoksi. Asettaa
+        current_file = path, jotta seuraava Ctrl+S tallentaa samaan
+        paikkaan. Virhetilanteessa logittaa virheen.
+        """
         try:
             content = self.query_one("#editor", TextArea).text
             path.write_text(content, encoding="utf-8")
@@ -528,6 +781,22 @@ class KCPU16TUI(App[None]):
             self._log(f"[red]Error: {e}[/red]")
 
     def _do_assemble(self) -> None:
+        """Assembloi editorin koodi ja lataa se koneen muistiin.
+
+        Tämä on TUI:n keskeinen operaatio - "editori → konekieli → muisti":
+
+        1. Lue editorin teksti (source)
+        2. assembler.assemble(source) → lista 16-bittisiä sanoja
+        3. machine.cold_reset() → nollaa CPU, muisti, laitteet
+        4. machine.load_program(words) → lataa sanat osoitteesta 0x0100
+        5. _build_addr_to_line() → rakenna osoite→rivi -mappi
+        6. dbg.snapshot_registers() → ota vertailupiste rekistereille
+        7. _update_exec_line() → siirrä kursori PC:n riville
+        8. _refresh_all() → päivitä kaikki näkymät
+
+        Virhetilanteessa (syntaksivirhe, tuntematon käsky) assembly
+        keskeytyy ja virhe näytetään lokissa punaisella.
+        """
         source = self.query_one("#editor", TextArea).text
         if not source.strip():
             self._log("[yellow]Editor is empty.[/yellow]")
@@ -550,6 +819,13 @@ class KCPU16TUI(App[None]):
             self.is_assembled = False
 
     def _do_load_example(self, name: str) -> None:
+        """Lataa esimerkkiohjelma editoriin ja assembloi se.
+
+        Hakee esimerkin nimen perusteella examples-moduulista,
+        asettaa sen editoriin ja kutsuu automaattisesti _do_assemble().
+        Jos nimeä ei löydy, näyttää virheen ja kehottaa kokeilemaan
+        'examples'-komentoa.
+        """
         try:
             source = get_source(name)
             self.query_one("#editor", TextArea).text = source
@@ -566,6 +842,25 @@ class KCPU16TUI(App[None]):
     # ------------------------------------------------------------------
 
     def _run_with_breakpoints(self, max_cycles: int) -> str:
+        """Suorita ohjelmaa kunnes breakpoint, HALT, EXIT tai sykliraja.
+
+        Ero machine.run()-metodiin: tämä steppaa yhden käskyn kerrallaan
+        ja tarkistaa breakpointit JOKAISEN käskyn jälkeen. machine.run()
+        ajaisi kaikki kerralla ilman breakpoint-tukea.
+
+        Suoritussilmukka:
+            1. machine.step() - suorita yksi käsky
+            2. Tarkista: halted? → palauta "HALTED"
+            3. Tarkista: process_exit? → palauta "EXITED"
+            4. Tarkista: onko uusi PC breakpointattu? → palauta "Breakpoint at..."
+            5. Toista kunnes max_cycles saavutettu
+
+        Parametrit:
+            max_cycles: Suurin sallittu syklimäärä (oletus 10000 F5:lle).
+
+        Palauttaa:
+            Rich-muotoiltu merkkijono joka kertoo pysähtymisen syyn.
+        """
         cpu = self.machine.cpu
         if cpu.halted or cpu.process_exit_requested:
             return "[yellow]CPU stopped. Reset to continue.[/yellow]"
@@ -590,6 +885,12 @@ class KCPU16TUI(App[None]):
     # ------------------------------------------------------------------
 
     def _refresh_all(self) -> None:
+        """Päivitä kaikki näkymäpaneelit kerralla.
+
+        Kutsutaan jokaisen tilan muutoksen jälkeen (step, run, reset,
+        assemble, komentosyöte). Ei timer-pollausta - paitsi Screen-tab
+        jolla on oma 0.5s intervalli (ks. on_mount).
+        """
         self._refresh_disassembly()
         self._refresh_registers()
         self._refresh_flags()
@@ -599,6 +900,31 @@ class KCPU16TUI(App[None]):
         self._refresh_stack()
 
     def _refresh_disassembly(self) -> None:
+        """Päivitä disassembly-paneeli PC:n ympäriltä.
+
+        Näyttöikkuna (scan window):
+            - Skannaa taaksepäin PC:stä max 15 osoitetta löytääkseen
+              aiempia käskyjä. Ohittaa tyhjät muistipaikat (0x0000),
+              mutta pysähtyy kun löytää aukon → ei näytä turhaa dataa.
+            - Clamp: näytä enintään 10 sanaa ennen PC:tä.
+            - Eteenpäin: näytä max 80 sanaa PC:n jälkeen.
+
+        Breakpointit:
+            - Breakpointatut osoitteet sisällytetään aina, vaikka ne
+              olisivat scan-ikkunan ulkopuolella (lähellä).
+            - Breakpointattu rivi saa ● (punainen pallo) -merkin.
+
+        Suodatus:
+            - ".word 0x0000" -rivit piilotetaan (tyhjä muisti) PAITSI:
+              * Rivi on PC:n kohdalla tai max 3 osoitteen päässä
+              * Rivillä on breakpoint
+
+        Muotoilu:
+            - ▶ = nykyinen PC (korostettu tausta)
+            - ● = breakpoint (punainen pallo)
+            - Osoite syaanilla, mnemoniikki keltaisella
+            - Rekisterit sinisellä, välittömät arvot vihreällä
+        """
         pc = self.machine.regs.pc
 
         # Scan backward from PC to find a good start point.
@@ -671,7 +997,16 @@ class KCPU16TUI(App[None]):
         return f"[cyan]{addr}[/]: [yellow]{mnemonic:<10}[/] {fmt_ops}"
 
     def _fmt_operands(self, mnemonic: str, ops_str: str) -> str:
-        """Muunna operandit luettavaan muotoon (rekisterinimet, värit)."""
+        """Muunna operandit luettavaan muotoon (rekisterinimet, värit).
+
+        Disassembler palauttaa operandit numeerisina (esim. "0, 42").
+        Tämä metodi muuntaa ne ihmisluettaviksi käyttäen REG_NAMES-lookuppia:
+        - _REG_FIRST kertoo, odottaako 1. operandi rekisteri-indeksiä
+        - _REG_SECOND kertoo, odottaako 2. operandi rekisteri-indeksiä
+        - Jos kyseessä on rekisteri, haetaan nimi REG_NAMES-dictistä (0→R0, jne.)
+          ja värjätään siniseksi
+        - Muut arvot (välittömät, osoitteet) näytetään vihreällä hex-muodossa
+        """
         if not ops_str:
             return ""
         ops = [o.strip() for o in ops_str.split(",")]
@@ -694,6 +1029,13 @@ class KCPU16TUI(App[None]):
         return ", ".join(result)
 
     def _refresh_registers(self) -> None:
+        """Päivitä rekisteripaneeli.
+
+        Näyttää kaikki rekisterit (R0-R3, FP, SP, PC, SR) sekä hex- että
+        desimaaliarvoina. Käyttää dbg.snapshot_registers()-metodia vertaamaan
+        edelliseen tilaan - muuttuneet rekisterit korostetaan punaisella
+        boldilla, muuttumattomat näytetään syaanilla.
+        """
         regs = self.machine.dump_registers()
         changed = self.dbg.snapshot_registers(regs)
         lines: list[str] = []
@@ -707,6 +1049,16 @@ class KCPU16TUI(App[None]):
         self.query_one("#regs-content", Static).update("\n".join(lines))
 
     def _refresh_flags(self) -> None:
+        """Päivitä lippupaneeli (SR-rekisterin yksittäiset bitit).
+
+        Näyttää jokaisen lipun erikseen:
+        - Z (Zero), N (Negative), C (Carry), V (Overflow), I (Interrupt),
+          P (Privilege)
+        - Asetettu lippu (1): vihreä bold
+        - Nollattu lippu (0): himmennetty (dim)
+        - Moodi: KERNEL (vihreä) tai USER (keltainen), riippuen
+          privilege-bitistä (SR_FLAG_P / in_kernel_mode)
+        """
         r = self.machine.regs
         flags = [
             ("Z", r.get_flag(SR_FLAG_Z)),
@@ -731,6 +1083,13 @@ class KCPU16TUI(App[None]):
         )
 
     def _refresh_cpu_status(self) -> None:
+        """Päivitä CPU-tilapaneeli.
+
+        Näyttää:
+        - Tila: READY (vihreä), HALTED (punainen) tai EXITED (keltainen)
+        - Syklit: CPU:n suorittamien käskyjen kokonaismäärä
+        - Breakpoint-lista: kaikki asetetut breakpointit (jos on)
+        """
         cpu = self.machine.cpu
         if cpu.halted:
             state = "[bold red]HALTED[/]"
@@ -748,6 +1107,14 @@ class KCPU16TUI(App[None]):
         self.query_one("#cpu-content", Static).update("\n".join(lines))
 
     def _refresh_screen_tab(self) -> None:
+        """Päivitä Screen-välilehden VRAM-renderöinti.
+
+        Kutsuu screen.render_with_rich_colors() joka lukee VRAM-alueen
+        (0xF800-0xFFCF, 80x25) ja tuottaa Rich-muotoillun tekstin
+        väreillä (FG/BG). Kutsutaan sekä _refresh_all():sta että
+        0.5s intervallitimerista (VRAM voi muuttua IO-operaatiolla
+        ilman explisiittistä refreshiä, esim. DWRITE-käskyn aikana).
+        """
         try:
             rendered = self.machine.screen.render_with_rich_colors(
                 self.machine.memory
@@ -757,6 +1124,17 @@ class KCPU16TUI(App[None]):
             pass
 
     def _refresh_memory(self) -> None:
+        """Päivitä Memory-välilehden hex dump -näkymä.
+
+        Näyttää 16 rivia x 8 sanaa = 128 sanaa alkaen mem_view_addr:sta.
+        Muistiosoitetta voi vaihtaa 'mem <addr>' -komennolla.
+
+        Formaatti (joka rivi):
+            ADDR: XXXX XXXX XXXX XXXX XXXX XXXX XXXX XXXX  ASCII
+        - ADDR: osoite syaanilla (4-bittinen hex)
+        - XXXX: sanan arvo hex-muodossa (16-bittinen)
+        - ASCII: sanan alemman tavun tulostettava merkki (tai '.')
+        """
         addr = self.mem_view_addr
         lines = [f"[bold]Memory at 0x{addr:04X}:[/]\n"]
         for row in range(16):
@@ -782,6 +1160,13 @@ class KCPU16TUI(App[None]):
         self.query_one("#memory-view", Static).update("\n".join(lines))
 
     def _refresh_stack(self) -> None:
+        """Päivitä Stack-välilehden pinonäkymä.
+
+        Näyttää 20 sanaa SP:n yläpuolelta (SP+1 ylöspäin, koska SP
+        osoittaa viimeksi pushattuun arvoon). Ensimmäinen rivi (SP+1)
+        merkitään → -nuolella. Jokainen rivi näyttää osoitteen, arvon
+        hex-muodossa ja desimaaliarvon.
+        """
         sp = self.machine.regs.sp
         lines = [f"[bold]Stack (SP=0x{sp:04X}):[/]\n"]
         for i in range(20):
@@ -798,6 +1183,17 @@ class KCPU16TUI(App[None]):
     # ------------------------------------------------------------------
 
     def _update_exec_line(self) -> None:
+        """Siirrä editorin kursori nykyistä PC:tä vastaavalle riville.
+
+        Käyttää addr_to_line-mappia (_build_addr_to_line) löytääkseen
+        mikä lähdekoodirivi vastaa nykyistä PC-osoitetta. Jos löytyy,
+        siirtää TextArea:n kursorin kyseiselle riville. Tämä mahdollistaa
+        "source-level debugging" -kokemuksen: käyttäjä näkee editorissa
+        missä kohdassa lähdekoodia suoritus on.
+
+        Ei tee mitään jos addr_to_line on tyhjä (koodi ei assembloitu)
+        tai PC:tä ei löydy mapista (esim. kernel-koodi).
+        """
         if not self.addr_to_line:
             return
         pc = self.machine.regs.pc
@@ -812,7 +1208,18 @@ class KCPU16TUI(App[None]):
                 pass
 
     def _log_step_info(self) -> None:
-        """Logita yksityiskohdat viimeisestä stepistä."""
+        """Logita yksityiskohdat viimeisestä stepistä.
+
+        Näyttää lokissa:
+        - IC (Instruction Counter): käskyjen kokonaislaskuri
+        - PC: nykyinen osoite
+        - Käsky: mnemoniikki + operandit (disassembloitu muistista)
+        - Rivinumero: vastaava lähdekoodirivi (jos addr_to_line löytää)
+        - HALT/EXIT-ilmoitus jos CPU pysähtyi
+
+        Käskyn tunnistus tehdään lukemalla opcode PC:n kohdalta muistista
+        ja hakemalla se OPCODE_TABLE:sta (mnemoniikki + operandien määrä).
+        """
         pc = self.machine.regs.pc
         ic = self.machine.cpu.instruction_counter
         opcode = self.machine.memory.read(pc)
@@ -844,6 +1251,34 @@ class KCPU16TUI(App[None]):
     # ------------------------------------------------------------------
 
     def _execute_command(self, command: str) -> CommandResult:
+        """Komentotulkki: parsii ja suorittaa komentosyötteen.
+
+        Tukee seuraavat komennot:
+            help              -- Näytä ohje
+            step [n]          -- Steppaa n käskyä (oletus 1)
+            run [n]           -- Aja n sykliä breakpointein (oletus 10000)
+            reset             -- Cold reset
+            bp <addr>         -- Toggle breakpoint osoitteeseen
+            bp list           -- Listaa breakpointit
+            bp clear          -- Poista kaikki breakpointit
+            mem [addr]        -- Näytä/vaihda muistinäkymän osoite
+            examples          -- Listaa saatavilla olevat esimerkit
+            load <name>       -- Lataa esimerkki editoriin ja assembloi
+            open <path>       -- Avaa tiedosto
+            save <path>       -- Tallenna tiedosto
+            assemble          -- Assembloi editorin koodi
+            regs              -- Näytä rekisterit yhdellä rivillä
+            status            -- Näytä CPU:n tila
+            spec              -- Näytä arkkitehtuurin spesifikaatio
+            disasm            -- Näytä disassembly lokissa
+            screen            -- Päivitä Screen-näkymä
+
+        Parametrit:
+            command: Käyttäjän syöttämä komentorivi.
+
+        Palauttaa:
+            CommandResult(ok, message) - ok=False virhetilanteessa.
+        """
         parts = command.split()
         op = parts[0].lower()
         args = parts[1:]
@@ -940,6 +1375,13 @@ class KCPU16TUI(App[None]):
             return CommandResult(False, f"Error: {exc}")
 
     def _handle_bp_command(self, args: list[str]) -> CommandResult:
+        """Käsittele breakpoint-alikomennot (bp <addr> / bp list / bp clear).
+
+        - bp <addr>: Toggle breakpoint annetussa osoitteessa (hex tai dec).
+        - bp list: Listaa kaikki asetetut breakpointit.
+        - bp clear: Poista kaikki breakpointit.
+        - bp (ilman argumentteja): Näytä käyttöohje.
+        """
         if not args:
             return CommandResult(
                 False, "Usage: bp <addr> | bp list | bp clear"
@@ -963,6 +1405,13 @@ class KCPU16TUI(App[None]):
         return CommandResult(True, f"Breakpoint REMOVED at 0x{addr:04X}")
 
     def _format_status(self) -> str:
+        """Muotoile CPU:n tilaraportti tekstimuotoon.
+
+        Palauttaa monirivisen merkkijonon jossa:
+        - Tila: READY / HALTED / EXITED
+        - Syklit: suoritettujen käskyjen kokonaismäärä
+        - PC, SP, SR: tärkeimmät rekisteriarvot hex-muodossa
+        """
         cpu = self.machine.cpu
         if cpu.halted:
             s = "HALTED"
@@ -978,6 +1427,13 @@ class KCPU16TUI(App[None]):
         )
 
     def _show_disasm_in_log(self) -> None:
+        """Näytä disassembly loki-widgetissä (disasm-komento).
+
+        Lukee 30 sanaa muistista alkaen PC-6 ja disassembloi ne.
+        Nykyinen PC korostetaan vihreällä taustalla (> -merkki).
+        Tämä on vaihtoehto disassembly-paneelille - hyödyllinen
+        kun haluaa nähdä disassemblyn loki-kontekstissa.
+        """
         pc = self.machine.regs.pc
         start = max(0, pc - 6)
         words = [self.machine.memory.read(start + i) for i in range(30)]
@@ -999,6 +1455,12 @@ class KCPU16TUI(App[None]):
     # ------------------------------------------------------------------
 
     def _log(self, message: str) -> None:
+        """Kirjoita viesti Log-välilehden RichLog-widgettiin.
+
+        Tukee Rich-markupia (esim. [bold], [red], [dim]).
+        Hiljaisesti ohittaa poikkeukset jos widget ei ole käytettävissä
+        (esim. sovelluksen sammutuksen aikana).
+        """
         try:
             self.query_one("#log-view", RichLog).write(message)
         except Exception:
@@ -1006,7 +1468,15 @@ class KCPU16TUI(App[None]):
 
 
 def run_tui() -> int:
-    """Käynnistä TUI."""
+    """Käynnistä kCPU16 TUI-sovellus.
+
+    Entry point jota kutsutaan CLI:stä (esim. __main__.py tai console_scripts).
+    Luo KCPU16TUI-instanssin ja käynnistää Textual-tapahtumasilmukan.
+    Palaa vasta kun käyttäjä sulkee sovelluksen (Ctrl+Q).
+
+    Palauttaa:
+        int: Exit-koodi (0 = normaali lopetus).
+    """
     app = KCPU16TUI()
     app.run()
     return 0
