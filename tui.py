@@ -143,7 +143,7 @@ def _build_addr_to_line(source: str, assembler: Assembler) -> dict[int, int]:
 class KCPU16TUI(App[None]):
     """Ammattimainen kCPU16 emulaattori-debuggeri."""
 
-    TITLE = "kCPU16 Debugger"
+    TITLE = "kCPU16 Debugger v1.0"
     SUB_TITLE = "16-bit CPU Emulator"
 
     CSS = """
@@ -327,7 +327,8 @@ class KCPU16TUI(App[None]):
         with TabbedContent(id="bottom-tabs"):
             with TabPane("Log", id="tab-log"):
                 yield RichLog(
-                    id="log-view", wrap=True, highlight=False, max_lines=500
+                    id="log-view", wrap=True, highlight=False,
+                    markup=True, max_lines=500,
                 )
             with TabPane("Screen", id="tab-screen"):
                 yield Static(id="screen-view")
@@ -599,8 +600,26 @@ class KCPU16TUI(App[None]):
 
     def _refresh_disassembly(self) -> None:
         pc = self.machine.regs.pc
-        start = max(0, pc - 30)
-        end = min(0xFFFF, pc + 60)
+
+        # Scan backward from PC to find a good start point.
+        # Skip over empty memory (0x0000) to avoid showing noise.
+        # Show up to 5 instructions before PC if they contain real code.
+        scan_start = max(0, pc - 15)
+        start = pc  # default: start at PC
+        for a in range(pc - 1, scan_start - 1, -1):
+            if self.machine.memory.read(a) != 0 or self.dbg.has_breakpoint(a):
+                start = a
+            else:
+                break
+        # Also include any breakpoints slightly beyond the backward scan
+        if self.dbg.breakpoints:
+            for bp_addr in self.dbg.breakpoints:
+                if scan_start <= bp_addr < start:
+                    start = bp_addr
+        # Clamp: show at most 10 words before PC
+        start = max(start, pc - 10)
+
+        end = min(0xFFFF, pc + 80)
         words = [self.machine.memory.read(a) for a in range(start, end + 1)]
         raw = self.disassembler.disassemble(words, start_addr=start)
 
@@ -613,6 +632,15 @@ class KCPU16TUI(App[None]):
                 addr = int(addr_part, 16)
             except ValueError:
                 lines.append(raw_line)
+                continue
+
+            # Skip .word 0x0000 lines (empty memory) unless near PC or has breakpoint
+            if (
+                ".word 0x0000" in raw_line
+                and addr != pc
+                and abs(addr - pc) > 3
+                and not self.dbg.has_breakpoint(addr)
+            ):
                 continue
 
             bp = "[bold red]\u25cf[/] " if self.dbg.has_breakpoint(addr) else "  "
@@ -688,15 +716,18 @@ class KCPU16TUI(App[None]):
             ("I", r.get_flag(SR_FLAG_I)),
             ("P", r.get_flag(SR_FLAG_P)),
         ]
-        header = "  ".join(f"[bold]{n}[/]" for n, _ in flags)
-        values = "  ".join(
-            f"[bold green]{v}[/]" if v else f"[dim]{v}[/]" for _, v in flags
-        )
+        # Show each flag as name:value on one line for clarity
+        parts = []
+        for name, val in flags:
+            if val:
+                parts.append(f"[bold green]{name}:1[/]")
+            else:
+                parts.append(f"[dim]{name}:0[/]")
         mode = (
             "[bold green]KERNEL[/]" if r.in_kernel_mode else "[yellow]USER[/]"
         )
         self.query_one("#flags-content", Static).update(
-            f"{header}\n{values}\nMode: {mode}"
+            f"{' '.join(parts)}\nMode: {mode}"
         )
 
     def _refresh_cpu_status(self) -> None:
