@@ -1,8 +1,9 @@
+# pyright: reportMissingImports=false
 """
-Yksinkertainen tekstieditori kCPU16 koodille.
+Assembly-editori kCPU16:lle.
 
-Käytetään Textual-widgetillä. Tämä moduuli tarjoaa assembly-syntaksivärityksen
-ja perusominaisuudet editoreille.
+Tarjoaa syntaksivärityksen ja peruseditorin toiminnallisuudet.
+Integroituu TUI:hin TextArea-pohjaisen interaktiivisen editorin kautta.
 """
 
 from __future__ import annotations
@@ -11,12 +12,9 @@ import re
 from pathlib import Path
 from typing import Optional
 
-from textual.widgets import Static
-from textual.message import Message
-
 
 class AssemblySyntaxHighlighter:
-    """Assembly-kielen syntaksin väritys."""
+    """Assembly-kielen syntaksin väritys Rich-muodossa."""
 
     MNEMONICS = {
         "LOAD", "CPY", "READ", "STORE", "READ_IND", "STORE_IND",
@@ -30,6 +28,8 @@ class AssemblySyntaxHighlighter:
 
     REGISTERS = {"R0", "R1", "R2", "R3", "FP", "SP"}
 
+    DIRECTIVES = {".ORIGIN", ".ORG", ".MACRO", ".ENDMACRO"}
+
     @staticmethod
     def highlight_line(line: str) -> str:
         """Väritä yksi assembly-rivi Rich-muodossa."""
@@ -40,19 +40,26 @@ class AssemblySyntaxHighlighter:
             code = line
             comment = ""
 
+        # Labelit (rivi päättyy kaksoispisteeseen)
+        stripped = code.strip()
+        if stripped.endswith(":"):
+            label = stripped[:-1]
+            indent = code[:len(code) - len(code.lstrip())]
+            return f"{indent}[bold white]{label}[/bold white]:" + comment
+
         # Mnemonicit
         for m in AssemblySyntaxHighlighter.MNEMONICS:
-            code = re.sub(r"\b" + m + r"\b", f"[yellow]{m}[/yellow]", code, flags=re.IGNORECASE)
+            code = re.sub(r"\b" + m + r"\b", f"[bold yellow]{m}[/bold yellow]", code, flags=re.IGNORECASE)
 
         # Rekisterit
         for r in AssemblySyntaxHighlighter.REGISTERS:
-            code = re.sub(r"\b" + r + r"\b", f"[blue]{r}[/blue]", code, flags=re.IGNORECASE)
+            code = re.sub(r"\b" + r + r"\b", f"[cyan]{r}[/cyan]", code, flags=re.IGNORECASE)
 
-        # Numerot
-        code = re.sub(r"(0x[0-9A-Fa-f]+|#?\d+|\$[0-9A-Fa-f]+)", r"[green]\1[/green]", code)
+        # Numerot (hex, decimal, $ prefix)
+        code = re.sub(r"(0x[0-9A-Fa-f]+|#?0x[0-9A-Fa-f]+|#\d+|\$[0-9A-Fa-f]+|\b\d+\b)", r"[green]\1[/green]", code)
 
         # Direktiivit
-        code = re.sub(r"\.(origin|org|macro|endmacro)", r"[cyan].\1[/cyan]", code, flags=re.IGNORECASE)
+        code = re.sub(r"\.(origin|org|macro|endmacro)\b", r"[bold magenta].\1[/bold magenta]", code, flags=re.IGNORECASE)
 
         return code + comment
 
@@ -60,7 +67,7 @@ class AssemblySyntaxHighlighter:
 class SimpleEditor:
     """Yksinkertainen tekstieditori-luokka."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.content = ""
         self.filename: Optional[Path] = None
 
@@ -77,18 +84,19 @@ class SimpleEditor:
             self.filename.write_text(self.content, encoding="utf-8")
 
     def get_content(self) -> str:
-        """Hae sisältö."""
         return self.content
 
     def set_content(self, content: str) -> None:
-        """Aseta sisältö."""
         self.content = content
 
-    def render_highlighted(self, max_lines: int = 50) -> str:
-        """Renderoi sisältö väreillä."""
+    def render_highlighted(self, max_lines: int = 100, highlight_line: int = -1) -> str:
+        """Renderoi sisältö väreillä. highlight_line = korostettava rivi (1-pohjainen)."""
         lines = self.content.split("\n")
         output = []
         for i, line in enumerate(lines[:max_lines], 1):
             colored = AssemblySyntaxHighlighter.highlight_line(line)
-            output.append(f"[dim]{i:4d}[/dim] {colored}")
+            if i == highlight_line:
+                output.append(f"[on dark_green][bold]>{i:4d}[/bold] {colored}[/on dark_green]")
+            else:
+                output.append(f"[dim]{i:4d}[/dim] {colored}")
         return "\n".join(output)
