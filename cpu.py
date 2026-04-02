@@ -378,6 +378,80 @@ class CPU:
             self.regs.set_zn_flags(result)
 
         # ======================================================================
+        # LOGIIKKAKASKYT
+        # ======================================================================
+
+        elif ins.mnemonic == "AND":
+            # AND regD, regS - Bittitason JA: regD = regD & regS
+            dst, src = ins.operands
+            result = self._get_reg(dst) & self._get_reg(src)
+            self._set_reg(dst, result)
+            self.regs.set_zn_flags(result)
+            self.regs.set_carry_overflow(False, False)
+
+        elif ins.mnemonic == "OR":
+            # OR regD, regS - Bittitason TAI: regD = regD | regS
+            dst, src = ins.operands
+            result = self._get_reg(dst) | self._get_reg(src)
+            self._set_reg(dst, result)
+            self.regs.set_zn_flags(result)
+            self.regs.set_carry_overflow(False, False)
+
+        elif ins.mnemonic == "XOR":
+            # XOR regD, regS - Bittitason XOR: regD = regD ^ regS
+            dst, src = ins.operands
+            result = self._get_reg(dst) ^ self._get_reg(src)
+            self._set_reg(dst, result)
+            self.regs.set_zn_flags(result)
+            self.regs.set_carry_overflow(False, False)
+
+        elif ins.mnemonic == "NOT":
+            # NOT reg - Bittitason komplementti: reg = ~reg
+            (reg_idx,) = ins.operands
+            result = (~self._get_reg(reg_idx)) & WORD_MASK
+            self._set_reg(reg_idx, result)
+            self.regs.set_zn_flags(result)
+            self.regs.set_carry_overflow(False, False)
+
+        elif ins.mnemonic == "SHL":
+            # SHL regD, regS - Siirto vasemmalle: regD = regD << regS
+            # Carry = viimeisin ulos siirtynyt bitti
+            dst, src = ins.operands
+            a = self._get_reg(dst)
+            shift = self._get_reg(src) & 0xFFFF
+            if shift == 0:
+                result = a
+                carry = False
+            elif shift > 16:
+                result = 0
+                carry = False
+            else:
+                carry = bool((a >> (16 - shift)) & 1)
+                result = (a << shift) & WORD_MASK
+            self._set_reg(dst, result)
+            self.regs.set_zn_flags(result)
+            self.regs.set_carry_overflow(carry, False)
+
+        elif ins.mnemonic == "SHR":
+            # SHR regD, regS - Looginen siirto oikealle: regD = regD >> regS
+            # Carry = viimeisin ulos siirtynyt bitti
+            dst, src = ins.operands
+            a = self._get_reg(dst)
+            shift = self._get_reg(src) & 0xFFFF
+            if shift == 0:
+                result = a
+                carry = False
+            elif shift > 16:
+                result = 0
+                carry = False
+            else:
+                carry = bool((a >> (shift - 1)) & 1)
+                result = (a >> shift) & WORD_MASK
+            self._set_reg(dst, result)
+            self.regs.set_zn_flags(result)
+            self.regs.set_carry_overflow(carry, False)
+
+        # ======================================================================
         # PINOKASKYT
         # ======================================================================
 
@@ -491,6 +565,33 @@ class CPU:
             # Toimii oikein myös etumerkillisilla luvuilla
             (addr,) = ins.operands
             if self.regs.get_flag(SR_FLAG_N) != self.regs.get_flag(SR_FLAG_V):
+                self.regs.pc = (addr - ins.size_words) & WORD_MASK
+
+        elif ins.mnemonic == "JGT":
+            # JGT addr - Jump if Greater Than (hyppa jos Z=0 ja N=V)
+            # Suurempi kuin: ei yhtasuuri ja ei pienempi kuin
+            (addr,) = ins.operands
+            z = self.regs.get_flag(SR_FLAG_Z)
+            n = self.regs.get_flag(SR_FLAG_N)
+            v = self.regs.get_flag(SR_FLAG_V)
+            if z == 0 and n == v:
+                self.regs.pc = (addr - ins.size_words) & WORD_MASK
+
+        elif ins.mnemonic == "JLE":
+            # JLE addr - Jump if Less or Equal (hyppa jos Z=1 tai N!=V)
+            # Pienempi tai yhtasuuri: yhtasuuri tai pienempi kuin
+            (addr,) = ins.operands
+            z = self.regs.get_flag(SR_FLAG_Z)
+            n = self.regs.get_flag(SR_FLAG_N)
+            v = self.regs.get_flag(SR_FLAG_V)
+            if z == 1 or n != v:
+                self.regs.pc = (addr - ins.size_words) & WORD_MASK
+
+        elif ins.mnemonic == "JGE":
+            # JGE addr - Jump if Greater or Equal (hyppa jos N=V)
+            # Suurempi tai yhtasuuri: ei pienempi kuin
+            (addr,) = ins.operands
+            if self.regs.get_flag(SR_FLAG_N) == self.regs.get_flag(SR_FLAG_V):
                 self.regs.pc = (addr - ins.size_words) & WORD_MASK
 
         elif ins.mnemonic == "STMR":
