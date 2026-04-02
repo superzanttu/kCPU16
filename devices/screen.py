@@ -6,19 +6,21 @@ sisaltonsa VRAM-muistista (Video RAM).
 
 NAYTÖN MAARITYKSET:
 -------------------
-- Koko: 80 saraketta x 24 rivia = 1920 merkkia
-- VRAM-alue: $F800 - $FF7F
-- Jokainen sana = yksi merkki + attribuutit
+- Koko: 80 saraketta x 25 rivia = 2000 merkkia
+- VRAM-alue: $F800 - $FD0F
+- Jokainen sana = yksi merkki + attribuutit + värit
 
 SANAN RAKENNE (16-bittia):
 -------------------------
-Bitit 0-7:   ASCII-merkki (0-127)
-Bitti 8:     Lihavointi (1 = paalla)
-Bitti 9:     Kursiivi (1 = paalla)
-Bitti 10:    Vilkku (1 = paalla)
-Bitti 11:    Alleviivaus (1 = paalla)
-Bitti 12:    Yliviivaus (1 = paalla)
-Bitit 13-15: Varikoodi (0-7)
+Bitit 0-7:    ASCII-merkki (0-127)
+Bitit 8-11:   Attribuutit:
+              Bitti 8:   Lihavointi (1 = paalla)
+              Bitti 9:   Kursiivi (1 = paalla)
+              Bitti 10:  Vilkku (1 = paalla)
+              Bitti 11:  Alleviivaus (1 = paalla)
+Bitti 12:     Yliviivaus (1 = paalla)
+Bitit 13-15:  VARATTU TULEVAISUUDELLE
+Bitit 12-14:  Edusta-väri (FG, 0-7, 3 bittiä)
     0 = Musta
     1 = Punainen
     2 = Vihrea
@@ -27,6 +29,9 @@ Bitit 13-15: Varikoodi (0-7)
     5 = Magenta
     6 = Syaani
     7 = Valkoinen
+Bitti 15:     Tausta-väri (BG, 1-bittinen)
+    0 = Musta
+    1 = Valkoinen
 
 MUISTIJARJESTYS:
 ----------------
@@ -44,7 +49,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from ..constants import SCREEN_COLS, SCREEN_ROWS, VRAM_START
+from ..constants import (
+    COLOR_BLACK, COLOR_BLUE, COLOR_CYAN, COLOR_GREEN, COLOR_MAGENTA,
+    COLOR_RED, COLOR_WHITE, COLOR_YELLOW, SCREEN_COLS, SCREEN_ROWS, VRAM_START,
+    VRAM_CHAR_MASK, VRAM_FG_MASK, VRAM_FG_SHIFT, VRAM_BG_MASK, VRAM_BG_SHIFT,
+    VRAM_ATTR_BOLD, VRAM_ATTR_ITALIC, VRAM_ATTR_BLINK,
+    VRAM_ATTR_UNDERLINE, VRAM_ATTR_STRIKETHROUGH,
+)
 from ..memory import Memory
 
 
@@ -70,7 +81,7 @@ class ScreenDevice:
 
     def render_text(self, memory: Memory) -> str:
         """
-        Renderoi nayttomuisti tekstiksi.
+        Renderoi nayttomuisti tekstiksi ilman värejä (backwards compatibility).
 
         Lukee VRAMin ja muuntaa jokaisen sanan ASCII-merkkiksi.
         Tulostuskelvoittomat merkit (kontrollimerkit) korvataan valilyonnilla.
@@ -79,7 +90,7 @@ class ScreenDevice:
             memory: Muistiolio, josta VRAM luetaan
 
         Returns:
-            Monirivinen merkkijono (24 rivia, 80 merkkia kukin)
+            Monirivinen merkkijono (25 rivia, 80 merkkia kukin)
 
         Example:
             >>> screen = ScreenDevice()
@@ -101,7 +112,7 @@ class ScreenDevice:
                 word = memory.read(addr)
 
                 # Pura ASCII-merkki (alimmat 8 bittia)
-                ch = chr(word & 0x00FF)
+                ch = chr(word & VRAM_CHAR_MASK)
 
                 # Nayta vain tulostuskelpoiset merkit (32-126)
                 # Muut korvataan valilyonnilla
@@ -113,4 +124,104 @@ class ScreenDevice:
             lines.append("".join(chars))
 
         # Yhdista rivit rivinvaihdoilla
+        return "\n".join(lines)
+
+    def extract_char_with_attrs(self, word: int) -> tuple[str, int, int, int]:
+        """
+        Erota VRAM-sanasta merkki, värit ja attribuutit.
+
+        Args:
+            word: 16-bittinen VRAM-sana
+
+        Returns:
+            Tuple: (merkki, fg_väri, bg_väri, attribuutit)
+                - merkki: str (ASCII-merkki)
+                - fg_väri: int (0-7)
+                - bg_väri: int (0-1)
+                - attribuutit: int (bittikentät 8-11)
+        """
+        # ASCII-merkki
+        ch = chr(word & VRAM_CHAR_MASK)
+
+        # Värit
+        fg = (word & VRAM_FG_MASK) >> VRAM_FG_SHIFT  # Bitit 12-14
+        bg = (word & VRAM_BG_MASK) >> VRAM_BG_SHIFT  # Bitti 15
+
+        # Attribuutit (bittikentät 8-11 VAIN, ei värejä)
+        attrs = (word >> 8) & 0x0F
+
+        return ch, fg, bg, attrs
+
+    def render_with_rich_colors(self, memory: Memory) -> str:
+        """
+        Renderoi VRAM Rich-tekstiksi väreillä ja attribuuteilla (Textual/Rich-integraatio).
+
+        Käyttää Rich-kirjaston color codes HTML-väreille ja attribuuteille.
+        Tämä metodi on suunniteltu Textual TUI:n käytölle.
+
+        Args:
+            memory: Muistiolio, josta VRAM luetaan
+
+        Returns:
+            Rich-muotoiltu merkkijono väreillä
+
+        Example:
+            >>> screen.render_with_rich_colors(memory)
+            '[blue]H[/blue]ello...'
+        """
+        # Värien mappaus Rich-värikoodeihin
+        color_map = {
+            COLOR_BLACK: "black",
+            COLOR_RED: "red",
+            COLOR_GREEN: "green",
+            COLOR_YELLOW: "yellow",
+            COLOR_BLUE: "blue",
+            COLOR_MAGENTA: "magenta",
+            COLOR_CYAN: "cyan",
+            COLOR_WHITE: "white",
+        }
+
+        lines: list[str] = []
+        addr = VRAM_START
+
+        for _ in range(self.rows):
+            row_text = ""
+
+            for _ in range(self.cols):
+                word = memory.read(addr)
+                ch, fg, bg, attrs = self.extract_char_with_attrs(word)
+
+                # Korvaa tulostuskelvoittomat merkit
+                if not (32 <= ord(ch) < 127):
+                    ch = " "
+
+                # Rakenna Rich-tag väreillä
+                fg_color = color_map.get(fg, "white")
+                # BG on 1-bittinen (0=musta, 1=valkoinen), mappaa Rich:lle
+                bg_color = "white" if bg else "black"
+
+                # Attribuutit
+                style_attrs = []
+                if attrs & 0x01:  # BOLD (bitti 8)
+                    style_attrs.append("bold")
+                if attrs & 0x02:  # ITALIC (bitti 9)
+                    style_attrs.append("italic")
+                if attrs & 0x04:  # BLINK (bitti 10) - ei suoraan Rich-tuettu
+                    pass
+                if attrs & 0x08:  # UNDERLINE (bitti 11)
+                    style_attrs.append("underline")
+                if attrs & 0x10:  # STRIKETHROUGH (bitti 12)
+                    style_attrs.append("strike")
+
+                # Rakenna tag
+                style_str = " ".join(style_attrs) if style_attrs else "normal"
+                rich_tag = f"[{style_str} on {bg_color} {fg_color}]"
+                close_tag = "[/]"
+
+                row_text += f"{rich_tag}{ch}{close_tag}"
+
+                addr += 1
+
+            lines.append(row_text)
+
         return "\n".join(lines)

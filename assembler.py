@@ -5,6 +5,7 @@ Muuntaa assembly-lahdekoodin konekieleksi (lista 16-bittisia sanoja).
 
 KAKSIPASSINEN TOIMINTA:
 -----------------------
+Pass 0: Makrojen ekspansointi ja .origin direktiivin käsittely
 Pass 1: Kerataan labelit ja lasketaan niiden osoitteet
 Pass 2: Luodaan konekieli korvaamalla labelit osoitteilla
 
@@ -17,20 +18,26 @@ SYNTAKSI:
 - Numerot: 42, 0xFF, #42, #0xFF, $F800
 - Label-viittaukset suoraan operandina: "JUMP loop"
 - Kommentit alkavat puolipisteella: "; tama on kommentti"
+- Direktiivit:
+  - .origin OSOITE (esim. .origin 0x0200)
+  - .macro NIMI ... .endmacro (esim. .macro LOAD_MANY ... .endmacro)
 
 ESIMERKKI:
 ----------
-    ; Laske 10 + 5
-    LOAD  R0, 10      ; R0 = 10
-    LOAD  R1, 5       ; R1 = 5
-    ADD   R0, R1      ; R0 = R0 + R1 = 15
-    HALT
+    .origin 0x0200       ; Koodi alkaa osoitteesta 0x0200
 
-Tuottaa konekielen:
-    [0x0001, 0x0000, 0x000A,   ; LOAD R0, 10
-     0x0001, 0x0001, 0x0005,   ; LOAD R1, 5
-     0x0010, 0x0000, 0x0001,   ; ADD R0, R1
-     0x0044]                   ; HALT
+    .macro LOAD_MANY
+        LOAD  R0, 10
+        LOAD  R1, 20
+        LOAD  R2, 30
+    .endmacro
+
+    START:
+        LOAD_MANY        ; Ekspandoi makroksi
+        JUMP  START
+        HALT
+
+Tuottaa konekielen osoitteesta 0x0200 eteenpäin.
 """
 
 from __future__ import annotations
@@ -61,7 +68,8 @@ class Assembler:
     """
     kCPU16 Assembler - muuntaa assembly-koodin konekieleksi.
 
-    Toimii kahdessa passissa:
+    Toimii kolmessa passissa:
+    0. Makrojen ekspansointi ja .origin käsittely
     1. Kerataan labelit ja lasketaan niiden muistiosoitteet
     2. Tuotetaan lopullinen konekieli
 
@@ -94,10 +102,91 @@ class Assembler:
             >>> asm.assemble("LOAD R0, 10\\nHALT", start_addr=0x0200)
             [1, 0, 10, 68]
         """
+        # Pass 0: Makrojen ekspansointi ja .origin käsittely
+        expanded_source, start_addr = self._pass0_expand_macros_and_origin(source, start_addr)
         # Pass 1: Kerataan labelit
-        labels = self._pass1_collect_labels(source, start_addr)
+        labels = self._pass1_collect_labels(expanded_source, start_addr)
         # Pass 2: Tuotetaan konekieli
-        return self._pass2_emit(source, labels)
+        return self._pass2_emit(expanded_source, labels)
+
+    def _pass0_expand_macros_and_origin(self, source: str, start_addr: int) -> tuple[str, int]:
+        """
+        Pass 0: Makrojen ekspansointi ja .origin direktiivin käsittely.
+
+        Ensin käsitellään .origin direktiivit, sitten makrot.
+
+        Args:
+            source: Assembly-lahdekoodi
+            start_addr: Oletusarvoinen aloitusosoite
+
+        Returns:
+            Tuple: (laajennettu_lähdekoodi, käytetty_aloitusosoite)
+        """
+        lines = source.splitlines()
+
+        # 1. Etsi .origin direktiivi
+        for line in lines:
+            stripped = line.split(";", 1)[0].strip()
+            if stripped.lower().startswith(".origin") or stripped.lower().startswith(".org"):
+                # Parse: ".origin 0x0200" -> 0x0200
+                parts = stripped.split()
+                if len(parts) > 1:
+                    try:
+                        start_addr = int(parts[1], 0) & 0xFFFF
+                    except ValueError:
+                        raise ValueError(f"Invalid .origin value: {parts[1]}")
+
+        # 2. Kerää makrot
+        macros: dict[str, list[str]] = {}
+        expanded_lines = []
+        i = 0
+        while i < len(lines):
+            line = lines[i]
+            stripped = line.split(";", 1)[0].strip()
+
+            # Makron alkaminen
+            if stripped.lower().startswith(".macro"):
+                parts = stripped.split()
+                if len(parts) < 2:
+                    raise ValueError(f"Invalid .macro syntax: {line}")
+                macro_name = parts[1].upper()
+
+                # Kerää makron sisältö
+                macro_lines = []
+                i += 1
+                while i < len(lines):
+                    macro_line = lines[i]
+                    macro_stripped = macro_line.split(";", 1)[0].strip()
+
+                    if macro_stripped.lower().startswith(".endmacro"):
+                        macros[macro_name] = macro_lines
+                        break
+
+                    macro_lines.append(macro_line)
+                    i += 1
+                i += 1
+                continue
+
+            # Ohita .origin ja .macro rivit tulosteesta
+            if (stripped.lower().startswith(".origin") or
+                stripped.lower().startswith(".org") or
+                stripped.lower().startswith(".macro") or
+                stripped.lower().startswith(".endmacro")):
+                i += 1
+                continue
+
+            # Korvaa makrokutsut
+            mnemonic = stripped.split()[0].upper() if stripped else ""
+            if mnemonic in macros:
+                # Ekspandoi makro
+                expanded_lines.extend(macros[mnemonic])
+            else:
+                expanded_lines.append(line)
+
+            i += 1
+
+        expanded_source = "\n".join(expanded_lines)
+        return expanded_source, start_addr
 
     def _pass1_collect_labels(self, source: str, start_addr: int) -> dict[str, int]:
         """

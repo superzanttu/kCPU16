@@ -15,8 +15,8 @@ $0000 - $0008   Keskeytysvektoritaulukko
 $0009 - $00FF   Varattu kayttojarjestelmalle
 $0100 - $01FF   Bootloaderin latausalue
 $0200 - $F7FF   Vapaa RAM (ohjelmat ja data)
-$F800 - $FF7F   Video RAM (nayttomuisti)
-$FF80 - $FFFF   Kernel Stack
+$F800 - $FFCF   Video RAM (nayttomuisti, 80x25)
+$FFD0 - $FFFF   Kernel Stack
 
 MUISTISUOJAUS:
 --------------
