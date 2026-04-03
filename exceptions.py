@@ -10,10 +10,14 @@ Poikkeushierarkia:
     |-- PrivilegeViolationError -> INT 4
     |-- MemoryAccessFaultError  -> INT 5
     |-- StackOverflowError      -> INT 2
-"""
 
-# FIXME: Yläpuolelle ei lisätty mainintaa kaikista poikkeuksista, jotka tiedostossa constants.py on mainittu.
-# FIXME: Alapuolella ei ole luokkaa kaikille keskeytyksille. Tutkittava tarvitaanko niitä. Jos löytyy puuttuvia, pitää myös varmistaa muut niihin liittyvä toiminallisuus.
+Ei-virhepohjaiset keskeytykset (eivat kayta poikkeusluokkia):
+    ZeroDivisionError (Python)  -> INT 0  (DIV-kaskyn jakaja = 0)
+    INT 3 (Breakpoint)          -- ohjelmallinen, INT-kaskylla
+    INT 6 (Keyboard)            -- laitteistokeskeytys
+    INT 7 (Timer)               -- ajastinkeskeytys
+    INT 8 (Process Exit)        -- EXIT-kasky
+"""
 
 
 class KCPU16Error(Exception):

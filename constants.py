@@ -79,23 +79,19 @@ SCREEN_ROWS = 24  # Rivit (korkeus)
 # VÄRIJÄRJESTELMÄ - VRAM:N BITTIKENTÄT
 # =============================================================================
 
-# VRAM-sanan ASCII-merkki ja attribuutit
+# VRAM-sanan ASCII-merkki
 VRAM_CHAR_MASK = 0x00FF  # Bitit 0-7: ASCII-merkki
 VRAM_CHAR_SHIFT = 0
 
-# Attribuutit (Bitit 8-12) - lihavointi, kursiivi, vilkku, alleviivaus, yliviivaus
-VRAM_ATTR_BOLD = 0x0100  # Bitti 8: Lihavointi
-VRAM_ATTR_ITALIC = 0x0200  # Bitti 9: Kursiivi
-VRAM_ATTR_BLINK = 0x0400  # Bitti 10: Vilkku
-VRAM_ATTR_UNDERLINE = 0x0800  # Bitti 11: Alleviivaus
-VRAM_ATTR_STRIKETHROUGH = 0x1000  # Bitti 12: Yliviivaus
-VRAM_ATTR_MASK = 0x1F00  # Kaikki attribuutit
+# Värit (Bitit 8-13)
+VRAM_FG_MASK = 0x0700  # Bitit 8-10: Edusta-väri (FG, 3 bittiä = 8 väriä)
+VRAM_FG_SHIFT = 8
+VRAM_BG_MASK = 0x3800  # Bitit 11-13: Tausta-väri (BG, 3 bittiä = 8 väriä)
+VRAM_BG_SHIFT = 11
 
-# Värit (Bitit 12-15)
-VRAM_FG_MASK = 0x7000  # Bitit 12-14: Edusta-väri (FG, 3 bittiä = 0-7)
-VRAM_FG_SHIFT = 12
-VRAM_BG_MASK = 0x8000  # Bitti 15: Tausta-väri (BG, aluksi 1-bittinen)
-VRAM_BG_SHIFT = 15
+# Attribuutit (Bitit 14-15)
+VRAM_ATTR_BOLD = 0x4000  # Bitti 14: Lihavointi
+VRAM_ATTR_BLINK = 0x8000  # Bitti 15: Vilkkuminen
 
 # Värikoodit (0-7 tai 0-1 taustalle)
 COLOR_BLACK = 0

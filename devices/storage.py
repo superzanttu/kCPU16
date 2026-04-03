@@ -119,7 +119,6 @@ class BlockStorageDevice:
             ValueError: Jos osoite on laitteen kapasiteetin ulkopuolella
         """
         block_idx, offset = self._decode_word_address(word_addr)
-        # FIXME: näyttää että koodi ei palauta sanaa, vaan kokonaisen blokin. Tutkittava onko tämä virhe vai tarkoituksellista. DREAD-kaskyjen pitäisi lukea yksittäisiä sanoja, ei koko blokkeja. Tarkista myös kirjoitusoperaation toiminta.
         return self.blocks[block_idx][offset]
 
     def write_word(self, word_addr: int, value: int) -> None:
