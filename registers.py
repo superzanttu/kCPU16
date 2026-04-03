@@ -31,8 +31,10 @@ Bitti 5 (P): Privilege - 1 = Kernel Mode, 0 = User Mode
 from dataclasses import dataclass, field
 
 from .constants import (
+    BOOT_RAM_START,
     DEFAULT_MPR,
     DEFAULT_TIMER_INTERVAL,
+    KERNEL_STACK_END,
     MODE_KERNEL,
     SR_FLAG_C,
     SR_FLAG_I,
@@ -70,8 +72,8 @@ class RegisterFile:
 
     # Erikoisrekisterit
     fp: int = 0  # Frame Pointer (ei kaytos kaynnistyksessa)
-    sp: int = 0xFFFF  # Stack Pointer alkaa muistin lopusta
-    pc: int = 0x0100  # Program Counter alkaa bootloader-alueelta
+    sp: int = KERNEL_STACK_END  # Stack Pointer alkaa muistin lopusta
+    pc: int = BOOT_RAM_START  # Program Counter alkaa bootloader-alueelta
     sr: int = 0  # Status Register (liput nollaa)
 
     # Jarjestelmarekisterit
@@ -96,8 +98,8 @@ class RegisterFile:
         self.r2 = 0
         self.r3 = 0
         self.fp = 0
-        self.sp = 0xFFFF
-        self.pc = 0x0100
+        self.sp = KERNEL_STACK_END
+        self.pc = BOOT_RAM_START
         self.sr = 0
         self.mpr = DEFAULT_MPR
         self.tmr = DEFAULT_TIMER_INTERVAL
