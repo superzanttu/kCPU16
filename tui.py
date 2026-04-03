@@ -291,7 +291,7 @@ class KCPU16TUI(App[None]):
         muuttua IO-operaatioilla ilman explisiittistä refreshiä).
     """
 
-    TITLE = "kCPU16 Debugger v1.0"
+    TITLE = "kCPU16 Emulator"
     SUB_TITLE = "16-bit CPU Emulator"
 
     # Textual CSS: Määrittelee koko sovelluksen visuaalisen layoutin.
@@ -1632,7 +1632,9 @@ class KCPU16TUI(App[None]):
             self.is_assembled = False
             self.addr_to_line = {}
             self.dbg.snapshot_registers(self.machine.dump_registers())
-            return CommandResult(True, "[green]Reset (memory + CPU). Storage intact.[/green]")
+            return CommandResult(
+                True, "[green]Reset (memory + CPU). Storage intact.[/green]"
+            )
         sub = args[0].lower()
         if sub == "deep":
             self.machine.cold_reset()
@@ -1646,9 +1648,7 @@ class KCPU16TUI(App[None]):
         if sub == "cpu":
             self.machine.cpu.reset()
             self.dbg.snapshot_registers(self.machine.dump_registers())
-            return CommandResult(
-                True, "[green]CPU reset. Memory preserved.[/green]"
-            )
+            return CommandResult(True, "[green]CPU reset. Memory preserved.[/green]")
         return CommandResult(False, "Usage: reset | reset deep | reset cpu")
 
     # ------------------------------------------------------------------
