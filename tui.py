@@ -594,6 +594,20 @@ class KCPU16TUI(App[None]):
         )
         self._log("[dim]Type 'help' for command list.[/dim]")
 
+        # Lataa käynnistysparametreilla annetut tiedostot
+        startup_asm: Path | None = getattr(self, "startup_asm", None)
+        startup_dsk: Path | None = getattr(self, "startup_dsk", None)
+
+        if startup_dsk is not None:
+            try:
+                self.machine.storage.load_from_file(startup_dsk)
+                self._log(f"[green]Storage loaded from {startup_dsk}[/green]")
+            except Exception as e:
+                self._log(f"[red]Storage load error: {e}[/red]")
+
+        if startup_asm is not None:
+            self._do_open(startup_asm)
+
         self._refresh_all()
         self.set_interval(0.5, self._refresh_screen_tab)
 
@@ -1527,16 +1541,25 @@ class KCPU16TUI(App[None]):
             pass
 
 
-def run_tui() -> int:
+def run_tui(
+    startup_asm: Path | None = None,
+    startup_dsk: Path | None = None,
+) -> int:
     """Käynnistä kCPU16 TUI-sovellus.
 
     Entry point jota kutsutaan CLI:stä (esim. __main__.py tai console_scripts).
     Luo KCPU16TUI-instanssin ja käynnistää Textual-tapahtumasilmukan.
     Palaa vasta kun käyttäjä sulkee sovelluksen (Ctrl+Q).
 
+    Args:
+        startup_asm: .asm-tiedosto ladattavaksi editoriin käynnistyksessä.
+        startup_dsk: .dsk-tiedosto ladattavaksi storageen käynnistyksessä.
+
     Palauttaa:
         int: Exit-koodi (0 = normaali lopetus).
     """
     app = KCPU16TUI()
+    app.startup_asm = startup_asm
+    app.startup_dsk = startup_dsk
     app.run()
     return 0
