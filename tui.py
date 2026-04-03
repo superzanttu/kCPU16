@@ -776,6 +776,7 @@ class KCPU16TUI(App[None]):
         self._log("  bp <addr>, bp list, bp clear")
         self._log("  mem <addr>, open <path>, save <path>")
         self._log("  load <example>, examples, regs, status, spec, disasm")
+        self._log("  storage load|save <file>, storage reset")
         self._log("---")
 
     # ------------------------------------------------------------------
@@ -1305,6 +1306,9 @@ class KCPU16TUI(App[None]):
             spec              -- Näytä arkkitehtuurin spesifikaatio
             disasm            -- Näytä disassembly lokissa
             screen            -- Päivitä Screen-näkymä
+            storage load <f>  -- Lataa .dsk-tiedosto storageen
+            storage save <f>  -- Tallenna storage .dsk-tiedostoon
+            storage reset     -- Nollaa storage
 
         Parametrit:
             command: Käyttäjän syöttämä komentorivi.
@@ -1398,6 +1402,9 @@ class KCPU16TUI(App[None]):
                 self._refresh_screen_tab()
                 return CommandResult(True, "Screen refreshed.")
 
+            if op == "storage":
+                return self._handle_storage_command(args)
+
             return CommandResult(False, f"Unknown: {op}. Type 'help'.")
         except Exception as exc:
             return CommandResult(False, f"Error: {exc}")
@@ -1425,6 +1432,37 @@ class KCPU16TUI(App[None]):
         if added:
             return CommandResult(True, f"[red]Breakpoint SET at 0x{addr:04X}[/red]")
         return CommandResult(True, f"Breakpoint REMOVED at 0x{addr:04X}")
+
+    def _handle_storage_command(self, args: list[str]) -> CommandResult:
+        """Käsittele storage-alikomennot (storage load|save|reset).
+
+        - storage load <tiedosto>: Lataa .dsk-tiedosto tallennuslaitteeseen.
+        - storage save <tiedosto>: Tallenna tallennuslaite .dsk-tiedostoon.
+        - storage reset: Nollaa tallennuslaitteen sisältö.
+        """
+        if not args:
+            return CommandResult(
+                False, "Usage: storage load <file> | storage save <file> | storage reset"
+            )
+        sub = args[0].lower()
+        if sub == "load":
+            if len(args) < 2:
+                return CommandResult(False, "Usage: storage load <filename.dsk>")
+            path = Path(" ".join(args[1:]))
+            self.machine.storage.load_from_file(path)
+            return CommandResult(True, f"[green]Storage loaded from {path}[/green]")
+        if sub == "save":
+            if len(args) < 2:
+                return CommandResult(False, "Usage: storage save <filename.dsk>")
+            path = Path(" ".join(args[1:]))
+            self.machine.storage.save_to_file(path)
+            return CommandResult(True, f"[green]Storage saved to {path}[/green]")
+        if sub == "reset":
+            self.machine.storage.reset()
+            return CommandResult(True, "[green]Storage reset (all zeros).[/green]")
+        return CommandResult(
+            False, "Usage: storage load <file> | storage save <file> | storage reset"
+        )
 
     def _format_status(self) -> str:
         """Muotoile CPU:n tilaraportti tekstimuotoon.
