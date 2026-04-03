@@ -81,7 +81,7 @@ from .constants import (
 )
 from .debugger import DebugState
 from .disassembler import Disassembler
-from .examples import get_source, list_examples
+
 from .instruction import OPCODE_TABLE
 from .machine import KCPU16Machine
 from .specs import format_arch_spec_report
@@ -546,7 +546,7 @@ class KCPU16TUI(App[None]):
                 yield Static(id="stack-view")
 
         yield Input(
-            placeholder="Komento: help, step, run, bp, mem, load, assemble ...",
+            placeholder="Command: help, step, run, bp, mem, mset, disk, reset ...",
             id="cmd-input",
         )
         yield Footer()
@@ -785,12 +785,35 @@ class KCPU16TUI(App[None]):
         self._log("  F7/F10  Step 1 instr    F5      Run (stops at BP)")
         self._log("  Ctrl+R  Reset machine   F9      Clear VRAM")
         self._log("  Ctrl+Q  Quit            F1      This help")
-        self._log("[bold]Commands:[/bold]")
-        self._log("  step [n], run [n], reset, assemble")
-        self._log("  bp <addr>, bp list, bp clear")
-        self._log("  mem <addr>, open <path>, save <path>")
-        self._log("  load <example>, examples, regs, status, spec, disasm")
-        self._log("  storage load|save <file>, storage reset")
+        self._log("[bold cyan]File & Assembly:[/bold cyan]")
+        self._log("  open <path>              Load .asm file")
+        self._log("  save [path]              Save editor")
+        self._log("  asm                      Assemble + load into memory")
+        self._log("  check                    Syntax check (no load)")
+        self._log("[bold cyan]CPU Control:[/bold cyan]")
+        self._log("  step [n]                 Step n instructions")
+        self._log("  run [n]                  Run to BP/halt (max n cycles)")
+        self._log("  stop                     Halt CPU")
+        self._log("  restart                  Reassemble and restart")
+        self._log("[bold cyan]Breakpoints:[/bold cyan]")
+        self._log("  bp <addr>                Toggle breakpoint")
+        self._log("  bp list / bp clear       List / clear all")
+        self._log("[bold cyan]Memory:[/bold cyan]")
+        self._log("  mem <addr> [count]       Read word(s)")
+        self._log("  mset <addr> <value>      Write word")
+        self._log("  mfill <addr> <n> <val>   Fill range")
+        self._log("[bold cyan]Disk (Storage):[/bold cyan]")
+        self._log("  disk <block>             Show block hex dump")
+        self._log("  disk load|save <file>    Load/save .dsk file")
+        self._log("  dset <blk> <off> <val>   Edit word in block")
+        self._log("  dfill <block> <value>    Fill block")
+        self._log("[bold cyan]Reset:[/bold cyan]")
+        self._log("  reset                    Memory + CPU (storage intact)")
+        self._log("  reset deep               Memory + CPU + storage")
+        self._log("  reset cpu                CPU only (memory intact)")
+        self._log("[bold cyan]Other:[/bold cyan]")
+        self._log("  cls                      Clear VRAM")
+        self._log("  spec                     Architecture spec")
         self._log("---")
 
     # ------------------------------------------------------------------
@@ -877,25 +900,6 @@ class KCPU16TUI(App[None]):
         except Exception as e:
             self._log(f"[red]Assembly error: {e}[/red]")
             self.is_assembled = False
-
-    def _do_load_example(self, name: str) -> None:
-        """Lataa esimerkkiohjelma editoriin ja assembloi se.
-
-        Hakee esimerkin nimen perusteella examples-moduulista,
-        asettaa sen editoriin ja kutsuu automaattisesti _do_assemble().
-        Jos nimeä ei löydy, näyttää virheen ja kehottaa kokeilemaan
-        'examples'-komentoa.
-        """
-        try:
-            source = get_source(name)
-            self.query_one("#editor", TextArea).text = source
-            self.current_file = None
-            self._log(f"Loaded example: [bold]{name}[/bold]")
-            self._do_assemble()
-        except KeyError:
-            self._log(f"[red]Unknown example: {name}[/red]. Type 'examples'.")
-        except Exception as e:
-            self._log(f"[red]Error: {e}[/red]")
 
     # ------------------------------------------------------------------
     # Breakpoint-tietoinen suoritus
@@ -1301,44 +1305,67 @@ class KCPU16TUI(App[None]):
     def _execute_command(self, command: str) -> CommandResult:
         """Komentotulkki: parsii ja suorittaa komentosyötteen.
 
-        Tukee seuraavat komennot:
-            help              -- Näytä ohje
-            step [n]          -- Steppaa n käskyä (oletus 1)
-            run [n]           -- Aja n sykliä breakpointein (oletus 10000)
-            reset             -- Cold reset
-            bp <addr>         -- Toggle breakpoint osoitteeseen
-            bp list           -- Listaa breakpointit
-            bp clear          -- Poista kaikki breakpointit
-            mem [addr]        -- Näytä/vaihda muistinäkymän osoite
-            examples          -- Listaa saatavilla olevat esimerkit
-            load <name>       -- Lataa esimerkki editoriin ja assembloi
-            open <path>       -- Avaa tiedosto
-            save <path>       -- Tallenna tiedosto
-            assemble          -- Assembloi editorin koodi
-            regs              -- Näytä rekisterit yhdellä rivillä
-            status            -- Näytä CPU:n tila
-            spec              -- Näytä arkkitehtuurin spesifikaatio
-            disasm            -- Näytä disassembly lokissa
-            screen            -- Päivitä Screen-näkymä
-            storage load <f>  -- Lataa .dsk-tiedosto storageen
-            storage save <f>  -- Tallenna storage .dsk-tiedostoon
-            storage reset     -- Nollaa storage
-
-        Parametrit:
-            command: Käyttäjän syöttämä komentorivi.
-
-        Palauttaa:
-            CommandResult(ok, message) - ok=False virhetilanteessa.
+        Komennot:
+            --- Tiedostot & assembly ---
+            open <path>                  -- Avaa .asm tiedosto editoriin
+            save [path]                  -- Tallenna editori tiedostoon
+            asm                          -- Käännä, reset, lataa muistiin
+            check                        -- Tarkista syntaksi
+            --- CPU-ohjaus ---
+            step [n]                     -- Steppaa n käskyä (oletus 1)
+            run [n]                      -- Aja breakpointiin/halttiin
+            stop                         -- Pysäytä CPU
+            restart                      -- Käännä uudelleen ja aloita alusta
+            --- Breakpointit ---
+            bp <addr>                    -- Toggle breakpoint
+            bp list / bp clear           -- Listaa / poista kaikki
+            --- Muisti ---
+            mem <addr> [count]           -- Lue muistia
+            mset <addr> <value>          -- Kirjoita muistiin
+            mfill <addr> <count> <value> -- Täytä muistialue
+            --- Tallennustila ---
+            disk <block>                 -- Näytä blokki
+            disk load|save <path>        -- Lataa/tallenna .dsk
+            dset <block> <offset> <val>  -- Muokkaa tavu blokissa
+            dfill <block> <value>        -- Täytä blokki
+            --- Reset ---
+            reset                        -- Muisti + CPU (storage säilyy)
+            reset deep                   -- Muisti + CPU + storage
+            reset cpu                    -- Vain CPU (muisti säilyy)
+            --- Muut ---
+            cls                          -- Nollaa VRAM
+            help                         -- Näytä ohje
+            spec                         -- Arkkitehtuuriraportti
         """
         parts = command.split()
         op = parts[0].lower()
         args = parts[1:]
 
         try:
-            if op == "help":
-                self.action_show_help()
+            # --- Tiedostot & assembly ---
+            if op == "open":
+                if not args:
+                    return CommandResult(False, "Usage: open <path>")
+                self._do_open(Path(" ".join(args)))
                 return CommandResult(True, "")
 
+            if op == "save":
+                if not args:
+                    if self.current_file:
+                        self._do_save(self.current_file)
+                        return CommandResult(True, "")
+                    return CommandResult(False, "Usage: save <path>")
+                self._do_save(Path(" ".join(args)))
+                return CommandResult(True, "")
+
+            if op == "asm":
+                self._do_assemble()
+                return CommandResult(True, "")
+
+            if op == "check":
+                return self._do_syntax_check()
+
+            # --- CPU-ohjaus ---
             if op == "step":
                 count = int(args[0], 0) if args else 1
                 for _ in range(max(1, count)):
@@ -1355,69 +1382,53 @@ class KCPU16TUI(App[None]):
                 self._update_exec_line()
                 return CommandResult(True, result)
 
-            if op == "reset":
-                self.machine.cold_reset()
-                self.is_assembled = False
-                self.addr_to_line = {}
-                self.dbg.snapshot_registers(self.machine.dump_registers())
-                return CommandResult(True, "[green]Machine reset.[/green]")
+            if op == "stop":
+                self.machine.cpu.halted = True
+                return CommandResult(True, "[red]CPU halted.[/red]")
 
-            if op == "bp":
-                return self._handle_bp_command(args)
-
-            if op in ("mem", "memory"):
-                if args:
-                    self.mem_view_addr = int(args[0], 0)
-                return CommandResult(True, f"Memory view at 0x{self.mem_view_addr:04X}")
-
-            if op == "examples":
-                lines = [f"  [cyan]{n:<16}[/cyan] {d}" for n, d in list_examples()]
-                return CommandResult(True, "Examples:\n" + "\n".join(lines))
-
-            if op == "load":
-                if not args:
-                    return CommandResult(False, "Usage: load <example-name>")
-                self._do_load_example(args[0])
-                return CommandResult(True, "")
-
-            if op == "open":
-                if not args:
-                    return CommandResult(False, "Usage: open <path>")
-                self._do_open(Path(" ".join(args)))
-                return CommandResult(True, "")
-
-            if op == "save":
-                if not args:
-                    return CommandResult(False, "Usage: save <path>")
-                self._do_save(Path(" ".join(args)))
-                return CommandResult(True, "")
-
-            if op == "assemble":
+            if op == "restart":
                 self._do_assemble()
                 return CommandResult(True, "")
 
-            if op == "regs":
-                items = [
-                    f"{n}=0x{v:04X}" for n, v in self.machine.dump_registers().items()
-                ]
-                return CommandResult(True, " | ".join(items))
+            # --- Breakpointit ---
+            if op == "bp":
+                return self._handle_bp_command(args)
 
-            if op == "status":
-                return CommandResult(True, self._format_status())
+            # --- Muisti ---
+            if op == "mem":
+                return self._handle_mem_command(args)
+
+            if op == "mset":
+                return self._handle_mset_command(args)
+
+            if op == "mfill":
+                return self._handle_mfill_command(args)
+
+            # --- Tallennustila ---
+            if op == "disk":
+                return self._handle_disk_command(args)
+
+            if op == "dset":
+                return self._handle_dset_command(args)
+
+            if op == "dfill":
+                return self._handle_dfill_command(args)
+
+            # --- Reset ---
+            if op == "reset":
+                return self._handle_reset_command(args)
+
+            # --- Näyttö & muut ---
+            if op == "cls":
+                self.machine.clear_screen_memory()
+                return CommandResult(True, "[green]VRAM cleared.[/green]")
+
+            if op == "help":
+                self.action_show_help()
+                return CommandResult(True, "")
 
             if op == "spec":
                 return CommandResult(True, format_arch_spec_report())
-
-            if op == "disasm":
-                self._show_disasm_in_log()
-                return CommandResult(True, "")
-
-            if op == "screen":
-                self._refresh_screen_tab()
-                return CommandResult(True, "Screen refreshed.")
-
-            if op == "storage":
-                return self._handle_storage_command(args)
 
             return CommandResult(False, f"Unknown: {op}. Type 'help'.")
         except Exception as exc:
@@ -1447,82 +1458,153 @@ class KCPU16TUI(App[None]):
             return CommandResult(True, f"[red]Breakpoint SET at 0x{addr:04X}[/red]")
         return CommandResult(True, f"Breakpoint REMOVED at 0x{addr:04X}")
 
-    def _handle_storage_command(self, args: list[str]) -> CommandResult:
-        """Käsittele storage-alikomennot (storage load|save|reset).
+    # ------------------------------------------------------------------
+    # Uudet komentokäsittelijät
+    # ------------------------------------------------------------------
 
-        - storage load <tiedosto>: Lataa .dsk-tiedosto tallennuslaitteeseen.
-        - storage save <tiedosto>: Tallenna tallennuslaite .dsk-tiedostoon.
-        - storage reset: Nollaa tallennuslaitteen sisältö.
-        """
+    def _do_syntax_check(self) -> CommandResult:
+        """Tarkista editorin assembly-koodin syntaksi ilman latausta muistiin."""
+        source = self.query_one("#editor", TextArea).text.strip()
+        if not source:
+            return CommandResult(False, "[yellow]Editor is empty.[/yellow]")
+        try:
+            words = self.assembler.assemble(source)
+            return CommandResult(
+                True,
+                f"[green]Syntax OK — {len(words)} words.[/green]",
+            )
+        except Exception as e:
+            return CommandResult(False, f"[red]Syntax error: {e}[/red]")
+
+    def _format_hex_dump(self, words: list[int], base_addr: int) -> str:
+        """Muotoile sanalista hex-dumpiksi (8 sanaa/rivi)."""
+        lines: list[str] = []
+        for row_start in range(0, len(words), 8):
+            addr = base_addr + row_start
+            row = words[row_start : row_start + 8]
+            hex_part = " ".join(f"{w:04X}" for w in row)
+            lines.append(f"  0x{addr:04X}: {hex_part}")
+        return "\n".join(lines)
+
+    def _handle_mem_command(self, args: list[str]) -> CommandResult:
+        """Lue muistia: mem <addr> [count]."""
+        if not args:
+            return CommandResult(False, "Usage: mem <addr> [count]")
+        addr = int(args[0], 0)
+        self.mem_view_addr = addr
+        if len(args) >= 2:
+            count = int(args[1], 0)
+            words = [self.machine.memory.read(addr + i) for i in range(count)]
+            dump = self._format_hex_dump(words, addr)
+            return CommandResult(True, dump)
+        val = self.machine.memory.read(addr)
+        return CommandResult(True, f"0x{addr:04X}: 0x{val:04X} ({val})")
+
+    def _handle_mset_command(self, args: list[str]) -> CommandResult:
+        """Kirjoita muistiin: mset <addr> <value>."""
+        if len(args) < 2:
+            return CommandResult(False, "Usage: mset <addr> <value>")
+        addr = int(args[0], 0)
+        value = int(args[1], 0)
+        self.machine.memory.write(addr, value)
+        return CommandResult(
+            True, f"[green]0x{addr:04X} = 0x{value & WORD_MASK:04X}[/green]"
+        )
+
+    def _handle_mfill_command(self, args: list[str]) -> CommandResult:
+        """Täytä muistialue: mfill <addr> <count> <value>."""
+        if len(args) < 3:
+            return CommandResult(False, "Usage: mfill <addr> <count> <value>")
+        addr = int(args[0], 0)
+        count = int(args[1], 0)
+        value = int(args[2], 0)
+        for i in range(count):
+            self.machine.memory.write(addr + i, value)
+        end = (addr + count - 1) & WORD_MASK
+        return CommandResult(
+            True,
+            f"[green]Filled 0x{addr:04X}–0x{end:04X} with 0x{value & WORD_MASK:04X}[/green]",
+        )
+
+    def _handle_disk_command(self, args: list[str]) -> CommandResult:
+        """Tallennustilan komennot: disk <block> | disk load|save <path>."""
         if not args:
             return CommandResult(
-                False, "Usage: storage load <file> | storage save <file> | storage reset"
+                False, "Usage: disk <block> | disk load <file> | disk save <file>"
             )
         sub = args[0].lower()
         if sub == "load":
             if len(args) < 2:
-                return CommandResult(False, "Usage: storage load <filename.dsk>")
+                return CommandResult(False, "Usage: disk load <filename.dsk>")
             path = Path(" ".join(args[1:]))
             self.machine.storage.load_from_file(path)
-            return CommandResult(True, f"[green]Storage loaded from {path}[/green]")
+            return CommandResult(True, f"[green]Disk loaded from {path}[/green]")
         if sub == "save":
             if len(args) < 2:
-                return CommandResult(False, "Usage: storage save <filename.dsk>")
+                return CommandResult(False, "Usage: disk save <filename.dsk>")
             path = Path(" ".join(args[1:]))
             self.machine.storage.save_to_file(path)
-            return CommandResult(True, f"[green]Storage saved to {path}[/green]")
-        if sub == "reset":
-            self.machine.storage.reset()
-            return CommandResult(True, "[green]Storage reset (all zeros).[/green]")
+            return CommandResult(True, f"[green]Disk saved to {path}[/green]")
+        block_idx = int(args[0], 0)
+        data = self.machine.storage.read_block(block_idx)
+        base = block_idx * self.machine.storage.block_size_words
+        dump = self._format_hex_dump(data, base)
+        return CommandResult(True, f"Block {block_idx}:\n{dump}")
+
+    def _handle_dset_command(self, args: list[str]) -> CommandResult:
+        """Muokkaa tallennustilaa: dset <block> <offset> <value>."""
+        if len(args) < 3:
+            return CommandResult(False, "Usage: dset <block> <offset> <value>")
+        block = int(args[0], 0)
+        offset = int(args[1], 0)
+        value = int(args[2], 0)
+        word_addr = block * self.machine.storage.block_size_words + offset
+        self.machine.storage.write_word(word_addr, value)
         return CommandResult(
-            False, "Usage: storage load <file> | storage save <file> | storage reset"
+            True,
+            f"[green]Block {block} offset {offset} = 0x{value & WORD_MASK:04X}[/green]",
         )
 
-    def _format_status(self) -> str:
-        """Muotoile CPU:n tilaraportti tekstimuotoon.
-
-        Palauttaa monirivisen merkkijonon jossa:
-        - Tila: READY / HALTED / EXITED
-        - Syklit: suoritettujen käskyjen kokonaismäärä
-        - PC, SP, SR: tärkeimmät rekisteriarvot hex-muodossa
-        """
-        cpu = self.machine.cpu
-        if cpu.halted:
-            s = "HALTED"
-        elif self.machine.process_exited:
-            s = "EXITED"
-        else:
-            s = "READY"
-        return (
-            f"State: {s}  Cycles: {cpu.instruction_counter}\n"
-            f"PC: 0x{self.machine.regs.pc:04X}  "
-            f"SP: 0x{self.machine.regs.sp:04X}  "
-            f"SR: 0x{self.machine.regs.sr:04X}"
+    def _handle_dfill_command(self, args: list[str]) -> CommandResult:
+        """Täytä tallenustilan blokki: dfill <block> <value>."""
+        if len(args) < 2:
+            return CommandResult(False, "Usage: dfill <block> <value>")
+        block_idx = int(args[0], 0)
+        value = int(args[1], 0) & WORD_MASK
+        bsw = self.machine.storage.block_size_words
+        data = [value] * bsw
+        self.machine.storage.write_block(block_idx, data)
+        return CommandResult(
+            True,
+            f"[green]Block {block_idx} filled with 0x{value:04X}[/green]",
         )
 
-    def _show_disasm_in_log(self) -> None:
-        """Näytä disassembly loki-widgetissä (disasm-komento).
-
-        Lukee 30 sanaa muistista alkaen PC-6 ja disassembloi ne.
-        Nykyinen PC korostetaan vihreällä taustalla (> -merkki).
-        Tämä on vaihtoehto disassembly-paneelille - hyödyllinen
-        kun haluaa nähdä disassemblyn loki-kontekstissa.
-        """
-        pc = self.machine.regs.pc
-        start = max(0, pc - 6)
-        words = [self.machine.memory.read(start + i) for i in range(30)]
-        result = self.disassembler.disassemble(words, start)
-        self._log("[bold]Disassembly:[/bold]")
-        for line in result.split("\n"):
-            addr_part = line.split(":")[0].strip()
-            try:
-                addr = int(addr_part, 16)
-                if addr == pc:
-                    self._log(f"[bold on dark_green]> {line}[/]")
-                else:
-                    self._log(f"  {line}")
-            except ValueError:
-                self._log(f"  {line}")
+    def _handle_reset_command(self, args: list[str]) -> CommandResult:
+        """Resetoi: reset | reset deep | reset cpu."""
+        if not args:
+            # Normaali reset: VRAM + muisti + CPU. Storage säilyy.
+            self.machine.cold_reset()
+            self.is_assembled = False
+            self.addr_to_line = {}
+            self.dbg.snapshot_registers(self.machine.dump_registers())
+            return CommandResult(True, "[green]Reset (memory + CPU). Storage intact.[/green]")
+        sub = args[0].lower()
+        if sub == "deep":
+            self.machine.cold_reset()
+            self.machine.storage.reset()
+            self.is_assembled = False
+            self.addr_to_line = {}
+            self.dbg.snapshot_registers(self.machine.dump_registers())
+            return CommandResult(
+                True, "[green]Deep reset (memory + CPU + storage).[/green]"
+            )
+        if sub == "cpu":
+            self.machine.cpu.reset()
+            self.dbg.snapshot_registers(self.machine.dump_registers())
+            return CommandResult(
+                True, "[green]CPU reset. Memory preserved.[/green]"
+            )
+        return CommandResult(False, "Usage: reset | reset deep | reset cpu")
 
     # ------------------------------------------------------------------
     # Apumetodit

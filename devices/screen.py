@@ -1,3 +1,6 @@
+# FIXME: varmista että näyttömuistin sisältö päivitetään käyttäjän näkyville ajasimella.
+# FIXME: varmista että kirjoitettaessa näyttömuistiin ascii arvo, se näytetään oletuksena valkoisena tekstinä mustalla pohjalla
+# FIXME: muuta värimäärittely niin, että edustavärin ja taustavärin määrittelyyn käytetään molempiin 2 bittiä.
 """
 Virtuaalinen tekstinaytto kCPU16-emulaattorille.
 
