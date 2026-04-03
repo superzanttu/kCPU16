@@ -35,11 +35,11 @@ Layout:
   │ (80x24 VRAM) │ (TabbedContent)     │ (TextArea, muokk.)          │
   │              │ ●=breakpoint        │ rivinumerot                 │
   │              │ ▶=nykyinen PC       │ kursori seuraa PC           │
-  ├──────────────┤                     │                             │
-  │ COMMANDS     │                     │                             │
-  │ (komentotul.)├─────────────────────┤                             │
-  │              │ LOG                 │                             │
-  ├──────────────┴──────┬──────────────┴─────────────────────────────┤
+  ├──────────────┴─────────────────────┤                             │
+  │ LOG (lokiviestit)                  │                             │
+  ├────────────────────────────────────┤                             │
+  │ COMMANDS (komentotulosteet)        │                             │
+  ├────────────────────────────────────┴─────────────────────────────┤
   │ > komentosyöte      │ FLAGS Z N C V I P  │ REGISTERS             │
   │                     │ CPU state/cycles   │ (muuttuneet=punainen) │
   └─────────────────────┴────────────────────┴───────────────────────┘
@@ -277,10 +277,12 @@ class KCPU16TUI(App[None]):
 
     Widget-hierarkia:
         Toolbar (Horizontal + Buttonit) → content-area (Horizontal):
-            left-col: screen-section (Static) + cmd-output-pane (RichLog)
-            middle-col: disasm-tabs (TabbedContent: Disassembly|Memory|Stack)
-                        + log-pane (RichLog)
-            editor-pane: TextArea
+            left-panel: top-section (Horizontal):
+                            screen-section (Static, VRAM 80x24)
+                            disasm-tabs (TabbedContent: Disassembly|Memory|Stack)
+                        log-pane (RichLog, lokiviestit)
+                        cmd-output-pane (RichLog, komentotulosteet)
+            editor-pane: TextArea (koko korkeus)
         → bottom-bar (Horizontal):
             cmd-input-col (Input) | flags-pane (Flags+CPU) | regs-pane (Registers)
 
@@ -299,13 +301,15 @@ class KCPU16TUI(App[None]):
     # Rakenne ylhäältä alas:
     #   1. #toolbar          - Yläpalkki: painikkeet (dock: top, height: 3)
     #   2. #content-area     - Pääalue (height: 1fr, horizontal):
-    #      - #left-col       - Vasen sarake (width: 82): Screen + Commands
-    #      - #middle-col     - Keskisarake (width: 60): Disassembly-tabit + Log
-    #      - #editor-pane    - Oikea sarake (width: 1fr): Editori
-    #   3. #bottom-bar       - Alarivi (height: auto, horizontal):
-    #      - #cmd-input-col  - Komentosyöte (width: 1fr)
+    #      - #left-panel     - Vasen paneeli (width: 142): Screen+Disasm | Log | Cmds
+    #        - #top-section  - Yläosa (horizontal): Screen (82) + Disasm tabs (60)
+    #        - #log-pane     - Lokiviestit (height: 1fr)
+    #        - #cmd-output   - Komentotulosteet (height: 1fr)
+    #      - #editor-pane    - Oikea sarake (width: 1fr): Editori (koko korkeus)
+    #   3. #bottom-bar       - Alarivi (dock: bottom, horizontal):
+    #      - #cmd-input-col  - Komentosyöte (width: 142, 1 rivi)
     #      - #flags-pane     - Liput + CPU-tila (width: auto)
-    #      - #regs-pane      - Rekisterit (width: auto)
+    #      - #regs-pane      - Rekisterit (width: 1fr)
     CSS = """
     Screen {
         layout: vertical;
@@ -329,18 +333,23 @@ class KCPU16TUI(App[None]):
         height: 3;
     }
 
-    /* ---- Content area (3 columns) ---- */
+    /* ---- Content area ---- */
     #content-area {
         height: 1fr;
         layout: horizontal;
     }
 
-    /* -- Left column: Screen + Command output -- */
-    #left-col {
-        width: 82;
+    /* -- Left panel: Screen+Disasm top, Log+CmdOutput bottom -- */
+    #left-panel {
+        width: 142;
         layout: vertical;
     }
+    #top-section {
+        height: 26;
+        layout: horizontal;
+    }
     #screen-section {
+        width: 82;
         height: 26;
         border: solid $primary-darken-2;
         border-title-color: $accent;
@@ -349,23 +358,9 @@ class KCPU16TUI(App[None]):
         width: 80;
         height: 24;
     }
-    #cmd-output-pane {
-        height: 1fr;
-        border: solid $primary-darken-2;
-        border-title-color: $accent;
-    }
-    #cmd-output {
-        height: 1fr;
-    }
-
-    /* -- Middle column: Disassembly tabs + Log -- */
-    #middle-col {
-        width: 60;
-        min-width: 50;
-        layout: vertical;
-    }
     #disasm-tabs {
-        height: 2fr;
+        width: 1fr;
+        height: 1fr;
         border: solid $success-darken-1;
         border-title-color: $accent;
     }
@@ -392,8 +387,16 @@ class KCPU16TUI(App[None]):
     #log-view {
         height: 1fr;
     }
+    #cmd-output-pane {
+        height: 1fr;
+        border: solid $primary-darken-2;
+        border-title-color: $accent;
+    }
+    #cmd-output {
+        height: 1fr;
+    }
 
-    /* -- Right column: Editor -- */
+    /* -- Right column: Editor (full height) -- */
     #editor-pane {
         width: 1fr;
         min-width: 30;
@@ -413,24 +416,22 @@ class KCPU16TUI(App[None]):
     }
     #cmd-input-col {
         width: 142;
-        height: 3;
-        align: left bottom;
-        background: yellow;
+        height: 1;
     }
     #cmd-input {
         width: 1fr;
         height: 1;
     }
     #flags-pane {
-        width: 1fr;
-        height: 1fr;
+        width: auto;
+        height: auto;
         border: solid $warning-darken-1;
         border-title-color: $accent;
         padding: 0 1;
     }
     #regs-pane {
         width: 1fr;
-        height: 1fr;
+        height: auto;
         border: solid $warning-darken-1;
         border-title-color: $accent;
         padding: 0 1;
@@ -491,26 +492,20 @@ class KCPU16TUI(App[None]):
     def compose(self) -> ComposeResult:
         """Rakenna sovelluksen widget-puu (Textual compose -pattern).
 
-        Palauttaa kaikki widgetit yield-lauseilla. Textual kutsuu tätä
-        kerran sovelluksen käynnistyessä.
-
         Widget-hierarkia:
             Toolbar (#toolbar): Open, Save, New, Assemble, Step, Run, Reset,
                                 BP, Clear, Help -painikkeet
             Content area (#content-area, Horizontal):
-                #left-col (Vertical, 82 lev.):
-                    #screen-section: Static (VRAM 80x24)
-                    #cmd-output-pane: RichLog (komentotulosteet)
-                #middle-col (Vertical, 60 lev.):
-                    #disasm-tabs (TabbedContent):
-                        Disassembly: Static (disassembly-listaus)
-                        Memory: Static (hex dump)
-                        Stack: Static (pinonäkymä)
+                #left-panel (Vertical, 142 lev.):
+                    #top-section (Horizontal):
+                        #screen-section: Static (VRAM 80x24)
+                        #disasm-tabs (TabbedContent: Disassembly|Memory|Stack)
                     #log-pane: RichLog (lokiviestit)
-                #editor-pane (Vertical, 1fr):
+                    #cmd-output-pane: RichLog (komentotulosteet)
+                #editor-pane (Vertical, 1fr, koko korkeus):
                     TextArea (lähdekoodieditori)
             Bottom bar (#bottom-bar, Horizontal):
-                #cmd-input-col: Input (komentosyöte)
+                #cmd-input-col: Input (komentosyöte, 142 lev., 1 rivi)
                 #flags-pane: Flags + CPU-tila
                 #regs-pane: Rekisterit
         """
@@ -530,36 +525,34 @@ class KCPU16TUI(App[None]):
             yield Button("Clear F9", id="btn-clear", variant="default")
             yield Button("Help F1", id="btn-help", variant="default")
 
-        # Content area: 3 columns
+        # Content area: left panel + editor
         with Horizontal(id="content-area"):
-            # Left column: Screen + Command output
-            with Vertical(id="left-col"):
-                with Vertical(id="screen-section"):
-                    yield Static(id="screen-view-solo")
-                with Vertical(id="cmd-output-pane"):
+            # Left panel: Screen+Disasm top, Log+CmdOutput bottom
+            with Vertical(id="left-panel"):
+                with Horizontal(id="top-section"):
+                    with Vertical(id="screen-section"):
+                        yield Static(id="screen-view-solo")
+                    with TabbedContent(id="disasm-tabs"):
+                        with TabPane("Disassembly", id="tab-disasm"):
+                            with VerticalScroll():
+                                yield Static(id="disasm-content")
+                        with TabPane("Memory", id="tab-memory"):
+                            with VerticalScroll():
+                                yield Static(id="memory-view")
+                        with TabPane("Stack", id="tab-stack"):
+                            with VerticalScroll():
+                                yield Static(id="stack-view")
+                with Vertical(id="log-pane"):
                     yield RichLog(
-                        id="cmd-output",
+                        id="log-view",
                         wrap=True,
                         highlight=False,
                         markup=True,
                         max_lines=500,
                     )
-
-            # Middle column: Disassembly tabs + Log
-            with Vertical(id="middle-col"):
-                with TabbedContent(id="disasm-tabs"):
-                    with TabPane("Disassembly", id="tab-disasm"):
-                        with VerticalScroll():
-                            yield Static(id="disasm-content")
-                    with TabPane("Memory", id="tab-memory"):
-                        with VerticalScroll():
-                            yield Static(id="memory-view")
-                    with TabPane("Stack", id="tab-stack"):
-                        with VerticalScroll():
-                            yield Static(id="stack-view")
-                with Vertical(id="log-pane"):
+                with Vertical(id="cmd-output-pane"):
                     yield RichLog(
-                        id="log-view",
+                        id="cmd-output",
                         wrap=True,
                         highlight=False,
                         markup=True,
