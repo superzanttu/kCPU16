@@ -30,21 +30,19 @@ Tietovirta:
 
 Layout:
   ┌─ Toolbar (Open|Save|New | Assemble ^B | Step F7|Run F5|Reset ^R | BP F2)
-  ├────────────────────┬─────────────────────┬─────────────────────────┤
-  │ SOURCE EDITOR      │ DISASSEMBLY         │ REGISTERS               │
-  │ (TextArea, muokk.) │ (Static, värikood.) │ (muuttuneet=punainen)   │
-  │ rivinumerot        │ ●=breakpoint        │                         │
-  │ kursori seuraa PC  │ ▶=nykyinen PC       ├─────────────────────────┤
-  │ width: 2fr         │ width: 2fr          │ FLAGS  Z N C V I P      │
-  │                    │                     │ (vihreä=1, dim=0)       │
-  │                    │                     ├─────────────────────────┤
-  │                    │                     │ CPU: READY/HALTED/EXIT  │
-  │                    │                     │ Cycles: N  BP: lista    │
-  ├────────────────────┴─────────────────────┴─────────────────────────┤
-  │ [Log] [Screen] [Memory] [Stack]   (TabbedContent, height: 14)      │
-  ├────────────────────────────────────────────────────────────────────┤
-  │ > komentosyöte                                              Footer│
-  └────────────────────────────────────────────────────────────────────┘
+  ├──────────────┬─────────────────────┬─────────────────────────────┤
+  │ SCREEN       │ DISASSEMBLY/MEM/STK │ SOURCE EDITOR               │
+  │ (80x24 VRAM) │ (TabbedContent)     │ (TextArea, muokk.)          │
+  │              │ ●=breakpoint        │ rivinumerot                 │
+  │              │ ▶=nykyinen PC       │ kursori seuraa PC           │
+  ├──────────────┤                     │                             │
+  │ COMMANDS     │                     │                             │
+  │ (komentotul.)├─────────────────────┤                             │
+  │              │ LOG                 │                             │
+  ├──────────────┴──────┬──────────────┴─────────────────────────────┤
+  │ > komentosyöte      │ FLAGS Z N C V I P  │ REGISTERS             │
+  │                     │ CPU state/cycles   │ (muuttuneet=punainen) │
+  └─────────────────────┴────────────────────┴───────────────────────┘
 """
 
 from __future__ import annotations
@@ -57,8 +55,6 @@ from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.widgets import (
     Button,
-    Footer,
-    Header,
     Input,
     RichLog,
     Static,
@@ -280,11 +276,13 @@ class KCPU16TUI(App[None]):
         is_assembled  -- True kun koodi on assembloitu ja ladattu muistiin.
 
     Widget-hierarkia:
-        Header → Toolbar (Horizontal + Buttonit) → main-area (Horizontal):
-            editor-pane (TextArea) | disasm-pane (Static) | right-sidebar:
-                regs-pane | flags-pane | cpu-pane
-        → bottom-tabs (TabbedContent): Log | Screen | Memory | Stack
-        → cmd-input (Input) → Footer
+        Toolbar (Horizontal + Buttonit) → content-area (Horizontal):
+            left-col: screen-section (Static) + cmd-output-pane (RichLog)
+            middle-col: disasm-tabs (TabbedContent: Disassembly|Memory|Stack)
+                        + log-pane (RichLog)
+            editor-pane: TextArea
+        → bottom-bar (Horizontal):
+            cmd-input-col (Input) | flags-pane (Flags+CPU) | regs-pane (Registers)
 
     Päivityslogiikka:
         _refresh_all() kutsutaan jokaisen muutoksen jälkeen (step, run, reset,
@@ -300,16 +298,14 @@ class KCPU16TUI(App[None]):
     #
     # Rakenne ylhäältä alas:
     #   1. #toolbar          - Yläpalkki: painikkeet (dock: top, height: 3)
-    #   2. #main-area        - Kolmen sarakkeen pääalue (height: 1fr, joustava):
-    #      - #editor-pane    - Lähdekoodi-editori (width: 2fr, vasemmalla)
-    #      - #disasm-pane    - Disassembly-näkymä (width: 2fr, keskellä)
-    #      - #right-sidebar  - Oikea sivupalkki (width: 30, kiinteä):
-    #          #regs-pane, #flags-pane, #cpu-pane päällekkäin
-    #   3. #screen-section   - Screen-näytön oma osio (height: 1fr)
-    #   4. #bottom-area      - Alatason 50/50 jako (height: 1fr):
-    #      - #cmd-area       - Vasemmalla (50%): komentosyöte + output
-    #      - #tabs-area      - Oikealla (50%): Log/Memory/Stack välilehdet
-    #   5. Footer            - Textual Footer (näppäinsidonnaisuudet)
+    #   2. #content-area     - Pääalue (height: 1fr, horizontal):
+    #      - #left-col       - Vasen sarake (width: 82): Screen + Commands
+    #      - #middle-col     - Keskisarake (width: 60): Disassembly-tabit + Log
+    #      - #editor-pane    - Oikea sarake (width: 1fr): Editori
+    #   3. #bottom-bar       - Alarivi (height: auto, horizontal):
+    #      - #cmd-input-col  - Komentosyöte (width: 1fr)
+    #      - #flags-pane     - Liput + CPU-tila (width: auto)
+    #      - #regs-pane      - Rekisterit (width: auto)
     CSS = """
     Screen {
         layout: vertical;
@@ -321,7 +317,6 @@ class KCPU16TUI(App[None]):
         height: 3;
         dock: top;
         background: $panel;
-        border-bottom: solid $primary-darken-2;
         layout: horizontal;
     }
     #toolbar Button {
@@ -334,15 +329,73 @@ class KCPU16TUI(App[None]):
         height: 3;
     }
 
-    /* ---- Main 3-column area ---- */
-    #main-area {
+    /* ---- Content area (3 columns) ---- */
+    #content-area {
         height: 1fr;
         layout: horizontal;
     }
 
-    /* Editor (left) */
+    /* -- Left column: Screen + Command output -- */
+    #left-col {
+        width: 82;
+        layout: vertical;
+    }
+    #screen-section {
+        height: 26;
+        border: solid $primary-darken-2;
+        border-title-color: $accent;
+    }
+    #screen-view-solo {
+        width: 80;
+        height: 24;
+    }
+    #cmd-output-pane {
+        height: 1fr;
+        border: solid $primary-darken-2;
+        border-title-color: $accent;
+    }
+    #cmd-output {
+        height: 1fr;
+    }
+
+    /* -- Middle column: Disassembly tabs + Log -- */
+    #middle-col {
+        width: 60;
+        min-width: 50;
+        layout: vertical;
+    }
+    #disasm-tabs {
+        height: 2fr;
+        border: solid $success-darken-1;
+        border-title-color: $accent;
+    }
+    TabPane {
+        padding: 0;
+    }
+    TabPane VerticalScroll {
+        height: 1fr;
+    }
+    #disasm-content {
+        padding: 0 1;
+    }
+    #memory-view {
+        padding: 0 1;
+    }
+    #stack-view {
+        padding: 0 1;
+    }
+    #log-pane {
+        height: 1fr;
+        border: solid $primary-darken-2;
+        border-title-color: $accent;
+    }
+    #log-view {
+        height: 1fr;
+    }
+
+    /* -- Right column: Editor -- */
     #editor-pane {
-        width: 2fr;
+        width: 1fr;
         min-width: 30;
         border: solid $primary-darken-2;
         border-title-color: $accent;
@@ -351,95 +404,34 @@ class KCPU16TUI(App[None]):
         height: 1fr;
     }
 
-    /* Disassembly (center) */
-    #disasm-pane {
-        width: 2fr;
-        min-width: 24;
-        border: solid $success-darken-1;
-        border-title-color: $accent;
-    }
-    #disasm-content {
-        padding: 0 1;
-    }
-
-    /* Right sidebar */
-    #right-sidebar {
-        width: 30;
-        min-width: 26;
-        max-width: 36;
-    }
-    #regs-pane {
+    /* ---- Bottom bar: Input | Flags+CPU | Registers ---- */
+    #bottom-bar {
+        dock: bottom;
         height: auto;
         max-height: 14;
-        border: solid $warning-darken-1;
-        border-title-color: $accent;
-        padding: 0 1;
-    }
-    #flags-pane {
-        height: 5;
-        border: solid $warning-darken-1;
-        border-title-color: $accent;
-        padding: 0 1;
-    }
-    #cpu-pane {
-        height: 1fr;
-        min-height: 4;
-        border: solid $warning-darken-1;
-        border-title-color: $accent;
-        padding: 0 1;
-    }
-
-    /* ---- Screen section (new) ---- */
-    #screen-section {
-        height: 1fr;
-        border: solid $primary-darken-2;
-        border-title-color: $accent;
-        layout: vertical;
-    }
-    #screen-view-solo {
-        height: 1fr;
-        padding: 0 1;
-    }
-
-    /* ---- Bottom area: 50/50 split ---- */
-    #bottom-area {
-        height: 1fr;
         layout: horizontal;
-        border-top: solid $primary-darken-2;
     }
-
-    /* Command area (left 50%) */
-    #cmd-area {
-        width: 1fr;
+    #cmd-input-col {
+        width: 142;
         height: 1fr;
-        layout: vertical;
-        border-right: solid $primary-darken-2;
+        align: left bottom;
     }
     #cmd-input {
-        height: 3;
         width: 1fr;
+        height: 1;
     }
-    #cmd-output {
-        height: 1fr;
-    }
-
-    /* Tabs area (right 50%) */
-    #tabs-area {
+    #flags-pane {
         width: 1fr;
-        layout: vertical;
-    }
-    TabPane {
-        padding: 0;
-    }
-    #log-view {
         height: 1fr;
-    }
-    #memory-view {
-        height: 1fr;
+        border: solid $warning-darken-1;
+        border-title-color: $accent;
         padding: 0 1;
     }
-    #stack-view {
+    #regs-pane {
+        width: 1fr;
         height: 1fr;
+        border: solid $warning-darken-1;
+        border-title-color: $accent;
         padding: 0 1;
     }
     """
@@ -488,6 +480,8 @@ class KCPU16TUI(App[None]):
         self.mem_view_addr: int = BOOT_RAM_START
         self.addr_to_line: dict[int, int] = {}
         self.is_assembled: bool = False
+        self._last_screen_render: str = ""
+        self._cmd_context: bool = False
 
     # ------------------------------------------------------------------
     # Layout
@@ -500,30 +494,25 @@ class KCPU16TUI(App[None]):
         kerran sovelluksen käynnistyessä.
 
         Widget-hierarkia:
-            Header (kellonaika)
             Toolbar (#toolbar): Open, Save, New, Assemble, Step, Run, Reset,
                                 BP, Clear, Help -painikkeet
-            Main area (#main-area, Horizontal):
-                #editor-pane: TextArea (language=None, ei tree-sitter ASM:lle)
-                #disasm-pane: Static (päivitetään _refresh_disassembly():lla)
-                #right-sidebar:
-                    #regs-pane: Rekisterit (Static)
-                    #flags-pane: Liput (Static)
-                    #cpu-pane: CPU-tila (Static)
-            Screen section (#screen-section, Vertical):
-                #screen-view-solo: Static (VRAM-renderöinti)
-            Bottom area (#bottom-area, Horizontal, 50/50 split):
-                Left (#cmd-area, Vertical):
-                    #cmd-input: Input (Komentosyöte)
-                    #cmd-output: RichLog (Komentojen tulosteet)
-                Right (#tabs-area, TabbedContent):
-                    Log (RichLog #log-view, max 500 riviä)
-                    Memory (Static #memory-view, hex dump)
-                    Stack (Static #stack-view, pinonäkymä)
-            Footer: Näppäinsidonnaisuudet
+            Content area (#content-area, Horizontal):
+                #left-col (Vertical, 82 lev.):
+                    #screen-section: Static (VRAM 80x24)
+                    #cmd-output-pane: RichLog (komentotulosteet)
+                #middle-col (Vertical, 60 lev.):
+                    #disasm-tabs (TabbedContent):
+                        Disassembly: Static (disassembly-listaus)
+                        Memory: Static (hex dump)
+                        Stack: Static (pinonäkymä)
+                    #log-pane: RichLog (lokiviestit)
+                #editor-pane (Vertical, 1fr):
+                    TextArea (lähdekoodieditori)
+            Bottom bar (#bottom-bar, Horizontal):
+                #cmd-input-col: Input (komentosyöte)
+                #flags-pane: Flags + CPU-tila
+                #regs-pane: Rekisterit
         """
-        yield Header(show_clock=True)
-
         # Toolbar
         with Horizontal(id="toolbar"):
             yield Button("Open", id="btn-open", variant="default")
@@ -540,45 +529,34 @@ class KCPU16TUI(App[None]):
             yield Button("Clear F9", id="btn-clear", variant="default")
             yield Button("Help F1", id="btn-help", variant="default")
 
-        # Main area: Editor | Disassembly | Right sidebar
-        with Horizontal(id="main-area"):
-            with Vertical(id="editor-pane"):
-                yield TextArea("", language=None, show_line_numbers=True, id="editor")
+        # Content area: 3 columns
+        with Horizontal(id="content-area"):
+            # Left column: Screen + Command output
+            with Vertical(id="left-col"):
+                with Vertical(id="screen-section"):
+                    yield Static(id="screen-view-solo")
+                with Vertical(id="cmd-output-pane"):
+                    yield RichLog(
+                        id="cmd-output",
+                        wrap=True,
+                        highlight=False,
+                        markup=True,
+                        max_lines=500,
+                    )
 
-            with VerticalScroll(id="disasm-pane"):
-                yield Static(id="disasm-content")
-
-            with Vertical(id="right-sidebar"):
-                with Vertical(id="regs-pane"):
-                    yield Static(id="regs-content")
-                with Vertical(id="flags-pane"):
-                    yield Static(id="flags-content")
-                with Vertical(id="cpu-pane"):
-                    yield Static(id="cpu-content")
-
-        # Screen section (new)
-        with Vertical(id="screen-section"):
-            yield Static(id="screen-view-solo")
-
-        # Bottom area: 50/50 split
-        with Horizontal(id="bottom-area"):
-            # Left: Command area
-            with Vertical(id="cmd-area"):
-                yield Input(
-                    placeholder="Command: help, step, run, bp, mem, mset, disk, reset ...",
-                    id="cmd-input",
-                )
-                yield RichLog(
-                    id="cmd-output",
-                    wrap=True,
-                    highlight=False,
-                    markup=True,
-                    max_lines=500,
-                )
-
-            # Right: Tabs area
-            with TabbedContent(id="tabs-area"):
-                with TabPane("Log", id="tab-log"):
+            # Middle column: Disassembly tabs + Log
+            with Vertical(id="middle-col"):
+                with TabbedContent(id="disasm-tabs"):
+                    with TabPane("Disassembly", id="tab-disasm"):
+                        with VerticalScroll():
+                            yield Static(id="disasm-content")
+                    with TabPane("Memory", id="tab-memory"):
+                        with VerticalScroll():
+                            yield Static(id="memory-view")
+                    with TabPane("Stack", id="tab-stack"):
+                        with VerticalScroll():
+                            yield Static(id="stack-view")
+                with Vertical(id="log-pane"):
                     yield RichLog(
                         id="log-view",
                         wrap=True,
@@ -586,12 +564,23 @@ class KCPU16TUI(App[None]):
                         markup=True,
                         max_lines=500,
                     )
-                with TabPane("Memory", id="tab-memory"):
-                    yield Static(id="memory-view")
-                with TabPane("Stack", id="tab-stack"):
-                    yield Static(id="stack-view")
 
-        yield Footer()
+            # Right column: Editor (full height)
+            with Vertical(id="editor-pane"):
+                yield TextArea("", language=None, show_line_numbers=True, id="editor")
+
+        # Bottom bar: Command input | Flags+CPU | Registers
+        with Horizontal(id="bottom-bar"):
+            with Vertical(id="cmd-input-col"):
+                yield Input(
+                    placeholder="Command: help, step, run, bp, mem, mset, disk, reset ...",
+                    id="cmd-input",
+                )
+            with Vertical(id="flags-pane"):
+                yield Static(id="flags-content")
+                yield Static(id="cpu-content")
+            with Vertical(id="regs-pane"):
+                yield Static(id="regs-content")
 
     # ------------------------------------------------------------------
     # Alustus
@@ -609,12 +598,12 @@ class KCPU16TUI(App[None]):
         5. Päivitetään kaikki näkymät (_refresh_all)
         6. Käynnistetään Screen-tabin 0.5s päivitystimer
         """
-        self.query_one("#editor-pane").border_title = "Source Editor"
-        self.query_one("#disasm-pane").border_title = "Disassembly"
+        self.query_one("#editor-pane").border_title = "Editor"
         self.query_one("#regs-pane").border_title = "Registers"
         self.query_one("#flags-pane").border_title = "Flags"
-        self.query_one("#cpu-pane").border_title = "CPU"
         self.query_one("#screen-section").border_title = "Screen"
+        self.query_one("#cmd-output-pane").border_title = "Commands"
+        self.query_one("#log-pane").border_title = "Log"
 
         self.machine.cold_reset()
         self.dbg.snapshot_registers(self.machine.dump_registers())
@@ -689,48 +678,35 @@ class KCPU16TUI(App[None]):
     def on_input_submitted(self, event: Input.Submitted) -> None:
         """Käsittele komentosyöte (Enter-painallus #cmd-input -kentässä).
 
-        Lukee komennon, tyhjentää kentän, logittaa komennon, suorittaa
-        sen _execute_command():lla ja näyttää tuloksen.
+        Lukee komennon, tyhjentää kentän, näyttää komennon cmd-output:issa,
+        suorittaa sen _execute_command():lla ja näyttää tuloksen.
 
-        Reititys:
-        - Virheelliset komennot → Log tab (punaisella)
-        - Data output (mem, disk, hex dumps) → Command Output area
-        - Status messages (step, run, etc.) → Log tab
-
-        Päivittää kaikki näkymät lopuksi.
+        Asettaa _cmd_context=True jotta kaikki _log()-kutsut (myös
+        action_show_help, _do_assemble jne.) ohjautuvat cmd-outputiin.
         """
         cmd = event.value.strip()
         event.input.value = ""
         if not cmd:
             return
-        self._log(f"[dim]> {cmd}[/dim]")
-        result = self._execute_command(cmd)
 
-        # Määritä reititys: data-output vai status-message?
-        cmd_verb = cmd.split()[0].lower()
-        is_data_command = cmd_verb in {"mem", "mset", "mfill", "disk", "dset", "dfill"}
+        # Ohjaa kaikki _log()-kutsut cmd-outputiin komennon suorituksen ajaksi
+        self._cmd_context = True
+        try:
+            self._log(f"[dim]> {cmd}[/dim]")
+            result = self._execute_command(cmd)
 
-        if result.ok:
-            if result.message:
-                if is_data_command:
-                    # Data output (hex dumps, formatted lists) → cmd-output
-                    self._log_cmd_output(result.message)
-                else:
-                    # Status messages → log
+            if result.ok:
+                if result.message:
                     self._log(result.message)
-        else:
-            # Errors always go to log
-            self._log(f"[red]{result.message}[/red]")
+            else:
+                self._log(f"[red]{result.message}[/red]")
 
-        # Älykäs refresh: Skip screen rendering, let 1s timer handle VRAM.
-        # Screen only needs updating if CPU state changed (step/run).
-        # Data commands (mem, disk) don't affect screen.
-        if cmd_verb not in {"mem", "mset", "mfill", "disk", "dset", "dfill"}:
-            self._refresh_all()
-        else:
-            # For memory/disk commands, only refresh memory/stack views
-            self._refresh_memory()
-            self._refresh_stack()
+            # VAIN step/run komennot päivittävät näkymän
+            cmd_verb = cmd.split()[0].lower()
+            if cmd_verb in {"step", "run", "restart", "asm", "reset"}:
+                self._refresh_all()
+        finally:
+            self._cmd_context = False
 
     # ------------------------------------------------------------------
     # Actions (näppäinsidonnaisuudet)
@@ -1235,17 +1211,16 @@ class KCPU16TUI(App[None]):
         self.query_one("#cpu-content", Static).update("\n".join(lines))
 
     def _refresh_screen_tab(self) -> None:
-        """Päivitä Screen-näytön VRAM-renderöinti.
+        """Päivitä Screen-näytön VRAM-renderöinti (1s timer).
 
-        Kutsuu screen.render_with_rich_colors() joka lukee VRAM-alueen
-        (0xF800-0xFF7F, 80x24) ja tuottaa Rich-muotoillun tekstin
-        väreillä (FG/BG). Kutsutaan sekä _refresh_all():sta että
-        0.5s intervallitimerista (VRAM voi muuttua IO-operaatiolla
-        ilman explisiittistä refreshiä, esim. DWRITE-käskyn aikana).
+        Käyttää cachea: Static.update() kutsutaan vain kun VRAM-sisältö
+        on oikeasti muuttunut edellisestä kerrasta.
         """
         try:
             rendered = self.machine.screen.render_with_rich_colors(self.machine.memory)
-            self.query_one("#screen-view-solo", Static).update(rendered)
+            if rendered != self._last_screen_render:
+                self._last_screen_render = rendered
+                self.query_one("#screen-view-solo", Static).update(rendered)
         except Exception:
             pass
 
@@ -1681,14 +1656,17 @@ class KCPU16TUI(App[None]):
     # ------------------------------------------------------------------
 
     def _log(self, message: str) -> None:
-        """Kirjoita viesti Log-välilehden RichLog-widgettiin.
+        """Kirjoita viesti Log-välilehden tai cmd-output:in RichLog-widgettiin.
 
+        Jos _cmd_context on True (komennon suorituksen aikana),
+        ohjaa viesti cmd-output:iin Log-tabin sijaan.
         Tukee Rich-markupia (esim. [bold], [red], [dim]).
-        Hiljaisesti ohittaa poikkeukset jos widget ei ole käytettävissä
-        (esim. sovelluksen sammutuksen aikana).
         """
         try:
-            self.query_one("#log-view", RichLog).write(message)
+            if self._cmd_context:
+                self.query_one("#cmd-output", RichLog).write(message)
+            else:
+                self.query_one("#log-view", RichLog).write(message)
         except Exception:
             pass
 

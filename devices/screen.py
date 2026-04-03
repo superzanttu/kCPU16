@@ -145,8 +145,8 @@ class ScreenDevice:
         """
         Renderoi VRAM Rich-tekstiksi väreillä ja attribuuteilla.
 
-        Kun pelkkä ASCII-merkki kirjoitetaan VRAM:iin (FG=0, BG=0),
-        se näytetään oletuksena valkoisena mustalla pohjalla.
+        Optimoitu: yhdistää peräkkäiset saman tyylin merkit yhteen
+        Rich-tagiin (esim. 80 tyhjää merkkiä → 1 tagi, ei 80).
 
         Args:
             memory: Muistiolio, josta VRAM luetaan
@@ -158,32 +158,37 @@ class ScreenDevice:
         addr = VRAM_START
 
         for _ in range(self.rows):
-            row_text = ""
+            row_parts: list[str] = []
+            run_chars: list[str] = []
+            run_tag = ""
 
             for _ in range(self.cols):
                 word = memory.read(addr)
                 ch, fg, bg, bold, blink = self.extract_char_with_attrs(word)
 
-                # Korvaa tulostuskelvoittomat merkit
                 if not (32 <= ord(ch) < 127):
                     ch = " "
 
-                # Oletusväri: jos pelkkä ASCII ilman värimäärittelyä,
-                # näytä valkoisena mustalla pohjalla
                 if fg == 0 and bg == 0 and ch != " ":
                     fg = COLOR_WHITE
 
                 fg_color = _COLOR_MAP.get(fg, "white")
                 bg_color = _COLOR_MAP.get(bg, "black")
-
-                # Attribuutit
                 style = "bold" if bold else "normal"
+                tag = f"[{style} on {bg_color} {fg_color}]"
 
-                rich_tag = f"[{style} on {bg_color} {fg_color}]"
-                row_text += f"{rich_tag}{ch}[/]"
+                if tag == run_tag:
+                    run_chars.append(ch)
+                else:
+                    if run_chars:
+                        row_parts.append(f"{run_tag}{''.join(run_chars)}[/]")
+                    run_tag = tag
+                    run_chars = [ch]
 
                 addr += 1
 
-            lines.append(row_text)
+            if run_chars:
+                row_parts.append(f"{run_tag}{''.join(run_chars)}[/]")
+            lines.append("".join(row_parts))
 
         return "\n".join(lines)
