@@ -43,6 +43,7 @@ from .constants import (
     INT_TIMER,
     INT_VECTOR_COUNT,
     INT_VECTOR_BASE,
+    SR_FLAG_C,
     SR_FLAG_I,
     SR_FLAG_N,
     SR_FLAG_V,
@@ -63,6 +64,7 @@ from .registers import RegisterFile
 # TYPE_CHECKING-lohko estaa syklisen importin ajonaikana
 if TYPE_CHECKING:
     from .devices.storage import BlockStorageDevice
+    from .devices.keyboard import KeyboardDevice
 
 
 @dataclass
@@ -84,6 +86,7 @@ class CPU:
     memory: Memory  # Paamuisti
     regs: RegisterFile  # Rekisterit
     storage: "BlockStorageDevice | None" = None  # Tallennuslaite (valinnainen)
+    keyboard: "KeyboardDevice | None" = None  # Nappaimistolaite (valinnainen)
 
     halted: bool = False  # Onko kone pysahtynyt (HALT)?
     instruction_counter: int = 0  # Suoritettujen kaskyjen maara
@@ -284,6 +287,21 @@ class CPU:
             addr = self._get_reg(ins.operands[0])  # regD sisaltaa kohdeosoitteen
             self.memory.check_user_access(addr, self.regs.mpr)
 
+        # Tarkista FP-suhteellinen lukuviittaus (READ_REL: [FP + imm])
+        elif ins.mnemonic == "READ_REL" and len(ins.operands) >= 2:
+            addr = (self.regs.fp + ins.operands[1]) & WORD_MASK
+            self.memory.check_user_access(addr, self.regs.mpr)
+
+        # Tarkista FP-suhteellinen kirjoitusviittaus (STORE_REL: [FP + imm])
+        elif ins.mnemonic == "STORE_REL" and len(ins.operands) >= 2:
+            addr = (self.regs.fp + ins.operands[1]) & WORD_MASK
+            self.memory.check_user_access(addr, self.regs.mpr)
+
+        # Tarkista TSL-muistiviittaus (TSL: lukee ja kirjoittaa addr)
+        elif ins.mnemonic == "TSL" and len(ins.operands) >= 2:
+            addr = ins.operands[1]
+            self.memory.check_user_access(addr, self.regs.mpr)
+
     def _execute(self, ins: DecodedInstruction) -> None:
         """
         Suorita dekoodattu kasky.
@@ -334,6 +352,20 @@ class CPU:
             reg_addr, reg_src = ins.operands
             self.memory.write(self._get_reg(reg_addr), self._get_reg(reg_src))
 
+        elif ins.mnemonic == "READ_REL":
+            # READ_REL reg, imm - Lue muistista FP + imm rekisteriin
+            # reg = [FP + imm]
+            reg_idx, offset = ins.operands
+            addr = (self.regs.fp + offset) & WORD_MASK
+            self._set_reg(reg_idx, self.memory.read(addr))
+
+        elif ins.mnemonic == "STORE_REL":
+            # STORE_REL reg, imm - Kirjoita rekisteri muistiin FP + imm
+            # [FP + imm] = reg
+            reg_idx, offset = ins.operands
+            addr = (self.regs.fp + offset) & WORD_MASK
+            self.memory.write(addr, self._get_reg(reg_idx))
+
         # ======================================================================
         # ARITMEETTISET KASKYT
         # ======================================================================
@@ -341,19 +373,28 @@ class CPU:
         elif ins.mnemonic == "ADD":
             # ADD regD, regS - Yhteenlasku: regD = regD + regS
             dst, src = ins.operands
-            result = self._get_reg(dst) + self._get_reg(src)
+            a = self._get_reg(dst)
+            b = self._get_reg(src)
+            result = a + b
             self._set_reg(dst, result)
             self.regs.set_zn_flags(result)
             # Carry jos tulos ylitti 16 bittia
-            self.regs.set_carry_overflow(result > WORD_MASK, False)
+            # Overflow jos molemmat samanmerkkiset ja tulos erimerkkinen
+            masked = result & WORD_MASK
+            overflow = bool(((a ^ masked) & (b ^ masked)) & 0x8000)
+            self.regs.set_carry_overflow(result > WORD_MASK, overflow)
 
         elif ins.mnemonic == "MUL":
             # MUL regD, regS - Kertolasku: regD = regD * regS
             dst, src = ins.operands
-            result = self._get_reg(dst) * self._get_reg(src)
+            a = self._get_reg(dst)
+            b = self._get_reg(src)
+            result = a * b
             self._set_reg(dst, result)
             self.regs.set_zn_flags(result)
-            self.regs.set_carry_overflow(result > WORD_MASK, False)
+            masked = result & WORD_MASK
+            overflow = bool(((a ^ masked) & (b ^ masked)) & 0x8000)
+            self.regs.set_carry_overflow(result > WORD_MASK, overflow)
 
         elif ins.mnemonic == "SUB":
             # SUB regD, regS - Vahennyslasku: regD = regD - regS
@@ -364,7 +405,9 @@ class CPU:
             self._set_reg(dst, result)
             self.regs.set_zn_flags(result)
             # Carry (borrow) jos a < b
-            self.regs.set_carry_overflow(a < b, False)
+            # Overflow jos operandit erimerkkiset ja tulos erimerkkinen kuin a
+            overflow = bool(((a ^ b) & (a ^ result)) & 0x8000)
+            self.regs.set_carry_overflow(a < b, overflow)
 
         elif ins.mnemonic == "DIV":
             # DIV regD, regS - Jakolasku: regD = regD / regS
@@ -451,6 +494,20 @@ class CPU:
             self.regs.set_zn_flags(result)
             self.regs.set_carry_overflow(carry, False)
 
+        elif ins.mnemonic == "ADC":
+            # ADC regD, regS - Yhteenlasku Carry-lipun kanssa
+            # regD = regD + regS + C
+            dst, src = ins.operands
+            a = self._get_reg(dst)
+            b = self._get_reg(src)
+            c = self.regs.get_flag(SR_FLAG_C)
+            result = a + b + c
+            self._set_reg(dst, result)
+            self.regs.set_zn_flags(result)
+            masked = result & WORD_MASK
+            overflow = bool(((a ^ masked) & (b ^ masked)) & 0x8000)
+            self.regs.set_carry_overflow(result > WORD_MASK, overflow)
+
         # ======================================================================
         # PINOKASKYT
         # ======================================================================
@@ -466,6 +523,14 @@ class CPU:
             # SP = SP + 1; reg = [SP]
             (reg_idx,) = ins.operands
             self._set_reg(reg_idx, self._pop())
+
+        elif ins.mnemonic == "SWSP":
+            # SWSP regD, regS - Vaihda pinon osoitinta
+            # regD = SP; SP = regS (atominen kontekstin vaihto)
+            dst, src = ins.operands
+            old_sp = self.regs.sp
+            self.regs.sp = self._get_reg(src) & WORD_MASK
+            self._set_reg(dst, old_sp)
 
         # ======================================================================
         # HYPPYKASKYT
@@ -493,8 +558,13 @@ class CPU:
 
         elif ins.mnemonic == "INT":
             # INT imm - Ohjelmallinen keskeytys (syscall)
+            # Ensin paivita PC paluuosoitteeksi (seuraava kasky INT:n jalkeen)
+            # jotta _trigger_interrupt tallentaa oikean paluuosoitteen pinoon.
             (int_no,) = ins.operands
+            self.regs.pc = (self.regs.pc + ins.size_words) & WORD_MASK
             self._trigger_interrupt(int_no)
+            # Kompensoi step():n PC-paivitys
+            self.regs.pc = (self.regs.pc - ins.size_words) & WORD_MASK
 
         elif ins.mnemonic == "IRET":
             # IRET - Paluu keskeytyksesta
@@ -525,7 +595,9 @@ class CPU:
             # EXIT - Prosessin hallittu lopetus
             # Aseta lippu ja laukaise keskeytys OS:lle
             self.process_exit_requested = True
+            self.regs.pc = (self.regs.pc + ins.size_words) & WORD_MASK
             self._trigger_interrupt(INT_PROCESS_EXIT)
+            self.regs.pc = (self.regs.pc - ins.size_words) & WORD_MASK
 
         # ======================================================================
         # JARJESTELMAKASKYT
@@ -545,7 +617,8 @@ class CPU:
             b = self._get_reg(reg_b)
             result = (a - b) & WORD_MASK
             self.regs.set_zn_flags(result)
-            self.regs.set_carry_overflow(a < b, False)
+            overflow = bool(((a ^ b) & (a ^ result)) & 0x8000)
+            self.regs.set_carry_overflow(a < b, overflow)
 
         elif ins.mnemonic == "JZ":
             # JZ addr - Jump if Zero (hyppa jos Z=1)
@@ -617,6 +690,23 @@ class CPU:
                 raise InvalidOpcodeError("Storage device not connected")
             storage_addr = self._get_reg(reg_addr)
             self.storage.write_word(storage_addr, self._get_reg(reg_src))
+
+        elif ins.mnemonic == "KGET":
+            # KGET reg - Lue viimeisin nappainpainallus rekisteriin
+            (reg_idx,) = ins.operands
+            if self.keyboard is None:
+                self._set_reg(reg_idx, 0)
+            else:
+                self._set_reg(reg_idx, self.keyboard.pop_key())
+
+        elif ins.mnemonic == "TSL":
+            # TSL reg, addr - Test and Set Lock (atominen)
+            # reg = [addr]; [addr] = 1
+            reg_idx, addr = ins.operands
+            old_value = self.memory.read(addr)
+            self._set_reg(reg_idx, old_value)
+            self.memory.write(addr, 1)
+            self.regs.set_zn_flags(old_value)
 
         else:
             # Tuntematon kasky

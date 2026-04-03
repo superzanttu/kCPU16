@@ -59,12 +59,12 @@ BOOT_RAM_END = 0x01FF  # Viimeinen bootloaderin osoite RAM:ssa
 #   Bitit 12-14: Edusta-väri (FG, 0-7, 3 bittiä)
 #   Bitit 15:    Tausta-väri (BG, 1-bittinen ensin, sitten laajennetaan)
 VRAM_START = 0xF800  # Nayttomuistin alkuosoite (vasen ylanurkka)
-VRAM_END = 0xFFCF    # Nayttomuistin loppuosoite (80x25 = 2000 sanaa)
-VRAM_WORDS = 2000    # 80 cols x 25 rows
+VRAM_END = 0xFF7F  # Nayttomuistin loppuosoite (80x24 = 1920 sanaa)
+VRAM_WORDS = 1920  # 80 cols x 24 rows
 
 # Nayton mitat merkkeina
 SCREEN_COLS = 80  # Sarakkeet (leveys)
-SCREEN_ROWS = 25  # Rivit (korkeus)
+SCREEN_ROWS = 24  # Rivit (korkeus)
 
 # =============================================================================
 # VÄRIJÄRJESTELMÄ - VRAM:N BITTIKENTÄT
@@ -75,17 +75,17 @@ VRAM_CHAR_MASK = 0x00FF  # Bitit 0-7: ASCII-merkki
 VRAM_CHAR_SHIFT = 0
 
 # Attribuutit (Bitit 8-12) - lihavointi, kursiivi, vilkku, alleviivaus, yliviivaus
-VRAM_ATTR_BOLD = 0x0100       # Bitti 8: Lihavointi
-VRAM_ATTR_ITALIC = 0x0200    # Bitti 9: Kursiivi
-VRAM_ATTR_BLINK = 0x0400     # Bitti 10: Vilkku
+VRAM_ATTR_BOLD = 0x0100  # Bitti 8: Lihavointi
+VRAM_ATTR_ITALIC = 0x0200  # Bitti 9: Kursiivi
+VRAM_ATTR_BLINK = 0x0400  # Bitti 10: Vilkku
 VRAM_ATTR_UNDERLINE = 0x0800  # Bitti 11: Alleviivaus
 VRAM_ATTR_STRIKETHROUGH = 0x1000  # Bitti 12: Yliviivaus
-VRAM_ATTR_MASK = 0x1F00      # Kaikki attribuutit
+VRAM_ATTR_MASK = 0x1F00  # Kaikki attribuutit
 
 # Värit (Bitit 12-15)
-VRAM_FG_MASK = 0x7000        # Bitit 12-14: Edusta-väri (FG, 3 bittiä = 0-7)
+VRAM_FG_MASK = 0x7000  # Bitit 12-14: Edusta-väri (FG, 3 bittiä = 0-7)
 VRAM_FG_SHIFT = 12
-VRAM_BG_MASK = 0x8000        # Bitti 15: Tausta-väri (BG, aluksi 1-bittinen)
+VRAM_BG_MASK = 0x8000  # Bitti 15: Tausta-väri (BG, aluksi 1-bittinen)
 VRAM_BG_SHIFT = 15
 
 # Värikoodit (0-7 tai 0-1 taustalle)
@@ -112,8 +112,8 @@ COLOR_NAMES = {
 
 # Kernel-pino: Kayttojarjestelman sisainen pino keskeytyksille yms.
 # Sijaitsee muistin lopussa, VRAM:n yläpuolella
-KERNEL_STACK_START = 0xFFD0  # Kernelin pino alkaa VRAM:n jälkeen
-KERNEL_STACK_END = 0xFFFF    # Muistin loppu
+KERNEL_STACK_START = 0xFF80  # Kernelin pino alkaa VRAM:n jälkeen
+KERNEL_STACK_END = 0xFFFF  # Muistin loppu
 
 # =============================================================================
 # OLETUSARVOT JARJESTELMAREKISTEREILLE

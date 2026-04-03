@@ -84,7 +84,12 @@ class KCPU16Machine:
         Luo CPU:n ja yhadistaa sen muistiin, rekistereihin
         ja tallennuslaitteeseen.
         """
-        self.cpu = CPU(memory=self.memory, regs=self.regs, storage=self.storage)
+        self.cpu = CPU(
+            memory=self.memory,
+            regs=self.regs,
+            storage=self.storage,
+            keyboard=self.keyboard,
+        )
 
     def cold_reset(self) -> None:
         """

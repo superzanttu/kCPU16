@@ -99,16 +99,55 @@ REG_NAMES = {0: "R0", 1: "R1", 2: "R2", 3: "R3", 4: "FP", 5: "SP"}
 
 # Käskyt joissa 1. operandi on rekisteri-indeksi (esim. LOAD R0, ...)
 _REG_FIRST = {
-    "LOAD", "CPY", "READ", "STORE", "READ_IND", "STORE_IND",
-    "ADD", "SUB", "MUL", "DIV", "CMP",
-    "AND", "OR", "XOR", "NOT", "SHL", "SHR",
-    "PUSH", "POP", "SMPR", "STMR", "DREAD", "DWRITE",
+    "LOAD",
+    "CPY",
+    "READ",
+    "STORE",
+    "READ_IND",
+    "STORE_IND",
+    "READ_REL",
+    "STORE_REL",
+    "ADD",
+    "ADC",
+    "SUB",
+    "MUL",
+    "DIV",
+    "CMP",
+    "AND",
+    "OR",
+    "XOR",
+    "NOT",
+    "SHL",
+    "SHR",
+    "PUSH",
+    "POP",
+    "SWSP",
+    "SMPR",
+    "STMR",
+    "DREAD",
+    "DWRITE",
+    "KGET",
+    "TSL",
 }
 # Käskyt joissa myös 2. operandi on rekisteri-indeksi (esim. ADD R0, R1)
 _REG_SECOND = {
-    "CPY", "ADD", "SUB", "MUL", "DIV", "CMP",
-    "AND", "OR", "XOR", "SHL", "SHR",
-    "READ_IND", "STORE_IND", "DREAD", "DWRITE",
+    "CPY",
+    "ADD",
+    "ADC",
+    "SUB",
+    "MUL",
+    "DIV",
+    "CMP",
+    "AND",
+    "OR",
+    "XOR",
+    "SHL",
+    "SHR",
+    "READ_IND",
+    "STORE_IND",
+    "SWSP",
+    "DREAD",
+    "DWRITE",
 }
 
 
@@ -124,6 +163,7 @@ class CommandResult:
         message: Käyttäjälle näytettävä teksti (Rich-markup sallittu).
                  Tyhjä merkkijono = ei näytetä mitään.
     """
+
     ok: bool
     message: str
 
@@ -131,6 +171,7 @@ class CommandResult:
 # ---------------------------------------------------------------------------
 # Lähdekoodi -> osoite -kartoitus (makrotuki)
 # ---------------------------------------------------------------------------
+
 
 def _build_addr_to_line(source: str, assembler: Assembler) -> dict[int, int]:
     """Rakenna osoite → lähdekoodirivi -mappi assembloidusta koodista.
@@ -164,9 +205,7 @@ def _build_addr_to_line(source: str, assembler: Assembler) -> dict[int, int]:
         Tyhjä dict jos makrolaajennus epäonnistuu.
     """
     try:
-        expanded, start_addr = assembler._pass0_expand_macros_and_origin(
-            source, 0x0100
-        )
+        expanded, start_addr = assembler._pass0_expand_macros_and_origin(source, 0x0100)
     except Exception:
         return {}
 
@@ -471,9 +510,7 @@ class KCPU16TUI(App[None]):
         # Main area: Editor | Disassembly | Right sidebar
         with Horizontal(id="main-area"):
             with Vertical(id="editor-pane"):
-                yield TextArea(
-                    "", language=None, show_line_numbers=True, id="editor"
-                )
+                yield TextArea("", language=None, show_line_numbers=True, id="editor")
 
             with VerticalScroll(id="disasm-pane"):
                 yield Static(id="disasm-content")
@@ -490,8 +527,11 @@ class KCPU16TUI(App[None]):
         with TabbedContent(id="bottom-tabs"):
             with TabPane("Log", id="tab-log"):
                 yield RichLog(
-                    id="log-view", wrap=True, highlight=False,
-                    markup=True, max_lines=500,
+                    id="log-view",
+                    wrap=True,
+                    highlight=False,
+                    markup=True,
+                    max_lines=500,
                 )
             with TabPane("Screen", id="tab-screen"):
                 yield Static(id="screen-view")
@@ -705,7 +745,7 @@ class KCPU16TUI(App[None]):
     def action_clear_screen(self) -> None:
         """Tyhjennä VRAM-näyttömuisti (F9).
 
-        Nollaa kaikki VRAM-osoitteet (0xF800-0xFFCF). Hyödyllistä
+        Nollaa kaikki VRAM-osoitteet (0xF800-0xFF7F). Hyödyllistä
         kun haluaa aloittaa piirron puhtaalta ruudulta ilman resettiä.
         """
         self.machine.clear_screen_memory()
@@ -973,9 +1013,7 @@ class KCPU16TUI(App[None]):
             display = self._fmt_disasm_line(raw_line)
 
             if addr == pc:
-                lines.append(
-                    f"{bp}[bold white on #3a3a3a]\u25b6 {display}[/]"
-                )
+                lines.append(f"{bp}[bold white on #3a3a3a]\u25b6 {display}[/]")
             else:
                 lines.append(f"{bp}  {display}")
 
@@ -1075,9 +1113,7 @@ class KCPU16TUI(App[None]):
                 parts.append(f"[bold green]{name}:1[/]")
             else:
                 parts.append(f"[dim]{name}:0[/]")
-        mode = (
-            "[bold green]KERNEL[/]" if r.in_kernel_mode else "[yellow]USER[/]"
-        )
+        mode = "[bold green]KERNEL[/]" if r.in_kernel_mode else "[yellow]USER[/]"
         self.query_one("#flags-content", Static).update(
             f"{' '.join(parts)}\nMode: {mode}"
         )
@@ -1100,9 +1136,7 @@ class KCPU16TUI(App[None]):
 
         lines = [f"State: {state}", f"Cycles: {cpu.instruction_counter}"]
         if self.dbg.breakpoints:
-            bp_list = ", ".join(
-                f"0x{a:04X}" for a in sorted(self.dbg.breakpoints)
-            )
+            bp_list = ", ".join(f"0x{a:04X}" for a in sorted(self.dbg.breakpoints))
             lines.append(f"[dim]BP: {bp_list}[/dim]")
         self.query_one("#cpu-content", Static).update("\n".join(lines))
 
@@ -1110,15 +1144,13 @@ class KCPU16TUI(App[None]):
         """Päivitä Screen-välilehden VRAM-renderöinti.
 
         Kutsuu screen.render_with_rich_colors() joka lukee VRAM-alueen
-        (0xF800-0xFFCF, 80x25) ja tuottaa Rich-muotoillun tekstin
+        (0xF800-0xFF7F, 80x24) ja tuottaa Rich-muotoillun tekstin
         väreillä (FG/BG). Kutsutaan sekä _refresh_all():sta että
         0.5s intervallitimerista (VRAM voi muuttua IO-operaatiolla
         ilman explisiittistä refreshiä, esim. DWRITE-käskyn aikana).
         """
         try:
-            rendered = self.machine.screen.render_with_rich_colors(
-                self.machine.memory
-            )
+            rendered = self.machine.screen.render_with_rich_colors(self.machine.memory)
             self.query_one("#screen-view", Static).update(rendered)
         except Exception:
             pass
@@ -1173,9 +1205,7 @@ class KCPU16TUI(App[None]):
             addr = (sp + 1 + i) & 0xFFFF
             word = self.machine.memory.read(addr)
             marker = "[yellow]\u2192[/] " if i == 0 else "  "
-            lines.append(
-                f"{marker}[cyan]{addr:04X}[/]: 0x{word:04X}  ({word})"
-            )
+            lines.append(f"{marker}[cyan]{addr:04X}[/]: 0x{word:04X}  ({word})")
         self.query_one("#stack-view", Static).update("\n".join(lines))
 
     # ------------------------------------------------------------------
@@ -1226,8 +1256,7 @@ class KCPU16TUI(App[None]):
         if opcode in OPCODE_TABLE:
             mnemonic, op_count, _ = OPCODE_TABLE[opcode]
             ops = [
-                f"0x{self.machine.memory.read(pc + 1 + i):04X}"
-                for i in range(op_count)
+                f"0x{self.machine.memory.read(pc + 1 + i):04X}" for i in range(op_count)
             ]
             instr = f"{mnemonic} {', '.join(ops)}" if ops else mnemonic
         else:
@@ -1238,8 +1267,7 @@ class KCPU16TUI(App[None]):
         if line_no:
             line_info = f" [dim](line {line_no})[/dim]"
         self._log(
-            f"[dim]IC={ic}[/dim] PC=0x{pc:04X}: "
-            f"[bold]{instr}[/bold]{line_info}"
+            f"[dim]IC={ic}[/dim] PC=0x{pc:04X}: " f"[bold]{instr}[/bold]{line_info}"
         )
         if self.machine.cpu.halted:
             self._log("[green]CPU halted (HALT).[/green]")
@@ -1317,14 +1345,10 @@ class KCPU16TUI(App[None]):
             if op in ("mem", "memory"):
                 if args:
                     self.mem_view_addr = int(args[0], 0)
-                return CommandResult(
-                    True, f"Memory view at 0x{self.mem_view_addr:04X}"
-                )
+                return CommandResult(True, f"Memory view at 0x{self.mem_view_addr:04X}")
 
             if op == "examples":
-                lines = [
-                    f"  [cyan]{n:<16}[/cyan] {d}" for n, d in list_examples()
-                ]
+                lines = [f"  [cyan]{n:<16}[/cyan] {d}" for n, d in list_examples()]
                 return CommandResult(True, "Examples:\n" + "\n".join(lines))
 
             if op == "load":
@@ -1351,8 +1375,7 @@ class KCPU16TUI(App[None]):
 
             if op == "regs":
                 items = [
-                    f"{n}=0x{v:04X}"
-                    for n, v in self.machine.dump_registers().items()
+                    f"{n}=0x{v:04X}" for n, v in self.machine.dump_registers().items()
                 ]
                 return CommandResult(True, " | ".join(items))
 
@@ -1383,15 +1406,11 @@ class KCPU16TUI(App[None]):
         - bp (ilman argumentteja): Näytä käyttöohje.
         """
         if not args:
-            return CommandResult(
-                False, "Usage: bp <addr> | bp list | bp clear"
-            )
+            return CommandResult(False, "Usage: bp <addr> | bp list | bp clear")
         if args[0] == "list":
             if not self.dbg.breakpoints:
                 return CommandResult(True, "No breakpoints.")
-            bps = ", ".join(
-                f"0x{a:04X}" for a in sorted(self.dbg.breakpoints)
-            )
+            bps = ", ".join(f"0x{a:04X}" for a in sorted(self.dbg.breakpoints))
             return CommandResult(True, f"Breakpoints: {bps}")
         if args[0] == "clear":
             self.dbg.clear_breakpoints()
@@ -1399,9 +1418,7 @@ class KCPU16TUI(App[None]):
         addr = int(args[0], 0)
         added = self.dbg.toggle_breakpoint(addr)
         if added:
-            return CommandResult(
-                True, f"[red]Breakpoint SET at 0x{addr:04X}[/red]"
-            )
+            return CommandResult(True, f"[red]Breakpoint SET at 0x{addr:04X}[/red]")
         return CommandResult(True, f"Breakpoint REMOVED at 0x{addr:04X}")
 
     def _format_status(self) -> str:
