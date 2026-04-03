@@ -305,9 +305,10 @@ class KCPU16TUI(App[None]):
     #      - #disasm-pane    - Disassembly-näkymä (width: 2fr, keskellä)
     #      - #right-sidebar  - Oikea sivupalkki (width: 30, kiinteä):
     #          #regs-pane, #flags-pane, #cpu-pane päällekkäin
-    #   3. #bottom-tabs      - Alatason välilehdet (dock: bottom, height: 14):
-    #      Log, Screen, Memory, Stack
-    #   4. #cmd-input        - Komentosyöte (dock: bottom, height: 3)
+    #   3. #screen-section   - Screen-näytön oma osio (height: 1fr)
+    #   4. #bottom-area      - Alatason 50/50 jako (height: 1fr):
+    #      - #cmd-area       - Vasemmalla (50%): komentosyöte + output
+    #      - #tabs-area      - Oikealla (50%): Log/Memory/Stack välilehdet
     #   5. Footer            - Textual Footer (näppäinsidonnaisuudet)
     CSS = """
     Screen {
@@ -388,21 +389,50 @@ class KCPU16TUI(App[None]):
         padding: 0 1;
     }
 
-    /* ---- Bottom tabs ---- */
-    #bottom-tabs {
-        height: 14;
-        dock: bottom;
+    /* ---- Screen section (new) ---- */
+    #screen-section {
+        height: 1fr;
+        border: solid $primary-darken-2;
+        border-title-color: $accent;
+        layout: vertical;
+    }
+    #screen-view-solo {
+        height: 1fr;
+        padding: 0 1;
+    }
+
+    /* ---- Bottom area: 50/50 split ---- */
+    #bottom-area {
+        height: 1fr;
+        layout: horizontal;
         border-top: solid $primary-darken-2;
+    }
+
+    /* Command area (left 50%) */
+    #cmd-area {
+        width: 1fr;
+        height: 1fr;
+        layout: vertical;
+        border-right: solid $primary-darken-2;
+    }
+    #cmd-input {
+        height: 3;
+        width: 1fr;
+    }
+    #cmd-output {
+        height: 1fr;
+    }
+
+    /* Tabs area (right 50%) */
+    #tabs-area {
+        width: 1fr;
+        layout: vertical;
     }
     TabPane {
         padding: 0;
     }
     #log-view {
         height: 1fr;
-    }
-    #screen-view {
-        height: 1fr;
-        padding: 0 1;
     }
     #memory-view {
         height: 1fr;
@@ -411,12 +441,6 @@ class KCPU16TUI(App[None]):
     #stack-view {
         height: 1fr;
         padding: 0 1;
-    }
-
-    /* Command input */
-    #cmd-input {
-        dock: bottom;
-        height: 3;
     }
     """
 
@@ -486,12 +510,16 @@ class KCPU16TUI(App[None]):
                     #regs-pane: Rekisterit (Static)
                     #flags-pane: Liput (Static)
                     #cpu-pane: CPU-tila (Static)
-            Bottom tabs (#bottom-tabs, TabbedContent):
-                Log (RichLog, max 500 riviä)
-                Screen (Static, VRAM-renderöinti)
-                Memory (Static, hex dump)
-                Stack (Static, pinonäkymä)
-            #cmd-input: Komentosyöte (Input)
+            Screen section (#screen-section, Vertical):
+                #screen-view-solo: Static (VRAM-renderöinti)
+            Bottom area (#bottom-area, Horizontal, 50/50 split):
+                Left (#cmd-area, Vertical):
+                    #cmd-input: Input (Komentosyöte)
+                    #cmd-output: RichLog (Komentojen tulosteet)
+                Right (#tabs-area, TabbedContent):
+                    Log (RichLog #log-view, max 500 riviä)
+                    Memory (Static #memory-view, hex dump)
+                    Stack (Static #stack-view, pinonäkymä)
             Footer: Näppäinsidonnaisuudet
         """
         yield Header(show_clock=True)
@@ -528,27 +556,41 @@ class KCPU16TUI(App[None]):
                 with Vertical(id="cpu-pane"):
                     yield Static(id="cpu-content")
 
-        # Bottom tabs
-        with TabbedContent(id="bottom-tabs"):
-            with TabPane("Log", id="tab-log"):
+        # Screen section (new)
+        with Vertical(id="screen-section"):
+            yield Static(id="screen-view-solo")
+
+        # Bottom area: 50/50 split
+        with Horizontal(id="bottom-area"):
+            # Left: Command area
+            with Vertical(id="cmd-area"):
+                yield Input(
+                    placeholder="Command: help, step, run, bp, mem, mset, disk, reset ...",
+                    id="cmd-input",
+                )
                 yield RichLog(
-                    id="log-view",
+                    id="cmd-output",
                     wrap=True,
                     highlight=False,
                     markup=True,
                     max_lines=500,
                 )
-            with TabPane("Screen", id="tab-screen"):
-                yield Static(id="screen-view")
-            with TabPane("Memory", id="tab-memory"):
-                yield Static(id="memory-view")
-            with TabPane("Stack", id="tab-stack"):
-                yield Static(id="stack-view")
 
-        yield Input(
-            placeholder="Command: help, step, run, bp, mem, mset, disk, reset ...",
-            id="cmd-input",
-        )
+            # Right: Tabs area
+            with TabbedContent(id="tabs-area"):
+                with TabPane("Log", id="tab-log"):
+                    yield RichLog(
+                        id="log-view",
+                        wrap=True,
+                        highlight=False,
+                        markup=True,
+                        max_lines=500,
+                    )
+                with TabPane("Memory", id="tab-memory"):
+                    yield Static(id="memory-view")
+                with TabPane("Stack", id="tab-stack"):
+                    yield Static(id="stack-view")
+
         yield Footer()
 
     # ------------------------------------------------------------------
@@ -572,6 +614,7 @@ class KCPU16TUI(App[None]):
         self.query_one("#regs-pane").border_title = "Registers"
         self.query_one("#flags-pane").border_title = "Flags"
         self.query_one("#cpu-pane").border_title = "CPU"
+        self.query_one("#screen-section").border_title = "Screen"
 
         self.machine.cold_reset()
         self.dbg.snapshot_registers(self.machine.dump_registers())
@@ -609,7 +652,8 @@ class KCPU16TUI(App[None]):
             self._do_open(startup_asm)
 
         self._refresh_all()
-        self.set_interval(0.5, self._refresh_screen_tab)
+        self.set_interval(1.0, self._refresh_screen_tab)
+        self.query_one("#cmd-input", Input).focus()
 
     # ------------------------------------------------------------------
     # Painikkeet
@@ -646,8 +690,14 @@ class KCPU16TUI(App[None]):
         """Käsittele komentosyöte (Enter-painallus #cmd-input -kentässä).
 
         Lukee komennon, tyhjentää kentän, logittaa komennon, suorittaa
-        sen _execute_command():lla ja näyttää tuloksen. Virheelliset
-        komennot näytetään punaisella. Päivittää kaikki näkymät lopuksi.
+        sen _execute_command():lla ja näyttää tuloksen.
+
+        Reititys:
+        - Virheelliset komennot → Log tab (punaisella)
+        - Data output (mem, disk, hex dumps) → Command Output area
+        - Status messages (step, run, etc.) → Log tab
+
+        Päivittää kaikki näkymät lopuksi.
         """
         cmd = event.value.strip()
         event.input.value = ""
@@ -655,12 +705,32 @@ class KCPU16TUI(App[None]):
             return
         self._log(f"[dim]> {cmd}[/dim]")
         result = self._execute_command(cmd)
+
+        # Määritä reititys: data-output vai status-message?
+        cmd_verb = cmd.split()[0].lower()
+        is_data_command = cmd_verb in {"mem", "mset", "mfill", "disk", "dset", "dfill"}
+
         if result.ok:
             if result.message:
-                self._log(result.message)
+                if is_data_command:
+                    # Data output (hex dumps, formatted lists) → cmd-output
+                    self._log_cmd_output(result.message)
+                else:
+                    # Status messages → log
+                    self._log(result.message)
         else:
+            # Errors always go to log
             self._log(f"[red]{result.message}[/red]")
-        self._refresh_all()
+
+        # Älykäs refresh: Skip screen rendering, let 1s timer handle VRAM.
+        # Screen only needs updating if CPU state changed (step/run).
+        # Data commands (mem, disk) don't affect screen.
+        if cmd_verb not in {"mem", "mset", "mfill", "disk", "dset", "dfill"}:
+            self._refresh_all()
+        else:
+            # For memory/disk commands, only refresh memory/stack views
+            self._refresh_memory()
+            self._refresh_stack()
 
     # ------------------------------------------------------------------
     # Actions (näppäinsidonnaisuudet)
@@ -949,17 +1019,17 @@ class KCPU16TUI(App[None]):
     # ------------------------------------------------------------------
 
     def _refresh_all(self) -> None:
-        """Päivitä kaikki näkymäpaneelit kerralla.
+        """Päivitä kaikki näkymäpaneelit kerralla (paitsi Screen).
 
         Kutsutaan jokaisen tilan muutoksen jälkeen (step, run, reset,
-        assemble, komentosyöte). Ei timer-pollausta - paitsi Screen-tab
-        jolla on oma 0.5s intervalli (ks. on_mount).
+        assemble, komentosyöte). Screen-näyttö päivittyy omalla 1s timerilla
+        eikä tässä, jotta komentojen suoritus pysyy ketteränä.
         """
         self._refresh_disassembly()
         self._refresh_registers()
         self._refresh_flags()
         self._refresh_cpu_status()
-        self._refresh_screen_tab()
+        # self._refresh_screen_tab()  # Käytetään vain 1s timeria
         self._refresh_memory()
         self._refresh_stack()
 
@@ -1165,7 +1235,7 @@ class KCPU16TUI(App[None]):
         self.query_one("#cpu-content", Static).update("\n".join(lines))
 
     def _refresh_screen_tab(self) -> None:
-        """Päivitä Screen-välilehden VRAM-renderöinti.
+        """Päivitä Screen-näytön VRAM-renderöinti.
 
         Kutsuu screen.render_with_rich_colors() joka lukee VRAM-alueen
         (0xF800-0xFF7F, 80x24) ja tuottaa Rich-muotoillun tekstin
@@ -1175,7 +1245,7 @@ class KCPU16TUI(App[None]):
         """
         try:
             rendered = self.machine.screen.render_with_rich_colors(self.machine.memory)
-            self.query_one("#screen-view", Static).update(rendered)
+            self.query_one("#screen-view-solo", Static).update(rendered)
         except Exception:
             pass
 
@@ -1619,6 +1689,18 @@ class KCPU16TUI(App[None]):
         """
         try:
             self.query_one("#log-view", RichLog).write(message)
+        except Exception:
+            pass
+
+    def _log_cmd_output(self, message: str) -> None:
+        """Kirjoita komentotulos Command Output -widgettiin.
+
+        Tukee Rich-markupia (esim. [bold], [red], [dim]).
+        Käytetään hex-dumppeihin, listan tulostukseen ja muihin
+        komentojen tuottamiin tulosteisiin. Log-tab saa status-viestit.
+        """
+        try:
+            self.query_one("#cmd-output", RichLog).write(message)
         except Exception:
             pass
 
