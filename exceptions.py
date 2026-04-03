@@ -11,8 +11,10 @@ Poikkeushierarkia:
     |-- MemoryAccessFaultError  -> INT 5
     |-- StackOverflowError      -> INT 2
 """
-FIXME: Yläpuolelle ei lisätty mainintaa kaikista poikkeuksista, jotka tiedostossa constants.py on mainittu.
-FIXME: Alapuolella ei ole luokkaa kaikille keskeytyksille. Tutkittava tarvitaanko niitä. Jos löytyy puuttuvia, pitää myös varmistaa muut niihin liittyvä toiminallisuus.
+
+# FIXME: Yläpuolelle ei lisätty mainintaa kaikista poikkeuksista, jotka tiedostossa constants.py on mainittu.
+# FIXME: Alapuolella ei ole luokkaa kaikille keskeytyksille. Tutkittava tarvitaanko niitä. Jos löytyy puuttuvia, pitää myös varmistaa muut niihin liittyvä toiminallisuus.
+
 
 class KCPU16Error(Exception):
     """
