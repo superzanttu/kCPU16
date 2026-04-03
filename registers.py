@@ -43,6 +43,7 @@ from .constants import (
     SR_FLAG_V,
     SR_FLAG_Z,
     WORD_MASK,
+    WORD_SIGN_BIT,
 )
 
 
@@ -171,7 +172,7 @@ class RegisterFile:
         # Zero: onko arvo nolla?
         self.set_flag(SR_FLAG_Z, 1 if value == 0 else 0)
         # Negative: onko ylin bitti 1? (bitti 15 = 0x8000)
-        self.set_flag(SR_FLAG_N, 1 if (value & 0x8000) else 0)
+        self.set_flag(SR_FLAG_N, 1 if (value & WORD_SIGN_BIT) else 0)
 
     def set_carry_overflow(self, carry: bool, overflow: bool) -> None:
         """

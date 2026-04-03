@@ -42,6 +42,7 @@ Tuottaa konekielen osoitteesta 0x0200 eteenpäin.
 
 from __future__ import annotations
 
+from .constants import BOOT_RAM_START, WORD_MASK
 from .instruction import OPCODE_TABLE
 
 
@@ -84,7 +85,7 @@ class Assembler:
         [1, 0, 42, 68]  # LOAD opcode, R0 index, 42, HALT opcode
     """
 
-    def assemble(self, source: str, start_addr: int = 0x0100) -> list[int]:
+    def assemble(self, source: str, start_addr: int = BOOT_RAM_START) -> list[int]:
         """
         Assembloi lahdekoodi konekieleksi.
 
@@ -103,13 +104,17 @@ class Assembler:
             [1, 0, 10, 68]
         """
         # Pass 0: Makrojen ekspansointi ja .origin käsittely
-        expanded_source, start_addr = self._pass0_expand_macros_and_origin(source, start_addr)
+        expanded_source, start_addr = self._pass0_expand_macros_and_origin(
+            source, start_addr
+        )
         # Pass 1: Kerataan labelit
         labels = self._pass1_collect_labels(expanded_source, start_addr)
         # Pass 2: Tuotetaan konekieli
         return self._pass2_emit(expanded_source, labels)
 
-    def _pass0_expand_macros_and_origin(self, source: str, start_addr: int) -> tuple[str, int]:
+    def _pass0_expand_macros_and_origin(
+        self, source: str, start_addr: int
+    ) -> tuple[str, int]:
         """
         Pass 0: Makrojen ekspansointi ja .origin direktiivin käsittely.
 
@@ -127,12 +132,14 @@ class Assembler:
         # 1. Etsi .origin direktiivi
         for line in lines:
             stripped = line.split(";", 1)[0].strip()
-            if stripped.lower().startswith(".origin") or stripped.lower().startswith(".org"):
+            if stripped.lower().startswith(".origin") or stripped.lower().startswith(
+                ".org"
+            ):
                 # Parse: ".origin 0x0200" -> 0x0200
                 parts = stripped.split()
                 if len(parts) > 1:
                     try:
-                        start_addr = int(parts[1], 0) & 0xFFFF
+                        start_addr = int(parts[1], 0) & WORD_MASK
                     except ValueError:
                         raise ValueError(f"Invalid .origin value: {parts[1]}")
 
@@ -168,10 +175,12 @@ class Assembler:
                 continue
 
             # Ohita .origin ja .macro rivit tulosteesta
-            if (stripped.lower().startswith(".origin") or
-                stripped.lower().startswith(".org") or
-                stripped.lower().startswith(".macro") or
-                stripped.lower().startswith(".endmacro")):
+            if (
+                stripped.lower().startswith(".origin")
+                or stripped.lower().startswith(".org")
+                or stripped.lower().startswith(".macro")
+                or stripped.lower().startswith(".endmacro")
+            ):
                 i += 1
                 continue
 
@@ -281,7 +290,7 @@ class Assembler:
                 words.append(self._parse_operand(token, labels))
 
         # Varmista etta kaikki arvot ovat 16-bittisia
-        return [w & 0xFFFF for w in words]
+        return [w & WORD_MASK for w in words]
 
     def _parse_operand(self, token: str, labels: dict[str, int]) -> int:
         """

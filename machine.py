@@ -35,7 +35,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from .constants import BOOT_RAM_START, BOOT_RAM_END, VRAM_END, VRAM_START
+from .constants import BOOT_RAM_START, BOOT_RAM_END, VRAM_END, VRAM_START, WORD_MASK
 from .cpu import CPU
 from .devices import BlockStorageDevice, KeyboardDevice, ScreenDevice
 from .memory import Memory
@@ -223,6 +223,6 @@ class KCPU16Machine:
         Args:
             value: Kirjoitettava arvo (oletus: 0, tyjha)
         """
-        v = value & 0xFFFF
+        v = value & WORD_MASK
         for addr in range(VRAM_START, VRAM_END + 1):
             self.memory.write(addr, v)

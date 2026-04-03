@@ -18,6 +18,15 @@ prosessorin emuloinnissa. Vakiot on jaettu loogisiin ryhmiin:
 # 16-bittinen maski - rajaa kaikki arvot valille 0x0000-0xFFFF
 WORD_MASK = 0xFFFF
 
+# Etumerkkilipun bitti (ylin bitti 16-bittisessa sanassa)
+WORD_SIGN_BIT = 0x8000
+
+# Sanan bittileveysarvo (SHL/SHR-laskuissa)
+WORD_BITS = 16
+
+# 3-bitin rekisteriindeksimaski (rekisterit koodataan 3 alimmalla bitilla)
+REG_IDX_MASK = 0x7
+
 # Kokonaismuistiavaruus sanoina (2^16 = 65536 sanaa)
 MEMORY_WORDS = 0x10000
 
@@ -134,6 +143,29 @@ DEFAULT_TIMER_INTERVAL = 0
 
 MODE_KERNEL = 1  # Taydellat oikeudet kaikkeen muistiin ja kaikkiin kaskyihin
 MODE_USER = 0  # Rajoitetut oikeudet (MPR:n mukainen muistisuojaus)
+
+# =============================================================================
+# TALLENNUSLAITTEEN VAKIOT
+# =============================================================================
+
+# Blokin koko sanoina (256 sanaa = 512 tavua)
+STORAGE_BLOCK_SIZE = 0x0100
+
+# Blokkien maara (256 blokkia)
+STORAGE_BLOCK_COUNT = 0x0100
+
+# =============================================================================
+# SUORITUKSEN OLETUSSYKLIMAARAT
+# =============================================================================
+
+# CLI run-komennon oletussyklit
+DEFAULT_RUN_CYCLES = 10000
+
+# CLI examples --run -oletussyklit
+DEFAULT_EXAMPLE_CYCLES = 50000
+
+# REPL-tilan oletussyklit (run ilman argumenttia)
+DEFAULT_REPL_CYCLES = 1000
 
 # =============================================================================
 # TILAREKISTERIN (SR) BITTI-INDEKSIT

@@ -33,7 +33,7 @@ Tallennuslaitteen rakenne:
 
 from dataclasses import dataclass, field
 
-from ..constants import WORD_MASK
+from ..constants import STORAGE_BLOCK_COUNT, STORAGE_BLOCK_SIZE, WORD_MASK
 
 
 @dataclass
@@ -60,10 +60,10 @@ class BlockStorageDevice:
     """
 
     # Blokin koko: 256 sanaa = 512 tavua (16-bittisia sanoja)
-    block_size_words: int = 0x0100
+    block_size_words: int = STORAGE_BLOCK_SIZE
 
     # Blokkien maara: 256 blokkia
-    block_count: int = 0x0100
+    block_count: int = STORAGE_BLOCK_COUNT
 
     # Sisainen tallennus: lista blokeista
     # Jokainen blokki on lista 16-bittisia sanoja

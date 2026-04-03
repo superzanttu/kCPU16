@@ -36,6 +36,12 @@ import argparse
 from pathlib import Path
 
 from .assembler import Assembler
+from .constants import (
+    DEFAULT_EXAMPLE_CYCLES,
+    DEFAULT_REPL_CYCLES,
+    DEFAULT_RUN_CYCLES,
+    WORD_MASK,
+)
 from .disassembler import Disassembler
 from .examples import get_source, list_examples
 from .machine import KCPU16Machine
@@ -65,7 +71,9 @@ def build_parser() -> argparse.ArgumentParser:
     # --------------------------------------------------------------------------
     run_cmd = sub.add_parser("run", help="Assemble source and run")
     run_cmd.add_argument("source", type=Path, help="Assembly source file")
-    run_cmd.add_argument("--cycles", type=int, default=10000, help="Max cycles")
+    run_cmd.add_argument(
+        "--cycles", type=int, default=DEFAULT_RUN_CYCLES, help="Max cycles"
+    )
 
     # --------------------------------------------------------------------------
     # DISASM - Disassembloi konekielisanoja
@@ -104,7 +112,7 @@ def build_parser() -> argparse.ArgumentParser:
     ex_cmd.add_argument(
         "--cycles",
         type=int,
-        default=50000,
+        default=DEFAULT_EXAMPLE_CYCLES,
         help="Max cycles when running (default: 50000)",
     )
 
@@ -206,7 +214,7 @@ def run_repl(machine: KCPU16Machine, asm: Assembler) -> None:
         if lower.startswith("run"):
             # Parsi mahdollinen numero ("run 5000" -> 5000)
             _, _, n = lower.partition(" ")
-            machine.run(int(n) if n.strip() else 1000)
+            machine.run(int(n) if n.strip() else DEFAULT_REPL_CYCLES)
             print("ok")
             continue
 
@@ -301,7 +309,7 @@ def main(argv: list[str] | None = None) -> int:
     # -------------------------------------------------------------------------
     if args.command == "disasm":
         # Muunna argumentit numeroiksi
-        words = [int(w, 0) & 0xFFFF for w in args.words]
+        words = [int(w, 0) & WORD_MASK for w in args.words]
         # Disassembloi ja tulosta
         print(dis.disassemble(words))
         return 0

@@ -69,12 +69,15 @@ from textual.widgets import (
 
 from .assembler import Assembler, MNEMONIC_TO_OPCODE
 from .constants import (
+    BOOT_RAM_START,
+    DEFAULT_RUN_CYCLES,
     SR_FLAG_C,
     SR_FLAG_I,
     SR_FLAG_N,
     SR_FLAG_P,
     SR_FLAG_V,
     SR_FLAG_Z,
+    WORD_MASK,
 )
 from .debugger import DebugState
 from .disassembler import Disassembler
@@ -205,7 +208,9 @@ def _build_addr_to_line(source: str, assembler: Assembler) -> dict[int, int]:
         Tyhjä dict jos makrolaajennus epäonnistuu.
     """
     try:
-        expanded, start_addr = assembler._pass0_expand_macros_and_origin(source, 0x0100)
+        expanded, start_addr = assembler._pass0_expand_macros_and_origin(
+            source, BOOT_RAM_START
+        )
     except Exception:
         return {}
 
@@ -456,7 +461,7 @@ class KCPU16TUI(App[None]):
         self.disassembler = Disassembler()
         self.dbg = DebugState()
         self.current_file: Path | None = None
-        self.mem_view_addr: int = 0x0100
+        self.mem_view_addr: int = BOOT_RAM_START
         self.addr_to_line: dict[int, int] = {}
         self.is_assembled: bool = False
 
@@ -670,7 +675,7 @@ class KCPU16TUI(App[None]):
         kerrallaan ja tarkistaa breakpointit jokaisen jälkeen. Logittaa
         tuloksen ja päivittää näkymät.
         """
-        result = self._run_with_breakpoints(10000)
+        result = self._run_with_breakpoints(DEFAULT_RUN_CYCLES)
         self._log(result)
         self._update_exec_line()
         self._refresh_all()
@@ -985,7 +990,7 @@ class KCPU16TUI(App[None]):
         # Clamp: show at most 10 words before PC
         start = max(start, pc - 10)
 
-        end = min(0xFFFF, pc + 80)
+        end = min(WORD_MASK, pc + 80)
         words = [self.machine.memory.read(a) for a in range(start, end + 1)]
         raw = self.disassembler.disassemble(words, start_addr=start)
 
@@ -1171,13 +1176,13 @@ class KCPU16TUI(App[None]):
         lines = [f"[bold]Memory at 0x{addr:04X}:[/]\n"]
         for row in range(16):
             row_addr = addr + row * 8
-            if row_addr > 0xFFFF:
+            if row_addr > WORD_MASK:
                 break
             hex_parts = []
             ascii_parts = []
             for col in range(8):
                 a = row_addr + col
-                if a > 0xFFFF:
+                if a > WORD_MASK:
                     hex_parts.append("    ")
                     ascii_parts.append(" ")
                 else:
@@ -1202,7 +1207,7 @@ class KCPU16TUI(App[None]):
         sp = self.machine.regs.sp
         lines = [f"[bold]Stack (SP=0x{sp:04X}):[/]\n"]
         for i in range(20):
-            addr = (sp + 1 + i) & 0xFFFF
+            addr = (sp + 1 + i) & WORD_MASK
             word = self.machine.memory.read(addr)
             marker = "[yellow]\u2192[/] " if i == 0 else "  "
             lines.append(f"{marker}[cyan]{addr:04X}[/]: 0x{word:04X}  ({word})")
@@ -1327,7 +1332,7 @@ class KCPU16TUI(App[None]):
                 return CommandResult(True, f"Stepped {max(1, count)}. IC={ic}")
 
             if op == "run":
-                cycles = int(args[0], 0) if args else 10000
+                cycles = int(args[0], 0) if args else DEFAULT_RUN_CYCLES
                 result = self._run_with_breakpoints(max(1, cycles))
                 self._update_exec_line()
                 return CommandResult(True, result)

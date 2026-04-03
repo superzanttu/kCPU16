@@ -50,11 +50,27 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from ..constants import (
-    COLOR_BLACK, COLOR_BLUE, COLOR_CYAN, COLOR_GREEN, COLOR_MAGENTA,
-    COLOR_RED, COLOR_WHITE, COLOR_YELLOW, SCREEN_COLS, SCREEN_ROWS, VRAM_START,
-    VRAM_CHAR_MASK, VRAM_FG_MASK, VRAM_FG_SHIFT, VRAM_BG_MASK, VRAM_BG_SHIFT,
-    VRAM_ATTR_BOLD, VRAM_ATTR_ITALIC, VRAM_ATTR_BLINK,
-    VRAM_ATTR_UNDERLINE, VRAM_ATTR_STRIKETHROUGH,
+    COLOR_BLACK,
+    COLOR_BLUE,
+    COLOR_CYAN,
+    COLOR_GREEN,
+    COLOR_MAGENTA,
+    COLOR_RED,
+    COLOR_WHITE,
+    COLOR_YELLOW,
+    SCREEN_COLS,
+    SCREEN_ROWS,
+    VRAM_START,
+    VRAM_CHAR_MASK,
+    VRAM_FG_MASK,
+    VRAM_FG_SHIFT,
+    VRAM_BG_MASK,
+    VRAM_BG_SHIFT,
+    VRAM_ATTR_BOLD,
+    VRAM_ATTR_ITALIC,
+    VRAM_ATTR_BLINK,
+    VRAM_ATTR_UNDERLINE,
+    VRAM_ATTR_STRIKETHROUGH,
 )
 from ..memory import Memory
 
@@ -147,8 +163,8 @@ class ScreenDevice:
         fg = (word & VRAM_FG_MASK) >> VRAM_FG_SHIFT  # Bitit 12-14
         bg = (word & VRAM_BG_MASK) >> VRAM_BG_SHIFT  # Bitti 15
 
-        # Attribuutit (bittikentät 8-11 VAIN, ei värejä)
-        attrs = (word >> 8) & 0x0F
+        # Attribuutit (bittikentat 8-12 - kaikki 5 attribuuttibittia)
+        attrs = (word >> 8) & (VRAM_ATTR_MASK >> 8)
 
         return ch, fg, bg, attrs
 
@@ -202,15 +218,17 @@ class ScreenDevice:
 
                 # Attribuutit
                 style_attrs = []
-                if attrs & 0x01:  # BOLD (bitti 8)
+                if attrs & (VRAM_ATTR_BOLD >> 8):  # BOLD (bitti 8)
                     style_attrs.append("bold")
-                if attrs & 0x02:  # ITALIC (bitti 9)
+                if attrs & (VRAM_ATTR_ITALIC >> 8):  # ITALIC (bitti 9)
                     style_attrs.append("italic")
-                if attrs & 0x04:  # BLINK (bitti 10) - ei suoraan Rich-tuettu
+                if attrs & (
+                    VRAM_ATTR_BLINK >> 8
+                ):  # BLINK (bitti 10) - ei suoraan Rich-tuettu
                     pass
-                if attrs & 0x08:  # UNDERLINE (bitti 11)
+                if attrs & (VRAM_ATTR_UNDERLINE >> 8):  # UNDERLINE (bitti 11)
                     style_attrs.append("underline")
-                if attrs & 0x10:  # STRIKETHROUGH (bitti 12)
+                if attrs & (VRAM_ATTR_STRIKETHROUGH >> 8):  # STRIKETHROUGH (bitti 12)
                     style_attrs.append("strike")
 
                 # Rakenna tag

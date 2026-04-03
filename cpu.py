@@ -43,13 +43,17 @@ from .constants import (
     INT_TIMER,
     INT_VECTOR_COUNT,
     INT_VECTOR_BASE,
+    REG_IDX_MASK,
     SR_FLAG_C,
     SR_FLAG_I,
     SR_FLAG_N,
+    SR_FLAG_P,
     SR_FLAG_V,
     SR_FLAG_Z,
     MODE_KERNEL,
+    WORD_BITS,
     WORD_MASK,
+    WORD_SIGN_BIT,
 )
 from .exceptions import (
     InvalidOpcodeError,
@@ -381,7 +385,7 @@ class CPU:
             # Carry jos tulos ylitti 16 bittia
             # Overflow jos molemmat samanmerkkiset ja tulos erimerkkinen
             masked = result & WORD_MASK
-            overflow = bool(((a ^ masked) & (b ^ masked)) & 0x8000)
+            overflow = bool(((a ^ masked) & (b ^ masked)) & WORD_SIGN_BIT)
             self.regs.set_carry_overflow(result > WORD_MASK, overflow)
 
         elif ins.mnemonic == "MUL":
@@ -393,7 +397,7 @@ class CPU:
             self._set_reg(dst, result)
             self.regs.set_zn_flags(result)
             masked = result & WORD_MASK
-            overflow = bool(((a ^ masked) & (b ^ masked)) & 0x8000)
+            overflow = bool(((a ^ masked) & (b ^ masked)) & WORD_SIGN_BIT)
             self.regs.set_carry_overflow(result > WORD_MASK, overflow)
 
         elif ins.mnemonic == "SUB":
@@ -406,7 +410,7 @@ class CPU:
             self.regs.set_zn_flags(result)
             # Carry (borrow) jos a < b
             # Overflow jos operandit erimerkkiset ja tulos erimerkkinen kuin a
-            overflow = bool(((a ^ b) & (a ^ result)) & 0x8000)
+            overflow = bool(((a ^ b) & (a ^ result)) & WORD_SIGN_BIT)
             self.regs.set_carry_overflow(a < b, overflow)
 
         elif ins.mnemonic == "DIV":
@@ -461,15 +465,15 @@ class CPU:
             # Carry = viimeisin ulos siirtynyt bitti
             dst, src = ins.operands
             a = self._get_reg(dst)
-            shift = self._get_reg(src) & 0xFFFF
+            shift = self._get_reg(src) & WORD_MASK
             if shift == 0:
                 result = a
                 carry = False
-            elif shift > 16:
+            elif shift > WORD_BITS:
                 result = 0
                 carry = False
             else:
-                carry = bool((a >> (16 - shift)) & 1)
+                carry = bool((a >> (WORD_BITS - shift)) & 1)
                 result = (a << shift) & WORD_MASK
             self._set_reg(dst, result)
             self.regs.set_zn_flags(result)
@@ -480,11 +484,11 @@ class CPU:
             # Carry = viimeisin ulos siirtynyt bitti
             dst, src = ins.operands
             a = self._get_reg(dst)
-            shift = self._get_reg(src) & 0xFFFF
+            shift = self._get_reg(src) & WORD_MASK
             if shift == 0:
                 result = a
                 carry = False
-            elif shift > 16:
+            elif shift > WORD_BITS:
                 result = 0
                 carry = False
             else:
@@ -505,7 +509,7 @@ class CPU:
             self._set_reg(dst, result)
             self.regs.set_zn_flags(result)
             masked = result & WORD_MASK
-            overflow = bool(((a ^ masked) & (b ^ masked)) & 0x8000)
+            overflow = bool(((a ^ masked) & (b ^ masked)) & WORD_SIGN_BIT)
             self.regs.set_carry_overflow(result > WORD_MASK, overflow)
 
         # ======================================================================
@@ -617,7 +621,7 @@ class CPU:
             b = self._get_reg(reg_b)
             result = (a - b) & WORD_MASK
             self.regs.set_zn_flags(result)
-            overflow = bool(((a ^ b) & (a ^ result)) & 0x8000)
+            overflow = bool(((a ^ b) & (a ^ result)) & WORD_SIGN_BIT)
             self.regs.set_carry_overflow(a < b, overflow)
 
         elif ins.mnemonic == "JZ":
@@ -730,7 +734,7 @@ class CPU:
         Args:
             int_no: Keskeytyksen numero (0-8)
         """
-        int_no &= 0xFFFF
+        int_no &= WORD_MASK
 
         # Laske vektoriosoite (kierrattamalla jos numero liian iso)
         vector_addr = (INT_VECTOR_BASE + (int_no % INT_VECTOR_COUNT)) & WORD_MASK
@@ -740,7 +744,7 @@ class CPU:
         self._push(self.regs.sr)
 
         # Siirry Kernel-tilaan ja esta keskeytykset
-        self.regs.set_flag(5, MODE_KERNEL)  # P = 1 (Kernel Mode)
+        self.regs.set_flag(SR_FLAG_P, MODE_KERNEL)  # P = 1 (Kernel Mode)
         self.regs.set_flag(SR_FLAG_I, 0)  # I = 0 (keskeytykset pois)
 
         # Hae kasittelijan osoite vektorista ja aseta PC
@@ -829,7 +833,7 @@ class CPU:
         Raises:
             InvalidOpcodeError: Jos indeksi on 6 tai 7 (varattu)
         """
-        idx = encoded & 0x7  # Vain 3 alinta bittia
+        idx = encoded & REG_IDX_MASK  # Vain 3 alinta bittia
         if idx == 0:
             return self.regs.r0
         if idx == 1:
@@ -856,7 +860,7 @@ class CPU:
             InvalidOpcodeError: Jos indeksi on 6 tai 7 (varattu)
         """
         value &= WORD_MASK  # Varmista 16-bittisyys
-        idx = encoded & 0x7
+        idx = encoded & REG_IDX_MASK
         if idx == 0:
             self.regs.r0 = value
         elif idx == 1:
