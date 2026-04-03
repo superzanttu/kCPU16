@@ -413,8 +413,9 @@ class KCPU16TUI(App[None]):
     }
     #cmd-input-col {
         width: 142;
-        height: 1fr;
+        height: 3;
         align: left bottom;
+        background: yellow;
     }
     #cmd-input {
         width: 1fr;
