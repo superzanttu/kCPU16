@@ -299,7 +299,7 @@ class Assembler:
         Tunnistetaan:
         - Rekisterinimet: R0, R1, R2, R3, FP, SP
         - Labelit: loop, DONE, jne.
-        - Numeroliteraalit: 42, 0xFF, #42, #0xFF
+        - Numeroliteraalit: 42, 0xFF, #42, #0xFF, $F800
 
         Args:
             token: Operandin teksti (esim. "R0", "loop", "42")
@@ -315,6 +315,8 @@ class Assembler:
             256
             >>> asm._parse_operand("#0xFF", {})
             255
+            >>> asm._parse_operand("$F800", {})
+            63488
         """
         upper = token.upper()
 
@@ -329,6 +331,10 @@ class Assembler:
         # Poista mahdollinen #-etuliite (immediate-merkki)
         if upper.startswith("#"):
             upper = upper[1:]
+
+        # Muunna $-etuliitteinen heksadesimaaliliteraali (esim. $F800 -> 0xF800)
+        if upper.startswith("$"):
+            upper = "0x" + upper[1:]
 
         # Muunna numeroksi (tue 0x, 0b, ja desimaali)
         # int(x, 0) tunnistaa formaatin automaattisesti

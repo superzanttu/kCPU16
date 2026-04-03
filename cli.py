@@ -23,7 +23,16 @@ from .assembler import Assembler
 
 
 def build_parser() -> argparse.ArgumentParser:
-    """Rakenna komentoriviargumenttien parseri."""
+    """Rakenna komentoriviargumenttien parseri.
+
+    Määrittää kaikki tuetut komentoriviargumentit:
+    - source: valinnainen .asm-tiedosto ladattavaksi TUI:iin
+    - --dsk: valinnainen .dsk-levykuvatiedosto storageen
+    - --check: syntaksitarkistustila (ei käynnistä TUI:a)
+
+    Returns:
+        Konfiguiroitu ArgumentParser-instanssi.
+    """
     parser = argparse.ArgumentParser(
         prog="kcpu16", description="kCPU16 emulator — TUI debugger"
     )

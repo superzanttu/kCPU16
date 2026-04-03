@@ -1509,7 +1509,16 @@ class KCPU16TUI(App[None]):
     # ------------------------------------------------------------------
 
     def _do_syntax_check(self) -> CommandResult:
-        """Tarkista editorin assembly-koodin syntaksi ilman latausta muistiin."""
+        """Tarkista editorin assembly-koodin syntaksi ilman latausta muistiin.
+
+        Kutsuu Assembler.assemble() koodin validoimiseksi mutta ei lataa
+        tulosta muistiin eikä nollaa konetta. Hyödyllinen nopean
+        syntaksitarkistuksen tekemiseen ennen varsinaista assemblointia.
+
+        Returns:
+            CommandResult: ok=True + sanamäärä jos syntaksi kunnossa,
+            ok=False + virheviesti jos syntaksivirhe löytyi.
+        """
         source = self.query_one("#editor", TextArea).text.strip()
         if not source:
             return CommandResult(False, "[yellow]Editor is empty.[/yellow]")
@@ -1523,7 +1532,18 @@ class KCPU16TUI(App[None]):
             return CommandResult(False, f"[red]Syntax error: {e}[/red]")
 
     def _format_hex_dump(self, words: list[int], base_addr: int) -> str:
-        """Muotoile sanalista hex-dumpiksi (8 sanaa/rivi)."""
+        """Muotoile sanalista hex-dumpiksi (8 sanaa/rivi).
+
+        Jokainen rivi on muotoa:
+            0x<osoite>: XXXX XXXX XXXX XXXX XXXX XXXX XXXX XXXX
+
+        Args:
+            words: Lista 16-bittisia sanoja tulostettavaksi.
+            base_addr: Ensimmaisen sanan muistiosoite (käytetään osoite-sarakkeessa).
+
+        Returns:
+            Monirivinen merkkijono hex-dumpina.
+        """
         lines: list[str] = []
         for row_start in range(0, len(words), 8):
             addr = base_addr + row_start
@@ -1533,7 +1553,18 @@ class KCPU16TUI(App[None]):
         return "\n".join(lines)
 
     def _handle_mem_command(self, args: list[str]) -> CommandResult:
-        """Lue muistia: mem <addr> [count]."""
+        """Lue muistia: mem <addr> [count].
+
+        Ilman count-argumenttia lukee yhden sanan annetusta osoitteesta
+        ja päivittää Memory-välilehden näkymän kyseiseen osoitteeseen.
+        Count-argumentilla lukee useamman sanan ja tulostaa hex-dumpina.
+
+        Args:
+            args: Komentoriviargumentit [addr] tai [addr, count].
+
+        Returns:
+            CommandResult: ok=True + lukutulos, ok=False jos argumentit puuttuvat.
+        """
         if not args:
             return CommandResult(False, "Usage: mem <addr> [count]")
         addr = int(args[0], 0)
@@ -1547,7 +1578,18 @@ class KCPU16TUI(App[None]):
         return CommandResult(True, f"0x{addr:04X}: 0x{val:04X} ({val})")
 
     def _handle_mset_command(self, args: list[str]) -> CommandResult:
-        """Kirjoita muistiin: mset <addr> <value>."""
+        """Kirjoita muistiin: mset <addr> <value>.
+
+        Kirjoittaa annetun 16-bittisen arvon suoraan muistiosoitteeseen.
+        Arvo maskataan 16-bittiseksi (0x0000-0xFFFF). Osoite voidaan
+        antaa desimaali- tai heksadesimaalimuodossa.
+
+        Args:
+            args: Komentoriviargumentit [addr, value].
+
+        Returns:
+            CommandResult: ok=True + kirjoitettu arvo, ok=False jos argumentit puuttuvat.
+        """
         if len(args) < 2:
             return CommandResult(False, "Usage: mset <addr> <value>")
         addr = int(args[0], 0)
@@ -1558,7 +1600,18 @@ class KCPU16TUI(App[None]):
         )
 
     def _handle_mfill_command(self, args: list[str]) -> CommandResult:
-        """Täytä muistialue: mfill <addr> <count> <value>."""
+        """Täytä muistialue: mfill <addr> <count> <value>.
+
+        Kirjoittaa saman arvon peräkkäisiin muistiosoitteisiin.
+        Kätevä esimerkiksi muistialueen nollaamiseen tai testidatan
+        kirjoittamiseen.
+
+        Args:
+            args: Komentoriviargumentit [addr, count, value].
+
+        Returns:
+            CommandResult: ok=True + täytetty alue, ok=False jos argumentit puuttuvat.
+        """
         if len(args) < 3:
             return CommandResult(False, "Usage: mfill <addr> <count> <value>")
         addr = int(args[0], 0)
@@ -1573,7 +1626,19 @@ class KCPU16TUI(App[None]):
         )
 
     def _handle_disk_command(self, args: list[str]) -> CommandResult:
-        """Tallennustilan komennot: disk <block> | disk load|save <path>."""
+        """Tallennustilan komennot: disk <block> | disk load|save <path>.
+
+        Alikomennot:
+        - disk <block>:       Näytä blokin sisältö hex-dumpina.
+        - disk load <path>:   Lataa .dsk-levykuvatiedosto storageen.
+        - disk save <path>:   Tallenna storage .dsk-tiedostoksi.
+
+        Args:
+            args: Komentoriviargumentit [block] tai [load/save, path].
+
+        Returns:
+            CommandResult: ok=True + tulos, ok=False jos argumentit virheelliset.
+        """
         if not args:
             return CommandResult(
                 False, "Usage: disk <block> | disk load <file> | disk save <file>"
@@ -1598,7 +1663,17 @@ class KCPU16TUI(App[None]):
         return CommandResult(True, f"Block {block_idx}:\n{dump}")
 
     def _handle_dset_command(self, args: list[str]) -> CommandResult:
-        """Muokkaa tallennustilaa: dset <block> <offset> <value>."""
+        """Muokkaa tallennustilaa: dset <block> <offset> <value>.
+
+        Kirjoittaa yksittäisen 16-bittisen sanan tallennuslaitteelle.
+        Osoite lasketaan kaavalla: block * block_size_words + offset.
+
+        Args:
+            args: Komentoriviargumentit [block, offset, value].
+
+        Returns:
+            CommandResult: ok=True + kirjoitettu arvo, ok=False jos argumentit puuttuvat.
+        """
         if len(args) < 3:
             return CommandResult(False, "Usage: dset <block> <offset> <value>")
         block = int(args[0], 0)
@@ -1612,7 +1687,17 @@ class KCPU16TUI(App[None]):
         )
 
     def _handle_dfill_command(self, args: list[str]) -> CommandResult:
-        """Täytä tallenustilan blokki: dfill <block> <value>."""
+        """Täytä tallennustilan blokki: dfill <block> <value>.
+
+        Kirjoittaa saman 16-bittisen arvon koko blokin jokaiseen sanaan.
+        Kätevä blokin nollaamiseen tai testidatan kirjoittamiseen.
+
+        Args:
+            args: Komentoriviargumentit [block, value].
+
+        Returns:
+            CommandResult: ok=True + täytetty blokki, ok=False jos argumentit puuttuvat.
+        """
         if len(args) < 2:
             return CommandResult(False, "Usage: dfill <block> <value>")
         block_idx = int(args[0], 0)
@@ -1626,7 +1711,19 @@ class KCPU16TUI(App[None]):
         )
 
     def _handle_reset_command(self, args: list[str]) -> CommandResult:
-        """Resetoi: reset | reset deep | reset cpu."""
+        """Resetoi: reset | reset deep | reset cpu.
+
+        Alikomennot:
+        - reset:       Nollaa muisti + CPU. Tallennuslaite säilyy ennallaan.
+        - reset deep:  Nollaa muisti + CPU + tallennuslaite.
+        - reset cpu:   Nollaa vain CPU (rekisterit, liput). Muisti säilyy.
+
+        Args:
+            args: Valinnaiset alikomennon argumentit ["deep"] tai ["cpu"].
+
+        Returns:
+            CommandResult: ok=True + resetin kuvaus, ok=False jos tuntematon alikomento.
+        """
         if not args:
             # Normaali reset: VRAM + muisti + CPU. Storage säilyy.
             self.machine.cold_reset()
