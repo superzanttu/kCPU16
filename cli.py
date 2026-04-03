@@ -31,7 +31,7 @@ def build_parser() -> argparse.ArgumentParser:
     - --check: syntaksitarkistustila (ei käynnistä TUI:a)
 
     Returns:
-        Konfiguiroitu ArgumentParser-instanssi.
+        Konfiguroitu ArgumentParser-instanssi.
     """
     parser = argparse.ArgumentParser(
         prog="kcpu16", description="kCPU16 emulator — TUI debugger"
