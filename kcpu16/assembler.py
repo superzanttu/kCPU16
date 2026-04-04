@@ -23,6 +23,7 @@ SYNTAKSI:
   - .macro NIMI ... .endmacro (esim. .macro LOAD_MANY ... .endmacro)
   - .db TAVU, TAVU, ... (esim. .db 0x41, 0x42, 255)
   - .dstr "TEKSTI" (esim. .dstr "Hello!", automaattinen null-terminaattori)
+  - .at OSOITE (esim. .at 0xF800, siirtyy uuteen muistiosoitteeseen)
 
 ESIMERKKI:
 ----------
@@ -45,7 +46,12 @@ ESIMERKKI:
         JUMP  START
         HALT
 
+    .at 0xF800           ; Seuraava data kirjoitetaan VRAMiin
+    VRAM_DATA:
+        .dstr "kCPU16"  ; Alustudata suoraan VRAMiin
+
 Tuottaa konekielen osoitteesta 0x0200 eteenpäin.
+VRAM_DATA-symboli osoittaa 0xF800.
 """
 
 from __future__ import annotations
@@ -88,28 +94,31 @@ class Assembler:
         ...     LOAD R0, 42
         ...     HALT
         ... '''
-        >>> words = asm.assemble(code)
-        >>> words
-        [1, 0, 42, 68]  # LOAD opcode, R0 index, 42, HALT opcode
+        >>> segments = asm.assemble(code)
+        >>> segments
+        [(256, [1, 0, 42, 68])]  # [(start_addr, [LOAD, R0=0, 42, HALT])]
     """
 
-    def assemble(self, source: str, start_addr: int = BOOT_RAM_START) -> list[int]:
+    def assemble(
+        self, source: str, start_addr: int = BOOT_RAM_START
+    ) -> list[tuple[int, list[int]]]:
         """
-        Assembloi lahdekoodi konekieleksi.
+        Assembloi lahdekoodi konekieleksi segmentteina.
 
         Args:
             source: Assembly-lahdekoodi merkkijonona
             start_addr: Ohjelman aloitusosoite muistissa (oletus: 0x0100)
 
         Returns:
-            Lista 16-bittisia sanoja (konekieli)
+            Lista (aloitusosoite, sanat) -pareista. Yleensa yksi segmentti,
+            mutta .at-direktiivilla voi olla useampia.
 
         Raises:
             ValueError: Jos mnemonic on tuntematon tai label on duplikaatti
 
         Example:
             >>> asm.assemble("LOAD R0, 10\\nHALT", start_addr=0x0200)
-            [1, 0, 10, 68]
+            [(512, [1, 0, 10, 68])]
         """
         # Pass 0: Makrojen ekspansointi ja .origin käsittely
         expanded_source, start_addr = self._pass0_expand_macros_and_origin(
@@ -117,8 +126,8 @@ class Assembler:
         )
         # Pass 1: Kerataan labelit
         labels = self._pass1_collect_labels(expanded_source, start_addr)
-        # Pass 2: Tuotetaan konekieli
-        return self._pass2_emit(expanded_source, labels)
+        # Pass 2: Tuotetaan konekieli segmentteina
+        return self._pass2_emit(expanded_source, labels, start_addr)
 
     def _pass0_expand_macros_and_origin(
         self, source: str, start_addr: int
@@ -242,6 +251,14 @@ class Assembler:
                 labels[label_name] = addr
                 continue  # Label ei kuluta muistia
 
+            # .at direktiivi: siirry uuteen muistiosoitteeseen (uusi segmentti)
+            if line.lower().startswith(".at ") or line.lower() == ".at":
+                parts = line.split()
+                if len(parts) < 2:
+                    raise ValueError(f"Invalid .at syntax: {line}")
+                addr = int(parts[1], 0) & WORD_MASK
+                continue
+
             # .db direktiivi: tallenna raakoja tavuja muistiin
             if line.lower().startswith(".db"):
                 addr += len(self._parse_db_values(line))
@@ -267,21 +284,27 @@ class Assembler:
 
         return labels
 
-    def _pass2_emit(self, source: str, labels: dict[str, int]) -> list[int]:
+    def _pass2_emit(
+        self, source: str, labels: dict[str, int], start_addr: int
+    ) -> list[tuple[int, list[int]]]:
         """
-        Pass 2: Tuota lopullinen konekieli.
+        Pass 2: Tuota lopullinen konekieli segmentteina.
 
         Kaydaan lahdekoodi uudelleen lapi ja tuotetaan jokainen
         kasky: opcode + operandit. Labelit korvataan osoitteilla.
+        .at-direktiivi aloittaa uuden segmentin uudessa muistiosoitteessa.
 
         Args:
             source: Assembly-lahdekoodi
             labels: Pass 1:ssa keratyt labelit ja osoitteet
+            start_addr: Ensimmaisen segmentin aloitusosoite
 
         Returns:
-            Lista 16-bittisia sanoja
+            Lista (aloitusosoite, sanat) -pareista.
         """
-        words: list[int] = []
+        segments: list[tuple[int, list[int]]] = []
+        current_start = start_addr
+        current_words: list[int] = []
 
         for raw_line in source.splitlines():
             # Poista kommentit
@@ -291,14 +314,27 @@ class Assembler:
             if not line or line.endswith(":"):
                 continue
 
+            # .at direktiivi: tallenna nykyinen segmentti, aloita uusi
+            if line.lower().startswith(".at ") or line.lower() == ".at":
+                if current_words:
+                    segments.append(
+                        (current_start, [w & WORD_MASK for w in current_words])
+                    )
+                parts = line.split()
+                if len(parts) < 2:
+                    raise ValueError(f"Invalid .at syntax: {line}")
+                current_start = int(parts[1], 0) & WORD_MASK
+                current_words = []
+                continue
+
             # .db direktiivi: emittoi raakoja tavuja
             if line.lower().startswith(".db"):
-                words.extend(self._parse_db_values(line))
+                current_words.extend(self._parse_db_values(line))
                 continue
 
             # .dstr direktiivi: emittoi null-terminoitu merkkijono
             if line.lower().startswith(".dstr"):
-                words.extend(self._parse_dstr_values(line))
+                current_words.extend(self._parse_dstr_values(line))
                 continue
 
             # Parsi kasky: "ADD R0, R1" -> ["ADD", "R0", "R1"]
@@ -311,14 +347,17 @@ class Assembler:
                 raise ValueError(f"Unknown mnemonic: {mnemonic}")
 
             # Lisaa opcode tulosteeseen
-            words.append(opcode)
+            current_words.append(opcode)
 
             # Parsi ja lisaa operandit
             for token in parts[1:]:
-                words.append(self._parse_operand(token, labels))
+                current_words.append(self._parse_operand(token, labels))
 
-        # Varmista etta kaikki arvot ovat 16-bittisia
-        return [w & WORD_MASK for w in words]
+        # Tallenna viimeinen segmentti
+        if current_words:
+            segments.append((current_start, [w & WORD_MASK for w in current_words]))
+
+        return segments
 
     def _parse_operand(self, token: str, labels: dict[str, int]) -> int:
         """

@@ -240,6 +240,29 @@ def _build_addr_to_line(source: str, assembler: Assembler) -> dict[int, int]:
         line = raw.split(";", 1)[0].strip()
         if not line or line.endswith(":"):
             continue
+        # .at direktiivi: paivita osoitelaskuri uuteen muistiosoitteeseen
+        if line.lower().startswith(".at ") or line.lower() == ".at":
+            parts_at = line.split()
+            if len(parts_at) >= 2:
+                try:
+                    addr = int(parts_at[1], 0) & 0xFFFF
+                except ValueError:
+                    pass
+            continue
+        # .db: edista osoitetta (ei suoritettavaa koodia)
+        if line.lower().startswith(".db"):
+            try:
+                addr += len(assembler._parse_db_values(line))
+            except Exception:
+                pass
+            continue
+        # .dstr: edista osoitetta (ei suoritettavaa koodia)
+        if line.lower().startswith(".dstr"):
+            try:
+                addr += len(assembler._parse_dstr_values(line))
+            except Exception:
+                pass
+            continue
         mnemonic = line.replace(",", " ").split()[0].upper()
         opcode = MNEMONIC_TO_OPCODE.get(mnemonic)
         if opcode is None:
@@ -902,9 +925,9 @@ class KCPU16TUI(App[None]):
         Tämä on TUI:n keskeinen operaatio - "editori → konekieli → muisti":
 
         1. Lue editorin teksti (source)
-        2. assembler.assemble(source) → lista 16-bittisiä sanoja
+        2. assembler.assemble(source) → lista (osoite, sanat) -segmenttejä
         3. machine.cold_reset() → nollaa CPU, muisti, laitteet
-        4. machine.load_program(words) → lataa sanat osoitteesta 0x0100
+        4. machine.load_segments(segments) → lataa segmentit muistiin
         5. _build_addr_to_line() → rakenna osoite→rivi -mappi
         6. dbg.snapshot_registers() → ota vertailupiste rekistereille
         7. _update_exec_line() → siirrä kursori PC:n riville
@@ -918,15 +941,16 @@ class KCPU16TUI(App[None]):
             self._log("[yellow]Editor is empty.[/yellow]")
             return
         try:
-            words = self.assembler.assemble(source)
+            segments = self.assembler.assemble(source)
             self.machine.cold_reset()
-            self.machine.load_program(words)
+            self.machine.load_segments(segments)
             self.is_assembled = True
             self.addr_to_line = _build_addr_to_line(source, self.assembler)
             self.dbg.snapshot_registers(self.machine.dump_registers())
+            total_words = sum(len(w) for _, w in segments)
             self._log(
-                f"[green]Assembled: {len(words)} words at "
-                f"0x{self.machine.regs.pc:04X}. F7=Step, F5=Run.[/green]"
+                f"[green]Assembled: {total_words} words in {len(segments)} "
+                f"segment(s) at 0x{self.machine.regs.pc:04X}. F7=Step, F5=Run.[/green]"
             )
             self._update_exec_line()
             self._refresh_all()
@@ -1506,10 +1530,11 @@ class KCPU16TUI(App[None]):
         if not source:
             return CommandResult(False, "[yellow]Editor is empty.[/yellow]")
         try:
-            words = self.assembler.assemble(source)
+            segments = self.assembler.assemble(source)
+            total_words = sum(len(w) for _, w in segments)
             return CommandResult(
                 True,
-                f"[green]Syntax OK — {len(words)} words.[/green]",
+                f"[green]Syntax OK — {total_words} words in {len(segments)} segment(s).[/green]",
             )
         except Exception as e:
             return CommandResult(False, f"[red]Syntax error: {e}[/red]")
