@@ -412,26 +412,23 @@ class KCPU16TUI(App[None]):
         dock: bottom;
         height: auto;
         max-height: 14;
-        layout: horizontal;
+        layout: grid;
+        grid-size: 3;
+        grid-columns: 142 28 1fr;
     }
     #cmd-input-col {
-        width: 142;
-        height: 1;
+        align: left top;
     }
     #cmd-input {
         width: 1fr;
         height: 1;
     }
     #flags-pane {
-        width: auto;
-        height: auto;
         border: solid $warning-darken-1;
         border-title-color: $accent;
         padding: 0 1;
     }
     #regs-pane {
-        width: 1fr;
-        height: auto;
         border: solid $warning-darken-1;
         border-title-color: $accent;
         padding: 0 1;
