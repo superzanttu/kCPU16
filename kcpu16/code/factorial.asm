@@ -1,5 +1,5 @@
 ; =============================================================================
-; factorial.asm - Kertoman laskenta aliohjelmalla (CALL/RET) test
+; factorial.asm - Kertoman laskenta aliohjelmalla (CALL/RET)
 ; =============================================================================
 ;
 ; KUVAUS:
