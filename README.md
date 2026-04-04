@@ -10,7 +10,7 @@ interaktiivisen Textual-pohjaisen käyttöliittymän.
 - **16-bittinen sana-osoitettu muisti** — 65 536 sanaa (0x0000–0xFFFF)
 - **Rekisterit** — R0–R3 (GPR), FP, SP, PC, SR, MPR, TMR
 - **Tilarekisteri (SR)** — liput Z, N, C, V, I, P (Zero / Negative / Carry / Overflow / Interrupt / Privilege)
-- **Käskykanta** — 47 käskyä (tiedonsiirto, aritmetiikka, logiikka, pino, hyppykäskyt, keskeytykset, järjestelmä)
+- **Käskykanta** — 44 käskyä (tiedonsiirto, aritmetiikka, logiikka, pino, hyppykäskyt, keskeytykset, järjestelmä)
 - **Kolmipassinen assembler** — makrotuki (`.macro`/`.endmacro`), `.origin`-direktiivi, labelit
 - **Disassembler** — konekieli → assembly-teksti
 - **Muistisuojaus** — MPR-rekisteri rajoittaa User-tilan muistinkäyttöä
@@ -230,8 +230,8 @@ TUI:n komentoriviltä (`>`) voidaan antaa komentoja kuten:
 0x0009 – 0x00FF   OS:lle varattu
 0x0100 – 0x01FF   Bootloader-latausalue (256 sanaa)
 0x0200 – 0xF7FF   Vapaa RAM (ohjelmat ja data)
-0xF800 – 0xFFCF   Video RAM, VRAM (80×25 = 2000 sanaa)
-0xFFD0 – 0xFFFF   Kernel Stack (48 sanaa)
+0xF800 – 0xFF7F   Video RAM, VRAM (80×24 = 1920 sanaa)
+0xFF80 – 0xFFFF   Kernel Stack (128 sanaa)
 ```
 
 ## VRAM-sanan rakenne
