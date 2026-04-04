@@ -280,8 +280,7 @@ class KCPU16TUI(App[None]):
             left-panel: top-section (Horizontal):
                             screen-section (Static, VRAM 80x24)
                             disasm-tabs (TabbedContent: Disassembly|Memory|Stack)
-                        log-pane (RichLog, lokiviestit)
-                        cmd-output-pane (RichLog, komentotulosteet)
+                        output-pane (RichLog, kaikki tulosteet + komentosyöte)
             editor-pane: TextArea (koko korkeus)
         → bottom-bar (Horizontal):
             cmd-input-col (Input) | flags-pane (Flags+CPU) | regs-pane (Registers)
@@ -303,8 +302,7 @@ class KCPU16TUI(App[None]):
     #   2. #content-area     - Pääalue (height: 1fr, horizontal):
     #      - #left-panel     - Vasen paneeli (width: 142): Screen+Disasm | Log | Cmds
     #        - #top-section  - Yläosa (horizontal): Screen (82) + Disasm tabs (60)
-    #        - #log-pane     - Lokiviestit (height: 1fr)
-    #        - #cmd-output   - Komentotulosteet (height: 1fr)
+    #        - #output-pane   - Tulosteet + komentosyöte (height: 1fr)
     #      - #editor-pane    - Oikea sarake (width: 1fr): Editori (koko korkeus)
     #   3. #bottom-bar       - Alarivi (dock: bottom, horizontal):
     #      - #cmd-input-col  - Komentosyöte (width: 142, 1 rivi)
@@ -379,20 +377,12 @@ class KCPU16TUI(App[None]):
     #stack-view {
         padding: 0 1;
     }
-    #log-pane {
+    #output-pane {
         height: 1fr;
         border: solid $primary-darken-2;
         border-title-color: $accent;
     }
-    #log-view {
-        height: 1fr;
-    }
-    #cmd-output-pane {
-        height: 1fr;
-        border: solid $primary-darken-2;
-        border-title-color: $accent;
-    }
-    #cmd-output {
+    #output-view {
         height: 1fr;
     }
 
@@ -407,7 +397,7 @@ class KCPU16TUI(App[None]):
         height: 1fr;
     }
 
-    /* ---- cmd-input inside cmd-output-pane ---- */
+    /* ---- cmd-input inside output-pane ---- */
     #cmd-input {
         dock: bottom;
         width: 1fr;
@@ -479,7 +469,6 @@ class KCPU16TUI(App[None]):
         self.addr_to_line: dict[int, int] = {}
         self.is_assembled: bool = False
         self._last_screen_render: str = ""
-        self._cmd_context: bool = False
 
     # ------------------------------------------------------------------
     # Layout
@@ -496,8 +485,7 @@ class KCPU16TUI(App[None]):
                     #top-section (Horizontal):
                         #screen-section: Static (VRAM 80x24)
                         #disasm-tabs (TabbedContent: Disassembly|Memory|Stack)
-                    #log-pane: RichLog (lokiviestit)
-                    #cmd-output-pane: RichLog (komentotulosteet)
+                    #output-pane: RichLog (kaikki tulosteet) + Input (komentosyöte)
                 #editor-pane (Vertical, 1fr, koko korkeus):
                     TextArea (lähdekoodieditori)
             Bottom bar (#bottom-bar, Horizontal):
@@ -538,17 +526,9 @@ class KCPU16TUI(App[None]):
                         with TabPane("Stack", id="tab-stack"):
                             with VerticalScroll():
                                 yield Static(id="stack-view")
-                with Vertical(id="log-pane"):
+                with Vertical(id="output-pane"):
                     yield RichLog(
-                        id="log-view",
-                        wrap=True,
-                        highlight=False,
-                        markup=True,
-                        max_lines=500,
-                    )
-                with Vertical(id="cmd-output-pane"):
-                    yield RichLog(
-                        id="cmd-output",
+                        id="output-view",
                         wrap=True,
                         highlight=False,
                         markup=True,
@@ -592,8 +572,7 @@ class KCPU16TUI(App[None]):
         self.query_one("#regs-pane").border_title = "Registers"
         self.query_one("#flags-pane").border_title = "Flags"
         self.query_one("#screen-section").border_title = "Screen"
-        self.query_one("#cmd-output-pane").border_title = "Commands"
-        self.query_one("#log-pane").border_title = "Log"
+        self.query_one("#output-pane").border_title = "Output"
 
         self.machine.cold_reset()
         self.dbg.snapshot_registers(self.machine.dump_registers())
@@ -668,35 +647,27 @@ class KCPU16TUI(App[None]):
     def on_input_submitted(self, event: Input.Submitted) -> None:
         """Käsittele komentosyöte (Enter-painallus #cmd-input -kentässä).
 
-        Lukee komennon, tyhjentää kentän, näyttää komennon cmd-output:issa,
+        Lukee komennon, tyhjentää kentän, näyttää komennon output-paneelissa,
         suorittaa sen _execute_command():lla ja näyttää tuloksen.
-
-        Asettaa _cmd_context=True jotta kaikki _log()-kutsut (myös
-        action_show_help, _do_assemble jne.) ohjautuvat cmd-outputiin.
         """
         cmd = event.value.strip()
         event.input.value = ""
         if not cmd:
             return
 
-        # Ohjaa kaikki _log()-kutsut cmd-outputiin komennon suorituksen ajaksi
-        self._cmd_context = True
-        try:
-            self._log(f"[dim]> {cmd}[/dim]")
-            result = self._execute_command(cmd)
+        self._log(f"[dim]> {cmd}[/dim]")
+        result = self._execute_command(cmd)
 
-            if result.ok:
-                if result.message:
-                    self._log(result.message)
-            else:
-                self._log(f"[red]{result.message}[/red]")
+        if result.ok:
+            if result.message:
+                self._log(result.message)
+        else:
+            self._log(f"[red]{result.message}[/red]")
 
-            # VAIN step/run komennot päivittävät näkymän
-            cmd_verb = cmd.split()[0].lower()
-            if cmd_verb in {"step", "run", "restart", "asm", "reset"}:
-                self._refresh_all()
-        finally:
-            self._cmd_context = False
+        # VAIN step/run komennot päivittävät näkymän
+        cmd_verb = cmd.split()[0].lower()
+        if cmd_verb in {"step", "run", "restart", "asm", "reset"}:
+            self._refresh_all()
 
     # ------------------------------------------------------------------
     # Actions (näppäinsidonnaisuudet)
@@ -1646,29 +1617,14 @@ class KCPU16TUI(App[None]):
     # ------------------------------------------------------------------
 
     def _log(self, message: str) -> None:
-        """Kirjoita viesti Log-välilehden tai cmd-output:in RichLog-widgettiin.
+        """Kirjoita viesti output-paneelin RichLog-widgettiin.
 
-        Jos _cmd_context on True (komennon suorituksen aikana),
-        ohjaa viesti cmd-output:iin Log-tabin sijaan.
+        Kaikki tulosteet (loki, komentotulosteet, virheet) ohjautuvat
+        yhteen yhtenäiseen output-ikkunaan.
         Tukee Rich-markupia (esim. [bold], [red], [dim]).
         """
         try:
-            if self._cmd_context:
-                self.query_one("#cmd-output", RichLog).write(message)
-            else:
-                self.query_one("#log-view", RichLog).write(message)
-        except Exception:
-            pass
-
-    def _log_cmd_output(self, message: str) -> None:
-        """Kirjoita komentotulos Command Output -widgettiin.
-
-        Tukee Rich-markupia (esim. [bold], [red], [dim]).
-        Käytetään hex-dumppeihin, listan tulostukseen ja muihin
-        komentojen tuottamiin tulosteisiin. Log-tab saa status-viestit.
-        """
-        try:
-            self.query_one("#cmd-output", RichLog).write(message)
+            self.query_one("#output-view", RichLog).write(message)
         except Exception:
             pass
 
