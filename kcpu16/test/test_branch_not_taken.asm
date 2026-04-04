@@ -47,14 +47,34 @@ CPY   FP, R3          ; FP = 7 (käytetään tilapäisesti)
 CMP   R3, FP          ; 7 - 7 = 0 -> Z=1, ei GT
 JGT   fail4           ; EI pitäisi hypätä (Z=1)
 LOAD  R3, 4           ; suoritetaan -> R3=4
-JUMP  done
+JUMP  test5
 fail4:
 LOAD  R3, 99
+
+test5:
+; --- JLE EI hyppää kun a > b (signed) ---
+LOAD  R0, 10
+LOAD  R1, 3
+CMP   R0, R1          ; 10 - 3 = 7 -> Z=0, N=0, V=0 -> N=V, ei LE
+JLE   fail5           ; EI pitäisi hypätä
+JUMP  test6
+fail5:
+LOAD  R3, 99          ; ei suoriteta
+
+test6:
+; --- JGE EI hyppää kun a < b (signed) ---
+LOAD  R0, 3
+LOAD  R1, 10
+CMP   R0, R1          ; 3 - 10 -> N=1, V=0 -> N!=V, ei GE
+JGE   fail6           ; EI pitäisi hypätä
+JUMP  done
+fail6:
+LOAD  R3, 99          ; ei suoriteta
 
 done:
 HALT
 
-.expect_reg   R0, 1    ; JZ ei hypännyt
-.expect_reg   R1, 2    ; JNZ ei hypännyt
+.expect_reg   R0, 3    ; viimeinen LOAD R0 = 3 (test6)
+.expect_reg   R1, 10   ; viimeinen LOAD R1 = 10 (test6)
 .expect_reg   R2, 3    ; JLT ei hypännyt
-.expect_reg   R3, 4    ; JGT ei hypännyt
+.expect_reg   R3, 4    ; JGT ei hypännyt (JLE/JGE eivät muuta R3:a)

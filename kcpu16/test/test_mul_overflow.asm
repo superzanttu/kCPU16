@@ -28,3 +28,4 @@ HALT
 .expect_flag  Z, 1           ; tulos = 0
 .expect_flag  C, 1           ; 65536 > 0xFFFF
 .expect_flag  N, 0
+.expect_flag  V, 0           ; MUL 256*256: V=0 (no signed overflow)
