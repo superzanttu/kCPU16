@@ -271,9 +271,9 @@ def run_test(path: Path) -> int:
         print(f"VIRHE assembloinnissa: {exc}", file=sys.stderr)
         return 1
 
-    # --- Suorita koneessa ---
+    # --- Suorita koneessa (ilman boot-prosessia) ---
     machine = KCPU16Machine()
-    machine.cold_reset()
+    machine.reset_for_test()
     machine.load_segments(segments)
     try:
         machine.run()
