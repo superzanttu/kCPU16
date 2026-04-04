@@ -421,7 +421,6 @@ class KCPU16TUI(App[None]):
     }
     #cmd-input {
         width: 1fr;
-        height: 1;
     }
     #flags-pane {
         border: solid $warning-darken-1;
