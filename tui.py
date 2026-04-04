@@ -407,7 +407,13 @@ class KCPU16TUI(App[None]):
         height: 1fr;
     }
 
-    /* ---- Bottom bar: Input | Flags+CPU | Registers ---- */
+    /* ---- cmd-input inside cmd-output-pane ---- */
+    #cmd-input {
+        dock: bottom;
+        width: 1fr;
+    }
+
+    /* ---- Bottom bar: Flags+CPU | Registers ---- */
     #bottom-bar {
         dock: bottom;
         height: auto;
@@ -415,12 +421,6 @@ class KCPU16TUI(App[None]):
         layout: grid;
         grid-size: 3;
         grid-columns: 142 28 1fr;
-    }
-    #cmd-input-col {
-        align: left bottom;
-    }
-    #cmd-input {
-        width: 1fr;
     }
     #flags-pane {
         border: solid $warning-darken-1;
@@ -554,18 +554,18 @@ class KCPU16TUI(App[None]):
                         markup=True,
                         max_lines=500,
                     )
+                    yield Input(
+                        placeholder="Command: help, step, run, bp, mem, mset, disk, reset ...",
+                        id="cmd-input",
+                    )
 
             # Right column: Editor (full height)
             with Vertical(id="editor-pane"):
                 yield TextArea("", language=None, show_line_numbers=True, id="editor")
 
-        # Bottom bar: Command input | Flags+CPU | Registers
+        # Bottom bar: Flags+CPU | Registers
         with Horizontal(id="bottom-bar"):
-            with Vertical(id="cmd-input-col"):
-                yield Input(
-                    placeholder="Command: help, step, run, bp, mem, mset, disk, reset ...",
-                    id="cmd-input",
-                )
+            yield Static("", id="bottom-spacer")
             with Vertical(id="flags-pane"):
                 yield Static(id="flags-content")
                 yield Static(id="cpu-content")
