@@ -21,6 +21,8 @@ SYNTAKSI:
 - Direktiivit:
   - .origin OSOITE (esim. .origin 0x0200)
   - .macro NIMI ... .endmacro (esim. .macro LOAD_MANY ... .endmacro)
+  - .db TAVU, TAVU, ... (esim. .db 0x41, 0x42, 255)
+  - .dstr "TEKSTI" (esim. .dstr "Hello!", automaattinen null-terminaattori)
 
 ESIMERKKI:
 ----------
@@ -32,8 +34,14 @@ ESIMERKKI:
         LOAD  R2, 30
     .endmacro
 
+    MSG:
+        .dstr "Hello!"  ; 7 sanaa: H,e,l,l,o,!,0x00
+    NUMS:
+        .db 0x01, 0x02   ; 2 sanaa: 0x01, 0x02
+
     START:
         LOAD_MANY        ; Ekspandoi makroksi
+        LOAD  R0, MSG    ; R0 = datan aloitusosoite
         JUMP  START
         HALT
 
@@ -234,6 +242,16 @@ class Assembler:
                 labels[label_name] = addr
                 continue  # Label ei kuluta muistia
 
+            # .db direktiivi: tallenna raakoja tavuja muistiin
+            if line.lower().startswith(".db"):
+                addr += len(self._parse_db_values(line))
+                continue
+
+            # .dstr direktiivi: tallenna null-terminoitu merkkijono muistiin
+            if line.lower().startswith(".dstr"):
+                addr += len(self._parse_dstr_values(line))
+                continue
+
             # Muuten tama on kasky - laske sen koko
             # "ADD R0, R1" -> ["ADD", "R0", "R1"]
             mnemonic = line.replace(",", " ").split()[0].upper()
@@ -271,6 +289,16 @@ class Assembler:
 
             # Ohita tyhjat rivit ja labelit
             if not line or line.endswith(":"):
+                continue
+
+            # .db direktiivi: emittoi raakoja tavuja
+            if line.lower().startswith(".db"):
+                words.extend(self._parse_db_values(line))
+                continue
+
+            # .dstr direktiivi: emittoi null-terminoitu merkkijono
+            if line.lower().startswith(".dstr"):
+                words.extend(self._parse_dstr_values(line))
                 continue
 
             # Parsi kasky: "ADD R0, R1" -> ["ADD", "R0", "R1"]
@@ -333,3 +361,62 @@ class Assembler:
         # Muunna numeroksi (tue 0x, 0b, ja desimaali)
         # int(x, 0) tunnistaa formaatin automaattisesti
         return int(upper, 0)
+
+    def _parse_db_values(self, line: str) -> list[int]:
+        """
+        Parsi .db-direktiivin arvot.
+
+        Hyväksyy pilkulla erotetun listan numeroita (desimaali tai hex).
+        Jokainen arvo maskataan 8 bittiin (0x00–0xFF).
+
+        Args:
+            line: Direktiiviriivi, esim. ".db 0x41, 66, 0b01000011"
+
+        Returns:
+            Lista kokonaislukuja, kukin väliltä 0–255.
+
+        Example:
+            >>> asm._parse_db_values(".db 0x41, 0x42")
+            [65, 66]
+        """
+        # Poista ".db" etuliite
+        rest = line[3:].strip()
+        if not rest:
+            return []
+        values = []
+        for token in rest.split(","):
+            token = token.strip()
+            if token:
+                values.append(int(token, 0) & 0xFF)
+        return values
+
+    def _parse_dstr_values(self, line: str) -> list[int]:
+        """
+        Parsi .dstr-direktiivin merkkijono.
+
+        Poimii lainausmerkkien välisen tekstin, muuntaa jokaisen merkin
+        sen ASCII-arvoksi (bitit 0–7) ja lisää automaattisesti
+        null-terminaattorin (0x00) loppuun.
+
+        Args:
+            line: Direktiiviriivi, esim. '.dstr "Hello!"'
+
+        Returns:
+            Lista kokonaislukuja (ASCII-arvot + 0), kukin väliltä 0–255.
+
+        Raises:
+            ValueError: Jos lainausmerkkejä ei löydy.
+
+        Example:
+            >>> asm._parse_dstr_values('.dstr "Hi"')
+            [72, 105, 0]
+        """
+        # Poista ".dstr" etuliite
+        rest = line[5:].strip()
+        # Etsi lainausmerkkien välinen teksti
+        start = rest.find('"')
+        end = rest.rfind('"')
+        if start == -1 or start == end:
+            raise ValueError(f"Invalid .dstr syntax (missing quotes): {line}")
+        text = rest[start + 1 : end]
+        return [ord(c) & 0xFF for c in text] + [0x00]
