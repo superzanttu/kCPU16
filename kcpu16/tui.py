@@ -240,6 +240,29 @@ def _build_addr_to_line(source: str, assembler: Assembler) -> dict[int, int]:
         line = raw.split(";", 1)[0].strip()
         if not line or line.endswith(":"):
             continue
+        # .at direktiivi: paivita osoitelaskuri uuteen muistiosoitteeseen
+        if line.lower().startswith(".at ") or line.lower() == ".at":
+            parts_at = line.split()
+            if len(parts_at) >= 2:
+                try:
+                    addr = int(parts_at[1], 0) & 0xFFFF
+                except ValueError:
+                    pass
+            continue
+        # .db: edista osoitetta (ei suoritettavaa koodia)
+        if line.lower().startswith(".db"):
+            try:
+                addr += len(assembler._parse_db_values(line))
+            except Exception:
+                pass
+            continue
+        # .dstr: edista osoitetta (ei suoritettavaa koodia)
+        if line.lower().startswith(".dstr"):
+            try:
+                addr += len(assembler._parse_dstr_values(line))
+            except Exception:
+                pass
+            continue
         mnemonic = line.replace(",", " ").split()[0].upper()
         opcode = MNEMONIC_TO_OPCODE.get(mnemonic)
         if opcode is None:
@@ -280,8 +303,7 @@ class KCPU16TUI(App[None]):
             left-panel: top-section (Horizontal):
                             screen-section (Static, VRAM 80x24)
                             disasm-tabs (TabbedContent: Disassembly|Memory|Stack)
-                        log-pane (RichLog, lokiviestit)
-                        cmd-output-pane (RichLog, komentotulosteet)
+                        output-pane (RichLog, kaikki tulosteet + komentosyöte)
             editor-pane: TextArea (koko korkeus)
         → bottom-bar (Horizontal):
             cmd-input-col (Input) | flags-pane (Flags+CPU) | regs-pane (Registers)
@@ -303,8 +325,7 @@ class KCPU16TUI(App[None]):
     #   2. #content-area     - Pääalue (height: 1fr, horizontal):
     #      - #left-panel     - Vasen paneeli (width: 142): Screen+Disasm | Log | Cmds
     #        - #top-section  - Yläosa (horizontal): Screen (82) + Disasm tabs (60)
-    #        - #log-pane     - Lokiviestit (height: 1fr)
-    #        - #cmd-output   - Komentotulosteet (height: 1fr)
+    #        - #output-pane   - Tulosteet + komentosyöte (height: 1fr)
     #      - #editor-pane    - Oikea sarake (width: 1fr): Editori (koko korkeus)
     #   3. #bottom-bar       - Alarivi (dock: bottom, horizontal):
     #      - #cmd-input-col  - Komentosyöte (width: 142, 1 rivi)
@@ -379,20 +400,12 @@ class KCPU16TUI(App[None]):
     #stack-view {
         padding: 0 1;
     }
-    #log-pane {
+    #output-pane {
         height: 1fr;
         border: solid $primary-darken-2;
         border-title-color: $accent;
     }
-    #log-view {
-        height: 1fr;
-    }
-    #cmd-output-pane {
-        height: 1fr;
-        border: solid $primary-darken-2;
-        border-title-color: $accent;
-    }
-    #cmd-output {
+    #output-view {
         height: 1fr;
     }
 
@@ -407,7 +420,13 @@ class KCPU16TUI(App[None]):
         height: 1fr;
     }
 
-    /* ---- Bottom bar: Input | Flags+CPU | Registers ---- */
+    /* ---- cmd-input inside output-pane ---- */
+    #cmd-input {
+        dock: bottom;
+        width: 1fr;
+    }
+
+    /* ---- Bottom bar: Flags+CPU | Registers ---- */
     #bottom-bar {
         dock: bottom;
         height: auto;
@@ -415,13 +434,6 @@ class KCPU16TUI(App[None]):
         layout: grid;
         grid-size: 3;
         grid-columns: 142 28 1fr;
-    }
-    #cmd-input-col {
-        align: left top;
-    }
-    #cmd-input {
-        width: 1fr;
-        height: 1;
     }
     #flags-pane {
         border: solid $warning-darken-1;
@@ -476,11 +488,12 @@ class KCPU16TUI(App[None]):
         self.disassembler = Disassembler()
         self.dbg = DebugState()
         self.current_file: Path | None = None
+        self.code_dir: Path = Path(__file__).resolve().parent / "code"
+        self.code_dir.mkdir(exist_ok=True)
         self.mem_view_addr: int = BOOT_RAM_START
         self.addr_to_line: dict[int, int] = {}
         self.is_assembled: bool = False
         self._last_screen_render: str = ""
-        self._cmd_context: bool = False
 
     # ------------------------------------------------------------------
     # Layout
@@ -497,8 +510,7 @@ class KCPU16TUI(App[None]):
                     #top-section (Horizontal):
                         #screen-section: Static (VRAM 80x24)
                         #disasm-tabs (TabbedContent: Disassembly|Memory|Stack)
-                    #log-pane: RichLog (lokiviestit)
-                    #cmd-output-pane: RichLog (komentotulosteet)
+                    #output-pane: RichLog (kaikki tulosteet) + Input (komentosyöte)
                 #editor-pane (Vertical, 1fr, koko korkeus):
                     TextArea (lähdekoodieditori)
             Bottom bar (#bottom-bar, Horizontal):
@@ -539,34 +551,26 @@ class KCPU16TUI(App[None]):
                         with TabPane("Stack", id="tab-stack"):
                             with VerticalScroll():
                                 yield Static(id="stack-view")
-                with Vertical(id="log-pane"):
+                with Vertical(id="output-pane"):
                     yield RichLog(
-                        id="log-view",
+                        id="output-view",
                         wrap=True,
                         highlight=False,
                         markup=True,
                         max_lines=500,
                     )
-                with Vertical(id="cmd-output-pane"):
-                    yield RichLog(
-                        id="cmd-output",
-                        wrap=True,
-                        highlight=False,
-                        markup=True,
-                        max_lines=500,
+                    yield Input(
+                        placeholder="Command: help, step, run, bp, mem, mset, disk, reset ...",
+                        id="cmd-input",
                     )
 
             # Right column: Editor (full height)
             with Vertical(id="editor-pane"):
                 yield TextArea("", language=None, show_line_numbers=True, id="editor")
 
-        # Bottom bar: Command input | Flags+CPU | Registers
+        # Bottom bar: Flags+CPU | Registers
         with Horizontal(id="bottom-bar"):
-            with Vertical(id="cmd-input-col"):
-                yield Input(
-                    placeholder="Command: help, step, run, bp, mem, mset, disk, reset ...",
-                    id="cmd-input",
-                )
+            yield Static("", id="bottom-spacer")
             with Vertical(id="flags-pane"):
                 yield Static(id="flags-content")
                 yield Static(id="cpu-content")
@@ -593,8 +597,7 @@ class KCPU16TUI(App[None]):
         self.query_one("#regs-pane").border_title = "Registers"
         self.query_one("#flags-pane").border_title = "Flags"
         self.query_one("#screen-section").border_title = "Screen"
-        self.query_one("#cmd-output-pane").border_title = "Commands"
-        self.query_one("#log-pane").border_title = "Log"
+        self.query_one("#output-pane").border_title = "Output"
 
         self.machine.cold_reset()
         self.dbg.snapshot_registers(self.machine.dump_registers())
@@ -669,35 +672,27 @@ class KCPU16TUI(App[None]):
     def on_input_submitted(self, event: Input.Submitted) -> None:
         """Käsittele komentosyöte (Enter-painallus #cmd-input -kentässä).
 
-        Lukee komennon, tyhjentää kentän, näyttää komennon cmd-output:issa,
+        Lukee komennon, tyhjentää kentän, näyttää komennon output-paneelissa,
         suorittaa sen _execute_command():lla ja näyttää tuloksen.
-
-        Asettaa _cmd_context=True jotta kaikki _log()-kutsut (myös
-        action_show_help, _do_assemble jne.) ohjautuvat cmd-outputiin.
         """
         cmd = event.value.strip()
         event.input.value = ""
         if not cmd:
             return
 
-        # Ohjaa kaikki _log()-kutsut cmd-outputiin komennon suorituksen ajaksi
-        self._cmd_context = True
-        try:
-            self._log(f"[dim]> {cmd}[/dim]")
-            result = self._execute_command(cmd)
+        self._log(f"[dim]> {cmd}[/dim]")
+        result = self._execute_command(cmd)
 
-            if result.ok:
-                if result.message:
-                    self._log(result.message)
-            else:
-                self._log(f"[red]{result.message}[/red]")
+        if result.ok:
+            if result.message:
+                self._log(result.message)
+        else:
+            self._log(f"[red]{result.message}[/red]")
 
-            # VAIN step/run komennot päivittävät näkymän
-            cmd_verb = cmd.split()[0].lower()
-            if cmd_verb in {"step", "run", "restart", "asm", "reset"}:
-                self._refresh_all()
-        finally:
-            self._cmd_context = False
+        # VAIN step/run komennot päivittävät näkymän
+        cmd_verb = cmd.split()[0].lower()
+        if cmd_verb in {"step", "run", "restart", "asm", "reset"}:
+            self._refresh_all()
 
     # ------------------------------------------------------------------
     # Actions (näppäinsidonnaisuudet)
@@ -772,9 +767,12 @@ class KCPU16TUI(App[None]):
         if not path_str or path_str.startswith("open "):
             cmd_input.focus()
             cmd_input.value = "open "
-            self._log("Type file path after 'open' and press Enter.")
+            self._log("Type filename after 'open' and press Enter.")
             return
-        self._do_open(Path(path_str))
+        path = Path(path_str)
+        if not path.is_absolute():
+            path = self.code_dir / path
+        self._do_open(path)
 
     def action_save_file(self) -> None:
         """Tallenna editorin sisältö tiedostoon (Ctrl+S).
@@ -788,7 +786,7 @@ class KCPU16TUI(App[None]):
             cmd_input = self.query_one("#cmd-input", Input)
             cmd_input.focus()
             cmd_input.value = "save "
-            self._log("Type file path after 'save' and press Enter.")
+            self._log("Type filename after 'save' and press Enter.")
 
     def action_assemble_code(self) -> None:
         """Assembloi editorin koodi ja lataa se muistiin (Ctrl+B).
@@ -816,41 +814,62 @@ class KCPU16TUI(App[None]):
         """
         self._log("")
         self._log("[bold]--- kCPU16 Debugger Help ---[/bold]")
-        self._log("[bold]Keyboard:[/bold]")
+        self._log("")
+        self._log("[bold]Keyboard shortcuts:[/bold]")
         self._log("  Ctrl+O  Open file       Ctrl+S  Save file")
         self._log("  Ctrl+B  Assemble code   F2      Toggle breakpoint")
         self._log("  F7/F10  Step 1 instr    F5      Run (stops at BP)")
         self._log("  Ctrl+R  Reset machine   F9      Clear VRAM")
         self._log("  Ctrl+Q  Quit            F1      This help")
+        self._log("")
         self._log("[bold cyan]File & Assembly:[/bold cyan]")
-        self._log("  open <path>              Load .asm file")
-        self._log("  save [path]              Save editor")
-        self._log("  asm                      Assemble + load into memory")
-        self._log("  check                    Syntax check (no load)")
+        self._log("  open <filename>              Load .asm from code/ directory")
+        self._log("  save [filename]              Save editor to code/ directory")
+        self._log("  asm                          Assemble, reset and load into memory")
+        self._log("  check                        Syntax check only (no load)")
         self._log("[bold cyan]CPU Control:[/bold cyan]")
-        self._log("  step [n]                 Step n instructions")
-        self._log("  run [n]                  Run to BP/halt (max n cycles)")
-        self._log("  stop                     Halt CPU")
-        self._log("  restart                  Reassemble and restart")
+        self._log("  step [n]                     Step n instructions (default 1)")
+        self._log("  run  [n]                     Run to BP/halt (max n cycles)")
+        self._log("  stop                         Halt CPU immediately")
+        self._log("  restart                      Reassemble and restart from 0x0100")
         self._log("[bold cyan]Breakpoints:[/bold cyan]")
-        self._log("  bp <addr>                Toggle breakpoint")
-        self._log("  bp list / bp clear       List / clear all")
+        self._log("  bp <addr>                    Toggle breakpoint at address")
+        self._log("  bp list                      List all breakpoints")
+        self._log("  bp clear                     Remove all breakpoints")
         self._log("[bold cyan]Memory:[/bold cyan]")
-        self._log("  mem <addr> [count]       Read word(s)")
-        self._log("  mset <addr> <value>      Write word")
-        self._log("  mfill <addr> <n> <val>   Fill range")
+        self._log("  mem <addr> [count]           Show count words at addr (default 1)")
+        self._log("  mset <addr> <value>          Write value to addr")
+        self._log("  mfill <addr> <count> <value> Fill count words starting at addr")
         self._log("[bold cyan]Disk (Storage):[/bold cyan]")
-        self._log("  disk <block>             Show block hex dump")
-        self._log("  disk load|save <file>    Load/save .dsk file")
-        self._log("  dset <blk> <off> <val>   Edit word in block")
-        self._log("  dfill <block> <value>    Fill block")
+        self._log("  disk <block>                 Show block as hex dump")
+        self._log("  disk load <path>             Load .dsk file into storage")
+        self._log("  disk save <path>             Save storage to .dsk file")
+        self._log("  dset <block> <offset> <value>  Write value at block + offset")
+        self._log("  dfill <block> <value>        Fill entire block with value")
         self._log("[bold cyan]Reset:[/bold cyan]")
-        self._log("  reset                    Memory + CPU (storage intact)")
-        self._log("  reset deep               Memory + CPU + storage")
-        self._log("  reset cpu                CPU only (memory intact)")
+        self._log("  reset                        Memory + CPU (storage intact)")
+        self._log("  reset deep                   Memory + CPU + storage")
+        self._log("  reset cpu                    CPU only (memory intact)")
         self._log("[bold cyan]Other:[/bold cyan]")
-        self._log("  cls                      Clear VRAM")
-        self._log("  spec                     Architecture spec")
+        self._log("  cls                          Clear VRAM")
+        self._log("  spec                         Show architecture spec")
+        self._log("  help                         This help")
+        self._log("")
+        self._log("[bold cyan]Parameter syntax:[/bold cyan]")
+        self._log("  <addr>    Memory address         0–0xFFFF (e.g. 256 or 0x0100)")
+        self._log("  <value>   16-bit word            0–0xFFFF (e.g. 42 or 0x002A)")
+        self._log("  <count>   Number of items        (e.g. 16 or 0x10)")
+        self._log("  <block>   Storage block index    (e.g. 0, 1, 2 ...)")
+        self._log("  <offset>  Word offset in block   (e.g. 0, 1, 2 ...)")
+        self._log("  <path>    File path               (e.g. disk.dsk)")
+        self._log("  <filename> .asm file in code/     (e.g. hello.asm)")
+        self._log("  [param]   Optional parameter     (can be omitted)")
+        self._log("")
+        self._log("[bold cyan]Number formats:[/bold cyan]")
+        self._log("  Decimal:  42, 256, 65535")
+        self._log("  Hex:      0x2A, 0x0100, 0xFFFF")
+        self._log("  Binary:   0b101010")
+        self._log("  Octal:    0o52")
         self._log("---")
 
     # ------------------------------------------------------------------
@@ -906,9 +925,9 @@ class KCPU16TUI(App[None]):
         Tämä on TUI:n keskeinen operaatio - "editori → konekieli → muisti":
 
         1. Lue editorin teksti (source)
-        2. assembler.assemble(source) → lista 16-bittisiä sanoja
+        2. assembler.assemble(source) → lista (osoite, sanat) -segmenttejä
         3. machine.cold_reset() → nollaa CPU, muisti, laitteet
-        4. machine.load_program(words) → lataa sanat osoitteesta 0x0100
+        4. machine.load_segments(segments) → lataa segmentit muistiin
         5. _build_addr_to_line() → rakenna osoite→rivi -mappi
         6. dbg.snapshot_registers() → ota vertailupiste rekistereille
         7. _update_exec_line() → siirrä kursori PC:n riville
@@ -922,15 +941,16 @@ class KCPU16TUI(App[None]):
             self._log("[yellow]Editor is empty.[/yellow]")
             return
         try:
-            words = self.assembler.assemble(source)
+            segments = self.assembler.assemble(source)
             self.machine.cold_reset()
-            self.machine.load_program(words)
+            self.machine.load_segments(segments)
             self.is_assembled = True
             self.addr_to_line = _build_addr_to_line(source, self.assembler)
             self.dbg.snapshot_registers(self.machine.dump_registers())
+            total_words = sum(len(w) for _, w in segments)
             self._log(
-                f"[green]Assembled: {len(words)} words at "
-                f"0x{self.machine.regs.pc:04X}. F7=Step, F5=Run.[/green]"
+                f"[green]Assembled: {total_words} words in {len(segments)} "
+                f"segment(s) at 0x{self.machine.regs.pc:04X}. F7=Step, F5=Run.[/green]"
             )
             self._update_exec_line()
             self._refresh_all()
@@ -1381,8 +1401,11 @@ class KCPU16TUI(App[None]):
             # --- Tiedostot & assembly ---
             if op == "open":
                 if not args:
-                    return CommandResult(False, "Usage: open <path>")
-                self._do_open(Path(" ".join(args)))
+                    return CommandResult(False, "Usage: open <filename>")
+                path = Path(" ".join(args))
+                if not path.is_absolute():
+                    path = self.code_dir / path
+                self._do_open(path)
                 return CommandResult(True, "")
 
             if op == "save":
@@ -1390,8 +1413,11 @@ class KCPU16TUI(App[None]):
                     if self.current_file:
                         self._do_save(self.current_file)
                         return CommandResult(True, "")
-                    return CommandResult(False, "Usage: save <path>")
-                self._do_save(Path(" ".join(args)))
+                    return CommandResult(False, "Usage: save <filename>")
+                path = Path(" ".join(args))
+                if not path.is_absolute():
+                    path = self.code_dir / path
+                self._do_save(path)
                 return CommandResult(True, "")
 
             if op == "asm":
@@ -1504,10 +1530,11 @@ class KCPU16TUI(App[None]):
         if not source:
             return CommandResult(False, "[yellow]Editor is empty.[/yellow]")
         try:
-            words = self.assembler.assemble(source)
+            segments = self.assembler.assemble(source)
+            total_words = sum(len(w) for _, w in segments)
             return CommandResult(
                 True,
-                f"[green]Syntax OK — {len(words)} words.[/green]",
+                f"[green]Syntax OK — {total_words} words in {len(segments)} segment(s).[/green]",
             )
         except Exception as e:
             return CommandResult(False, f"[red]Syntax error: {e}[/red]")
@@ -1647,29 +1674,14 @@ class KCPU16TUI(App[None]):
     # ------------------------------------------------------------------
 
     def _log(self, message: str) -> None:
-        """Kirjoita viesti Log-välilehden tai cmd-output:in RichLog-widgettiin.
+        """Kirjoita viesti output-paneelin RichLog-widgettiin.
 
-        Jos _cmd_context on True (komennon suorituksen aikana),
-        ohjaa viesti cmd-output:iin Log-tabin sijaan.
+        Kaikki tulosteet (loki, komentotulosteet, virheet) ohjautuvat
+        yhteen yhtenäiseen output-ikkunaan.
         Tukee Rich-markupia (esim. [bold], [red], [dim]).
         """
         try:
-            if self._cmd_context:
-                self.query_one("#cmd-output", RichLog).write(message)
-            else:
-                self.query_one("#log-view", RichLog).write(message)
-        except Exception:
-            pass
-
-    def _log_cmd_output(self, message: str) -> None:
-        """Kirjoita komentotulos Command Output -widgettiin.
-
-        Tukee Rich-markupia (esim. [bold], [red], [dim]).
-        Käytetään hex-dumppeihin, listan tulostukseen ja muihin
-        komentojen tuottamiin tulosteisiin. Log-tab saa status-viestit.
-        """
-        try:
-            self.query_one("#cmd-output", RichLog).write(message)
+            self.query_one("#output-view", RichLog).write(message)
         except Exception:
             pass
 

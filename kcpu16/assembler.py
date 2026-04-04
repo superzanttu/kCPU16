@@ -21,6 +21,13 @@ SYNTAKSI:
 - Direktiivit:
   - .origin OSOITE (esim. .origin 0x0200)
   - .macro NIMI ... .endmacro (esim. .macro LOAD_MANY ... .endmacro)
+  - .db TAVU, TAVU, ... (esim. .db 0x41, 0x42, 255)
+  - .dstr "TEKSTI" (esim. .dstr "Hello!", automaattinen null-terminaattori)
+  - .at OSOITE (esim. .at 0xF800, siirtyy uuteen muistiosoitteeseen)
+  - .expect_reg REK, ARVO (esim. .expect_reg R0, 120, testaukseen)
+  - .expect_flag LIPPU, ARVO (esim. .expect_flag Z, 0, testaukseen)
+  - .expect_mem OSOITE, ARVO (esim. .expect_mem 0x0300, 0xFF, testaukseen)
+  - .expect_storage OSOITE, ARVO (tallennuslaiteen testaus)
 
 ESIMERKKI:
 ----------
@@ -32,12 +39,23 @@ ESIMERKKI:
         LOAD  R2, 30
     .endmacro
 
+    MSG:
+        .dstr "Hello!"  ; 7 sanaa: H,e,l,l,o,!,0x00
+    NUMS:
+        .db 0x01, 0x02   ; 2 sanaa: 0x01, 0x02
+
     START:
         LOAD_MANY        ; Ekspandoi makroksi
+        LOAD  R0, MSG    ; R0 = datan aloitusosoite
         JUMP  START
         HALT
 
+    .at 0xF800           ; Seuraava data kirjoitetaan VRAMiin
+    VRAM_DATA:
+        .dstr "kCPU16"  ; Alustudata suoraan VRAMiin
+
 Tuottaa konekielen osoitteesta 0x0200 eteenpäin.
+VRAM_DATA-symboli osoittaa 0xF800.
 """
 
 from __future__ import annotations
@@ -80,28 +98,31 @@ class Assembler:
         ...     LOAD R0, 42
         ...     HALT
         ... '''
-        >>> words = asm.assemble(code)
-        >>> words
-        [1, 0, 42, 68]  # LOAD opcode, R0 index, 42, HALT opcode
+        >>> segments = asm.assemble(code)
+        >>> segments
+        [(256, [1, 0, 42, 68])]  # [(start_addr, [LOAD, R0=0, 42, HALT])]
     """
 
-    def assemble(self, source: str, start_addr: int = BOOT_RAM_START) -> list[int]:
+    def assemble(
+        self, source: str, start_addr: int = BOOT_RAM_START
+    ) -> list[tuple[int, list[int]]]:
         """
-        Assembloi lahdekoodi konekieleksi.
+        Assembloi lahdekoodi konekieleksi segmentteina.
 
         Args:
             source: Assembly-lahdekoodi merkkijonona
             start_addr: Ohjelman aloitusosoite muistissa (oletus: 0x0100)
 
         Returns:
-            Lista 16-bittisia sanoja (konekieli)
+            Lista (aloitusosoite, sanat) -pareista. Yleensa yksi segmentti,
+            mutta .at-direktiivilla voi olla useampia.
 
         Raises:
             ValueError: Jos mnemonic on tuntematon tai label on duplikaatti
 
         Example:
             >>> asm.assemble("LOAD R0, 10\\nHALT", start_addr=0x0200)
-            [1, 0, 10, 68]
+            [(512, [1, 0, 10, 68])]
         """
         # Pass 0: Makrojen ekspansointi ja .origin käsittely
         expanded_source, start_addr = self._pass0_expand_macros_and_origin(
@@ -109,8 +130,8 @@ class Assembler:
         )
         # Pass 1: Kerataan labelit
         labels = self._pass1_collect_labels(expanded_source, start_addr)
-        # Pass 2: Tuotetaan konekieli
-        return self._pass2_emit(expanded_source, labels)
+        # Pass 2: Tuotetaan konekieli segmentteina
+        return self._pass2_emit(expanded_source, labels, start_addr)
 
     def _pass0_expand_macros_and_origin(
         self, source: str, start_addr: int
@@ -234,6 +255,28 @@ class Assembler:
                 labels[label_name] = addr
                 continue  # Label ei kuluta muistia
 
+            # .at direktiivi: siirry uuteen muistiosoitteeseen (uusi segmentti)
+            if line.lower().startswith(".at ") or line.lower() == ".at":
+                parts = line.split()
+                if len(parts) < 2:
+                    raise ValueError(f"Invalid .at syntax: {line}")
+                addr = int(parts[1], 0) & WORD_MASK
+                continue
+
+            # .db direktiivi: tallenna raakoja tavuja muistiin
+            if line.lower().startswith(".db"):
+                addr += len(self._parse_db_values(line))
+                continue
+
+            # .dstr direktiivi: tallenna null-terminoitu merkkijono muistiin
+            if line.lower().startswith(".dstr"):
+                addr += len(self._parse_dstr_values(line))
+                continue
+
+            # .expect_*-direktiivit: ainoastaan testaukseen, ei tuota koodia
+            if line.lower().startswith(".expect_"):
+                continue
+
             # Muuten tama on kasky - laske sen koko
             # "ADD R0, R1" -> ["ADD", "R0", "R1"]
             mnemonic = line.replace(",", " ").split()[0].upper()
@@ -249,21 +292,27 @@ class Assembler:
 
         return labels
 
-    def _pass2_emit(self, source: str, labels: dict[str, int]) -> list[int]:
+    def _pass2_emit(
+        self, source: str, labels: dict[str, int], start_addr: int
+    ) -> list[tuple[int, list[int]]]:
         """
-        Pass 2: Tuota lopullinen konekieli.
+        Pass 2: Tuota lopullinen konekieli segmentteina.
 
         Kaydaan lahdekoodi uudelleen lapi ja tuotetaan jokainen
         kasky: opcode + operandit. Labelit korvataan osoitteilla.
+        .at-direktiivi aloittaa uuden segmentin uudessa muistiosoitteessa.
 
         Args:
             source: Assembly-lahdekoodi
             labels: Pass 1:ssa keratyt labelit ja osoitteet
+            start_addr: Ensimmaisen segmentin aloitusosoite
 
         Returns:
-            Lista 16-bittisia sanoja
+            Lista (aloitusosoite, sanat) -pareista.
         """
-        words: list[int] = []
+        segments: list[tuple[int, list[int]]] = []
+        current_start = start_addr
+        current_words: list[int] = []
 
         for raw_line in source.splitlines():
             # Poista kommentit
@@ -271,6 +320,33 @@ class Assembler:
 
             # Ohita tyhjat rivit ja labelit
             if not line or line.endswith(":"):
+                continue
+
+            # .at direktiivi: tallenna nykyinen segmentti, aloita uusi
+            if line.lower().startswith(".at ") or line.lower() == ".at":
+                if current_words:
+                    segments.append(
+                        (current_start, [w & WORD_MASK for w in current_words])
+                    )
+                parts = line.split()
+                if len(parts) < 2:
+                    raise ValueError(f"Invalid .at syntax: {line}")
+                current_start = int(parts[1], 0) & WORD_MASK
+                current_words = []
+                continue
+
+            # .db direktiivi: emittoi raakoja tavuja
+            if line.lower().startswith(".db"):
+                current_words.extend(self._parse_db_values(line))
+                continue
+
+            # .dstr direktiivi: emittoi null-terminoitu merkkijono
+            if line.lower().startswith(".dstr"):
+                current_words.extend(self._parse_dstr_values(line))
+                continue
+
+            # .expect_*-direktiivit: testaukseen, ei tuota koodia
+            if line.lower().startswith(".expect_"):
                 continue
 
             # Parsi kasky: "ADD R0, R1" -> ["ADD", "R0", "R1"]
@@ -283,14 +359,17 @@ class Assembler:
                 raise ValueError(f"Unknown mnemonic: {mnemonic}")
 
             # Lisaa opcode tulosteeseen
-            words.append(opcode)
+            current_words.append(opcode)
 
             # Parsi ja lisaa operandit
             for token in parts[1:]:
-                words.append(self._parse_operand(token, labels))
+                current_words.append(self._parse_operand(token, labels))
 
-        # Varmista etta kaikki arvot ovat 16-bittisia
-        return [w & WORD_MASK for w in words]
+        # Tallenna viimeinen segmentti
+        if current_words:
+            segments.append((current_start, [w & WORD_MASK for w in current_words]))
+
+        return segments
 
     def _parse_operand(self, token: str, labels: dict[str, int]) -> int:
         """
@@ -333,3 +412,62 @@ class Assembler:
         # Muunna numeroksi (tue 0x, 0b, ja desimaali)
         # int(x, 0) tunnistaa formaatin automaattisesti
         return int(upper, 0)
+
+    def _parse_db_values(self, line: str) -> list[int]:
+        """
+        Parsi .db-direktiivin arvot.
+
+        Hyväksyy pilkulla erotetun listan numeroita (desimaali tai hex).
+        Jokainen arvo maskataan 8 bittiin (0x00–0xFF).
+
+        Args:
+            line: Direktiiviriivi, esim. ".db 0x41, 66, 0b01000011"
+
+        Returns:
+            Lista kokonaislukuja, kukin väliltä 0–255.
+
+        Example:
+            >>> asm._parse_db_values(".db 0x41, 0x42")
+            [65, 66]
+        """
+        # Poista ".db" etuliite
+        rest = line[3:].strip()
+        if not rest:
+            return []
+        values = []
+        for token in rest.split(","):
+            token = token.strip()
+            if token:
+                values.append(int(token, 0) & 0xFF)
+        return values
+
+    def _parse_dstr_values(self, line: str) -> list[int]:
+        """
+        Parsi .dstr-direktiivin merkkijono.
+
+        Poimii lainausmerkkien välisen tekstin, muuntaa jokaisen merkin
+        sen ASCII-arvoksi (bitit 0–7) ja lisää automaattisesti
+        null-terminaattorin (0x00) loppuun.
+
+        Args:
+            line: Direktiiviriivi, esim. '.dstr "Hello!"'
+
+        Returns:
+            Lista kokonaislukuja (ASCII-arvot + 0), kukin väliltä 0–255.
+
+        Raises:
+            ValueError: Jos lainausmerkkejä ei löydy.
+
+        Example:
+            >>> asm._parse_dstr_values('.dstr "Hi"')
+            [72, 105, 0]
+        """
+        # Poista ".dstr" etuliite
+        rest = line[5:].strip()
+        # Etsi lainausmerkkien välinen teksti
+        start = rest.find('"')
+        end = rest.rfind('"')
+        if start == -1 or start == end:
+            raise ValueError(f"Invalid .dstr syntax (missing quotes): {line}")
+        text = rest[start + 1 : end]
+        return [ord(c) & 0xFF for c in text] + [0x00]

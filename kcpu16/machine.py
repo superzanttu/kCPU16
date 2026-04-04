@@ -143,6 +143,26 @@ class KCPU16Machine:
         self.memory.load_words(start_addr, words)
         self.regs.pc = start_addr
 
+    def load_segments(self, segments: list[tuple[int, list[int]]]) -> None:
+        """
+        Lataa useampi muistisegmentti kerralla ja aseta PC.
+
+        Kayttotapaus: Assembler tuottaa useampia erillisia muistilohkoja
+        .at-direktiivilla (esim. koodi RAM:iin, alustudata VRAMiin).
+        PC asetetaan ensimmaisen segmentin aloitusosoitteeseen.
+
+        Args:
+            segments: Lista (aloitusosoite, sanat) -pareista.
+
+        Example:
+            >>> machine.load_segments([(0x0200, [0x0044]), (0xF800, [0xE041])])
+        """
+        if not segments:
+            return
+        for seg_addr, seg_words in segments:
+            self.memory.load_words(seg_addr, seg_words)
+        self.regs.pc = segments[0][0]
+
     def run(self, max_cycles: int = 1000000) -> None:
         """
         Aja ohjelmaa kunnes pysaytysehto tayttyy.
