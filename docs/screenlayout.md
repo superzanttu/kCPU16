@@ -1,3 +1,5 @@
+Tässä dokumentissa kuvataan ohjelman tekstipohjaisen käyttöliittymän asettelu.
+
 +-------------------------------------------------+
 |toolbar                                          |
 +--------------+-------------+--------------------+
