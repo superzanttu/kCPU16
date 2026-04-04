@@ -102,20 +102,18 @@ TUI on inspiroitu MARS/RARS-, GDB TUI-, Turbo Debugger- ja emu8086-ohjelmistoist
 ### Layout
 
 ```
-┌─ Toolbar (Open|Save|New | Assemble ^B | Step F7|Run F5|Reset ^R | BP F2)
-├──────────────┬─────────────────────┬─────────────────────────────┤
-│ SCREEN       │ DISASSEMBLY/MEM/STK │ SOURCE EDITOR               │
-│ (80×24 VRAM) │ (TabbedContent)     │ (TextArea, muokattava)      │
-│              │ ●=breakpoint        │ rivinumerot                 │
-│              │ ▶=nykyinen PC       │ kursori seuraa PC:tä        │
-├──────────────┴─────────────────────┤                             │
-│ LOG (lokiviestit)                  │                             │
-├────────────────────────────────────┤                             │
-│ COMMANDS (komentotulosteet)        │                             │
-├────────────────────────────────────┴─────────────────────────────┤
-│ > komentosyöte      │ FLAGS Z N C V I P  │ REGISTERS             │
-│                     │ CPU state/cycles   │ (muuttuneet=punainen) │
-└─────────────────────┴────────────────────┴───────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────┐
+│ Toolbar                                                                 │
+├──────────────┬──────────────────────┬──────────────────────────────────┤
+│ Screen       │ Disassembly          │ Editor                           │
+│ (80×24 VRAM) │ [Disassembly|        │                                  │
+│              │  Memory|Stack]       │                                  │
+├──────────────┴──────────────────────┤                                  │
+│ Output                              │                                  │
+│                                     │                                  │
+├─────────────────────────────────────┼──────────────────┬───────────────┤
+│ Input                               │ Flags            │ Registers     │
+└─────────────────────────────────────┴──────────────────┴───────────────┘
 ```
 
 ### Näppäinsidonnaisuudet
