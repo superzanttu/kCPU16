@@ -1,6 +1,6 @@
 # kCPU16 — 16-bittinen CPU-emulaattori (Python)
 
-kCPU16 on täysimittainen 16-bittinen CPU-emulaattori, jossa on tekstipohjainen käyttöliittymä..
+kCPU16 on täysimittainen 16-bittinen CPU-emulaattori, jossa on tekstipohjainen käyttöliittymä.
 Projekti sisältää oman assembly-kielen, assemblerin, disassemblerin, virtuaalikoneen sekä
 interaktiivisen Textual-pohjaisen käyttöliittymän.
 
@@ -65,7 +65,7 @@ kCPU16/
 
 ## Käynnistys
 
-### TUI-debuggeri (suositeltu)
+### TUI-käyttöliittymä (suositeltu)
 
 ```bash
 python main.py
