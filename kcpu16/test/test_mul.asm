@@ -19,3 +19,6 @@
 .expect_reg   R0, 42
 .expect_reg   R2, 0
 .expect_flag  Z, 1
+.expect_flag  N, 0
+.expect_flag  C, 0
+.expect_flag  V, 0

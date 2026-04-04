@@ -26,3 +26,8 @@ done:
 
 .expect_reg   R2, 0            ; JLE otti hypyn oikein
 .expect_reg   R3, 0            ; JGE otti hypyn oikein
+; Liput viimeisimmän CMP:n (10−3=7) jäljiltä
+.expect_flag  Z, 0
+.expect_flag  N, 0
+.expect_flag  C, 0
+.expect_flag  V, 0

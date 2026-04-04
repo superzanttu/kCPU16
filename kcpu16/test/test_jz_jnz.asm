@@ -26,3 +26,8 @@ done:
 
 .expect_reg   R2, 0            ; JZ otti hypyn oikein
 .expect_reg   R3, 0            ; JNZ otti hypyn oikein
+; Liput viimeisimmän CMP:n (3−7=0xFFFC) jäljiltä
+.expect_flag  Z, 0
+.expect_flag  N, 1
+.expect_flag  C, 1
+.expect_flag  V, 0

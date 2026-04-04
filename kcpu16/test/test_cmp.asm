@@ -34,3 +34,6 @@ test3:
 .expect_reg   R0, 42          ; CMP ei muuttanut R0:aa
 .expect_reg   R1, 42          ; CMP ei muuttanut R1:tä
 .expect_flag  Z, 1
+.expect_flag  N, 0
+.expect_flag  C, 0
+.expect_flag  V, 0

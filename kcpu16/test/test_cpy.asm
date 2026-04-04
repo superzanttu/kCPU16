@@ -17,3 +17,8 @@
 .expect_reg   R1, 123
 .expect_reg   R2, 123
 .expect_reg   R3, 123
+; CPY ei aseta lippuja
+.expect_flag  Z, 0
+.expect_flag  N, 0
+.expect_flag  C, 0
+.expect_flag  V, 0

@@ -16,3 +16,4 @@
 .expect_flag  C, 1
 .expect_flag  Z, 0
 .expect_flag  N, 0
+.expect_flag  V, 0

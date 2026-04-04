@@ -15,3 +15,8 @@ skip:
 
 .expect_reg   R0, 1           ; 99:ää ei kirjoitettu
 .expect_reg   R1, 2
+; JUMP ei aseta lippuja
+.expect_flag  Z, 0
+.expect_flag  N, 0
+.expect_flag  C, 0
+.expect_flag  V, 0

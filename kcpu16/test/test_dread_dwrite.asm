@@ -28,3 +28,8 @@
 .expect_reg     R3, 0xABCD
 .expect_storage 10,  0x1234
 .expect_storage 50,  0xABCD
+; DREAD/DWRITE ei aseta lippuja
+.expect_flag  Z, 0
+.expect_flag  N, 0
+.expect_flag  C, 0
+.expect_flag  V, 0

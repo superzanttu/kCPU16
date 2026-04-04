@@ -18,3 +18,8 @@
 .expect_reg   R0, 0x0400      ; R0 muuttumaton
 .expect_reg   R1, 0xFFFF      ; R1 sai alkuperäisen SP:n
 .expect_reg   R2, 0x0400      ; R2 sai vaihdetun SP:n arvon
+; SWSP ei aseta lippuja
+.expect_flag  Z, 0
+.expect_flag  N, 0
+.expect_flag  C, 0
+.expect_flag  V, 0

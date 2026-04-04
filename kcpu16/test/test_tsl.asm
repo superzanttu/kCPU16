@@ -23,3 +23,6 @@
 .expect_reg   R2, 1           ; toinen TSL löysi lukitun lukon
 .expect_mem   0x0300, 1       ; lukko on lukittu
 .expect_flag  Z, 0            ; viimeisin TSL: vanha arvo=1 → Z=0
+.expect_flag  N, 0            ; arvo 1 ei aseta N-lippua (bitti 15 = 0)
+.expect_flag  C, 0            ; TSL ei aseta C-lippua
+.expect_flag  V, 0            ; TSL ei aseta V-lippua

@@ -17,3 +17,8 @@ myproc:
 
 .expect_reg   R0, 42
 .expect_reg   R1, 99
+; CALL/RET ei aseta lippuja
+.expect_flag  Z, 0
+.expect_flag  N, 0
+.expect_flag  C, 0
+.expect_flag  V, 0

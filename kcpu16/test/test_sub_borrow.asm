@@ -16,3 +16,4 @@
 .expect_flag  C, 1            ; a < b → borrow
 .expect_flag  N, 1            ; bitti 15 asetettu
 .expect_flag  Z, 0
+.expect_flag  V, 0

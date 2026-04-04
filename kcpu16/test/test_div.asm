@@ -19,3 +19,5 @@
 .expect_reg   R2, 3
 .expect_flag  Z, 0
 .expect_flag  N, 0
+.expect_flag  C, 0            ; DIV ei aseta C-lippua
+.expect_flag  V, 0            ; DIV ei aseta V-lippua

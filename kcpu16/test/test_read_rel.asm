@@ -31,3 +31,8 @@
 .expect_mem   0x0300, 77
 .expect_mem   0x0302, 88
 .expect_mem   0x0305, 255
+; READ_REL/STORE_REL ei aseta lippuja
+.expect_flag  Z, 0
+.expect_flag  N, 0
+.expect_flag  C, 0
+.expect_flag  V, 0

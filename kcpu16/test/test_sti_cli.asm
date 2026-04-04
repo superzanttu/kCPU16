@@ -20,3 +20,8 @@
 .expect_reg   R0, 1
 .expect_reg   R1, 2
 .expect_flag  I, 1            ; viimeisin operaatio oli STI
+; STI/CLI muuttaa vain I-lippua — Z, N, C, V pysyvät nollassa
+.expect_flag  Z, 0
+.expect_flag  N, 0
+.expect_flag  C, 0
+.expect_flag  V, 0

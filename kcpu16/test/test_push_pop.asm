@@ -19,3 +19,8 @@
 
 .expect_reg   R2, 200
 .expect_reg   R3, 100
+; PUSH/POP ei aseta lippuja
+.expect_flag  Z, 0
+.expect_flag  N, 0
+.expect_flag  C, 0
+.expect_flag  V, 0

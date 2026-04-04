@@ -23,3 +23,8 @@
 .expect_reg   R2, 0x55AA
 .expect_reg   R3, 0x1234
 .expect_mem   0x0300, 0x1234
+; READ_IND/STORE_IND ei aseta lippuja
+.expect_flag  Z, 0
+.expect_flag  N, 0
+.expect_flag  C, 0
+.expect_flag  V, 0

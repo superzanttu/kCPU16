@@ -19,3 +19,8 @@
 .expect_reg   R3, 0x1234
 .expect_mem   0x0300, 0xABCD
 .expect_mem   0x0301, 0x1234
+; READ/STORE ei aseta lippuja
+.expect_flag  Z, 0
+.expect_flag  N, 0
+.expect_flag  C, 0
+.expect_flag  V, 0
