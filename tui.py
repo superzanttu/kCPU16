@@ -417,7 +417,7 @@ class KCPU16TUI(App[None]):
         grid-columns: 142 28 1fr;
     }
     #cmd-input-col {
-        align: left top;
+        align: left bottom;
     }
     #cmd-input {
         width: 1fr;
