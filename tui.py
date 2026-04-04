@@ -465,6 +465,8 @@ class KCPU16TUI(App[None]):
         self.disassembler = Disassembler()
         self.dbg = DebugState()
         self.current_file: Path | None = None
+        self.code_dir: Path = Path(__file__).resolve().parent.parent / "code"
+        self.code_dir.mkdir(exist_ok=True)
         self.mem_view_addr: int = BOOT_RAM_START
         self.addr_to_line: dict[int, int] = {}
         self.is_assembled: bool = False
@@ -742,9 +744,12 @@ class KCPU16TUI(App[None]):
         if not path_str or path_str.startswith("open "):
             cmd_input.focus()
             cmd_input.value = "open "
-            self._log("Type file path after 'open' and press Enter.")
+            self._log("Type filename after 'open' and press Enter.")
             return
-        self._do_open(Path(path_str))
+        path = Path(path_str)
+        if not path.is_absolute():
+            path = self.code_dir / path
+        self._do_open(path)
 
     def action_save_file(self) -> None:
         """Tallenna editorin sisältö tiedostoon (Ctrl+S).
@@ -758,7 +763,7 @@ class KCPU16TUI(App[None]):
             cmd_input = self.query_one("#cmd-input", Input)
             cmd_input.focus()
             cmd_input.value = "save "
-            self._log("Type file path after 'save' and press Enter.")
+            self._log("Type filename after 'save' and press Enter.")
 
     def action_assemble_code(self) -> None:
         """Assembloi editorin koodi ja lataa se muistiin (Ctrl+B).
@@ -795,8 +800,8 @@ class KCPU16TUI(App[None]):
         self._log("  Ctrl+Q  Quit            F1      This help")
         self._log("")
         self._log("[bold cyan]File & Assembly:[/bold cyan]")
-        self._log("  open <path>                  Load .asm file into editor")
-        self._log("  save [path]                  Save editor (omit path to overwrite)")
+        self._log("  open <filename>              Load .asm from code/ directory")
+        self._log("  save [filename]              Save editor to code/ directory")
         self._log("  asm                          Assemble, reset and load into memory")
         self._log("  check                        Syntax check only (no load)")
         self._log("[bold cyan]CPU Control:[/bold cyan]")
@@ -833,7 +838,8 @@ class KCPU16TUI(App[None]):
         self._log("  <count>   Number of items        (e.g. 16 or 0x10)")
         self._log("  <block>   Storage block index    (e.g. 0, 1, 2 ...)")
         self._log("  <offset>  Word offset in block   (e.g. 0, 1, 2 ...)")
-        self._log("  <path>    File path               (e.g. program.asm, disk.dsk)")
+        self._log("  <path>    File path               (e.g. disk.dsk)")
+        self._log("  <filename> .asm file in code/     (e.g. hello.asm)")
         self._log("  [param]   Optional parameter     (can be omitted)")
         self._log("")
         self._log("[bold cyan]Number formats:[/bold cyan]")
@@ -1371,8 +1377,11 @@ class KCPU16TUI(App[None]):
             # --- Tiedostot & assembly ---
             if op == "open":
                 if not args:
-                    return CommandResult(False, "Usage: open <path>")
-                self._do_open(Path(" ".join(args)))
+                    return CommandResult(False, "Usage: open <filename>")
+                path = Path(" ".join(args))
+                if not path.is_absolute():
+                    path = self.code_dir / path
+                self._do_open(path)
                 return CommandResult(True, "")
 
             if op == "save":
@@ -1380,8 +1389,11 @@ class KCPU16TUI(App[None]):
                     if self.current_file:
                         self._do_save(self.current_file)
                         return CommandResult(True, "")
-                    return CommandResult(False, "Usage: save <path>")
-                self._do_save(Path(" ".join(args)))
+                    return CommandResult(False, "Usage: save <filename>")
+                path = Path(" ".join(args))
+                if not path.is_absolute():
+                    path = self.code_dir / path
+                self._do_save(path)
                 return CommandResult(True, "")
 
             if op == "asm":
