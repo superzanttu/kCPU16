@@ -63,6 +63,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--test-all",
         type=Path,
+        nargs="?",
+        const=Path(__file__).parent / "test",
+        default=None,
+        metavar="DIR",
+        help="Suorita kaikki .asm-testit hakemistosta (oletus: kcpu16/test/)",
     )
 
     return parser
