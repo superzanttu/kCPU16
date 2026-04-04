@@ -465,7 +465,7 @@ class KCPU16TUI(App[None]):
         self.disassembler = Disassembler()
         self.dbg = DebugState()
         self.current_file: Path | None = None
-        self.code_dir: Path = Path(__file__).resolve().parent.parent / "code"
+        self.code_dir: Path = Path(__file__).resolve().parent / "code"
         self.code_dir.mkdir(exist_ok=True)
         self.mem_view_addr: int = BOOT_RAM_START
         self.addr_to_line: dict[int, int] = {}
