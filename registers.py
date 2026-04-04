@@ -31,8 +31,10 @@ Bitti 5 (P): Privilege - 1 = Kernel Mode, 0 = User Mode
 from dataclasses import dataclass, field
 
 from .constants import (
+    BOOT_RAM_START,
     DEFAULT_MPR,
     DEFAULT_TIMER_INTERVAL,
+    KERNEL_STACK_END,
     MODE_KERNEL,
     SR_FLAG_C,
     SR_FLAG_I,
@@ -41,6 +43,7 @@ from .constants import (
     SR_FLAG_V,
     SR_FLAG_Z,
     WORD_MASK,
+    WORD_SIGN_BIT,
 )
 
 
@@ -70,8 +73,8 @@ class RegisterFile:
 
     # Erikoisrekisterit
     fp: int = 0  # Frame Pointer (ei kaytos kaynnistyksessa)
-    sp: int = 0xFFFF  # Stack Pointer alkaa muistin lopusta
-    pc: int = 0x0100  # Program Counter alkaa bootloader-alueelta
+    sp: int = KERNEL_STACK_END  # Stack Pointer alkaa muistin lopusta
+    pc: int = BOOT_RAM_START  # Program Counter alkaa bootloader-alueelta
     sr: int = 0  # Status Register (liput nollaa)
 
     # Jarjestelmarekisterit
@@ -96,8 +99,8 @@ class RegisterFile:
         self.r2 = 0
         self.r3 = 0
         self.fp = 0
-        self.sp = 0xFFFF
-        self.pc = 0x0100
+        self.sp = KERNEL_STACK_END
+        self.pc = BOOT_RAM_START
         self.sr = 0
         self.mpr = DEFAULT_MPR
         self.tmr = DEFAULT_TIMER_INTERVAL
@@ -169,7 +172,7 @@ class RegisterFile:
         # Zero: onko arvo nolla?
         self.set_flag(SR_FLAG_Z, 1 if value == 0 else 0)
         # Negative: onko ylin bitti 1? (bitti 15 = 0x8000)
-        self.set_flag(SR_FLAG_N, 1 if (value & 0x8000) else 0)
+        self.set_flag(SR_FLAG_N, 1 if (value & WORD_SIGN_BIT) else 0)
 
     def set_carry_overflow(self, carry: bool, overflow: bool) -> None:
         """

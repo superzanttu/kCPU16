@@ -10,6 +10,13 @@ Poikkeushierarkia:
     |-- PrivilegeViolationError -> INT 4
     |-- MemoryAccessFaultError  -> INT 5
     |-- StackOverflowError      -> INT 2
+
+Ei-virhepohjaiset keskeytykset (eivat kayta poikkeusluokkia):
+    ZeroDivisionError (Python)  -> INT 0  (DIV-kaskyn jakaja = 0)
+    INT 3 (Breakpoint)          -- ohjelmallinen, INT-kaskylla
+    INT 6 (Keyboard)            -- laitteistokeskeytys
+    INT 7 (Timer)               -- ajastinkeskeytys
+    INT 8 (Process Exit)        -- EXIT-kasky
 """
 
 

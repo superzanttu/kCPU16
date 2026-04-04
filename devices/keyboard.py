@@ -28,6 +28,8 @@ Note:
 
 from collections import deque
 
+from ..constants import VRAM_CHAR_MASK
+
 
 class KeyboardDevice:
     """
@@ -65,7 +67,7 @@ class KeyboardDevice:
         Args:
             ascii_code: Napaimen ASCII-koodi (esim. ord('A') = 65)
         """
-        self._queue.append(ascii_code & 0xFF)
+        self._queue.append(ascii_code & VRAM_CHAR_MASK)
 
     def pop_key(self) -> int:
         """

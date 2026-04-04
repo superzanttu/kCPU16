@@ -32,8 +32,9 @@ Tallennuslaitteen rakenne:
 """
 
 from dataclasses import dataclass, field
+from pathlib import Path
 
-from ..constants import WORD_MASK
+from ..constants import STORAGE_BLOCK_COUNT, STORAGE_BLOCK_SIZE, WORD_MASK
 
 
 @dataclass
@@ -60,10 +61,10 @@ class BlockStorageDevice:
     """
 
     # Blokin koko: 256 sanaa = 512 tavua (16-bittisia sanoja)
-    block_size_words: int = 0x0100
+    block_size_words: int = STORAGE_BLOCK_SIZE
 
     # Blokkien maara: 256 blokkia
-    block_count: int = 0x0100
+    block_count: int = STORAGE_BLOCK_COUNT
 
     # Sisainen tallennus: lista blokeista
     # Jokainen blokki on lista 16-bittisia sanoja
@@ -214,6 +215,59 @@ class BlockStorageDevice:
         """
         for i, word in enumerate(data):
             self.write_word(start_addr + i, word)
+
+    # =========================================================================
+    # TIEDOSTO-OPERAATIOT JA RESET
+    # =========================================================================
+
+    def save_to_file(self, path: Path) -> None:
+        """Tallenna tallennuslaitteen sisalto .dsk-tiedostoon.
+
+        Tiedosto on binaarinen: jokainen 16-bittinen sana kirjoitetaan
+        kahtena tavuna (big-endian).
+
+        Args:
+            path: Kohdetiedoston polku (.dsk-paate lisataan tarvittaessa)
+        """
+        if path.suffix.lower() != ".dsk":
+            path = path.with_suffix(".dsk")
+        with open(path, "wb") as f:
+            for block in self.blocks:
+                for word in block:
+                    f.write((word & WORD_MASK).to_bytes(2, "big"))
+
+    def load_from_file(self, path: Path) -> None:
+        """Lataa tallennuslaitteen sisalto .dsk-tiedostosta.
+
+        Tiedoston koon on vastattava laitteen kapasiteettia
+        (total_words * 2 tavua).
+
+        Args:
+            path: Lahdetiedoston polku
+
+        Raises:
+            FileNotFoundError: Jos tiedostoa ei loydy
+            ValueError: Jos tiedoston koko ei vastaa laitteen kapasiteettia
+        """
+        if path.suffix.lower() != ".dsk":
+            path = path.with_suffix(".dsk")
+        data = path.read_bytes()
+        expected = self.total_words * 2
+        if len(data) != expected:
+            raise ValueError(
+                f"Tiedoston koko {len(data)} tavua, odotettu {expected} tavua"
+            )
+        idx = 0
+        for block in self.blocks:
+            for i in range(len(block)):
+                block[i] = int.from_bytes(data[idx : idx + 2], "big")
+                idx += 2
+
+    def reset(self) -> None:
+        """Nollaa tallennuslaitteen sisalto (kaikki sanat = 0)."""
+        for block in self.blocks:
+            for i in range(len(block)):
+                block[i] = 0
 
     # =========================================================================
     # SISAISET APUMETODIT

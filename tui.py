@@ -30,21 +30,19 @@ Tietovirta:
 
 Layout:
   ┌─ Toolbar (Open|Save|New | Assemble ^B | Step F7|Run F5|Reset ^R | BP F2)
-  ├────────────────────┬─────────────────────┬─────────────────────────┤
-  │ SOURCE EDITOR      │ DISASSEMBLY         │ REGISTERS               │
-  │ (TextArea, muokk.) │ (Static, värikood.) │ (muuttuneet=punainen)   │
-  │ rivinumerot        │ ●=breakpoint        │                         │
-  │ kursori seuraa PC  │ ▶=nykyinen PC       ├─────────────────────────┤
-  │ width: 2fr         │ width: 2fr          │ FLAGS  Z N C V I P      │
-  │                    │                     │ (vihreä=1, dim=0)       │
-  │                    │                     ├─────────────────────────┤
-  │                    │                     │ CPU: READY/HALTED/EXIT  │
-  │                    │                     │ Cycles: N  BP: lista    │
-  ├────────────────────┴─────────────────────┴─────────────────────────┤
-  │ [Log] [Screen] [Memory] [Stack]   (TabbedContent, height: 14)      │
-  ├────────────────────────────────────────────────────────────────────┤
-  │ > komentosyöte                                              Footer│
-  └────────────────────────────────────────────────────────────────────┘
+  ├──────────────┬─────────────────────┬─────────────────────────────┤
+  │ SCREEN       │ DISASSEMBLY/MEM/STK │ SOURCE EDITOR               │
+  │ (80x24 VRAM) │ (TabbedContent)     │ (TextArea, muokk.)          │
+  │              │ ●=breakpoint        │ rivinumerot                 │
+  │              │ ▶=nykyinen PC       │ kursori seuraa PC           │
+  ├──────────────┴─────────────────────┤                             │
+  │ LOG (lokiviestit)                  │                             │
+  ├────────────────────────────────────┤                             │
+  │ COMMANDS (komentotulosteet)        │                             │
+  ├────────────────────────────────────┴─────────────────────────────┤
+  │ > komentosyöte      │ FLAGS Z N C V I P  │ REGISTERS             │
+  │                     │ CPU state/cycles   │ (muuttuneet=punainen) │
+  └─────────────────────┴────────────────────┴───────────────────────┘
 """
 
 from __future__ import annotations
@@ -57,8 +55,6 @@ from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.widgets import (
     Button,
-    Footer,
-    Header,
     Input,
     RichLog,
     Static,
@@ -69,16 +65,19 @@ from textual.widgets import (
 
 from .assembler import Assembler, MNEMONIC_TO_OPCODE
 from .constants import (
+    BOOT_RAM_START,
+    DEFAULT_RUN_CYCLES,
     SR_FLAG_C,
     SR_FLAG_I,
     SR_FLAG_N,
     SR_FLAG_P,
     SR_FLAG_V,
     SR_FLAG_Z,
+    WORD_MASK,
 )
 from .debugger import DebugState
 from .disassembler import Disassembler
-from .examples import get_source, list_examples
+
 from .instruction import OPCODE_TABLE
 from .machine import KCPU16Machine
 from .specs import format_arch_spec_report
@@ -99,16 +98,55 @@ REG_NAMES = {0: "R0", 1: "R1", 2: "R2", 3: "R3", 4: "FP", 5: "SP"}
 
 # Käskyt joissa 1. operandi on rekisteri-indeksi (esim. LOAD R0, ...)
 _REG_FIRST = {
-    "LOAD", "CPY", "READ", "STORE", "READ_IND", "STORE_IND",
-    "ADD", "SUB", "MUL", "DIV", "CMP",
-    "AND", "OR", "XOR", "NOT", "SHL", "SHR",
-    "PUSH", "POP", "SMPR", "STMR", "DREAD", "DWRITE",
+    "LOAD",
+    "CPY",
+    "READ",
+    "STORE",
+    "READ_IND",
+    "STORE_IND",
+    "READ_REL",
+    "STORE_REL",
+    "ADD",
+    "ADC",
+    "SUB",
+    "MUL",
+    "DIV",
+    "CMP",
+    "AND",
+    "OR",
+    "XOR",
+    "NOT",
+    "SHL",
+    "SHR",
+    "PUSH",
+    "POP",
+    "SWSP",
+    "SMPR",
+    "STMR",
+    "DREAD",
+    "DWRITE",
+    "KGET",
+    "TSL",
 }
 # Käskyt joissa myös 2. operandi on rekisteri-indeksi (esim. ADD R0, R1)
 _REG_SECOND = {
-    "CPY", "ADD", "SUB", "MUL", "DIV", "CMP",
-    "AND", "OR", "XOR", "SHL", "SHR",
-    "READ_IND", "STORE_IND", "DREAD", "DWRITE",
+    "CPY",
+    "ADD",
+    "ADC",
+    "SUB",
+    "MUL",
+    "DIV",
+    "CMP",
+    "AND",
+    "OR",
+    "XOR",
+    "SHL",
+    "SHR",
+    "READ_IND",
+    "STORE_IND",
+    "SWSP",
+    "DREAD",
+    "DWRITE",
 }
 
 
@@ -124,6 +162,7 @@ class CommandResult:
         message: Käyttäjälle näytettävä teksti (Rich-markup sallittu).
                  Tyhjä merkkijono = ei näytetä mitään.
     """
+
     ok: bool
     message: str
 
@@ -131,6 +170,7 @@ class CommandResult:
 # ---------------------------------------------------------------------------
 # Lähdekoodi -> osoite -kartoitus (makrotuki)
 # ---------------------------------------------------------------------------
+
 
 def _build_addr_to_line(source: str, assembler: Assembler) -> dict[int, int]:
     """Rakenna osoite → lähdekoodirivi -mappi assembloidusta koodista.
@@ -165,7 +205,7 @@ def _build_addr_to_line(source: str, assembler: Assembler) -> dict[int, int]:
     """
     try:
         expanded, start_addr = assembler._pass0_expand_macros_and_origin(
-            source, 0x0100
+            source, BOOT_RAM_START
         )
     except Exception:
         return {}
@@ -236,11 +276,15 @@ class KCPU16TUI(App[None]):
         is_assembled  -- True kun koodi on assembloitu ja ladattu muistiin.
 
     Widget-hierarkia:
-        Header → Toolbar (Horizontal + Buttonit) → main-area (Horizontal):
-            editor-pane (TextArea) | disasm-pane (Static) | right-sidebar:
-                regs-pane | flags-pane | cpu-pane
-        → bottom-tabs (TabbedContent): Log | Screen | Memory | Stack
-        → cmd-input (Input) → Footer
+        Toolbar (Horizontal + Buttonit) → content-area (Horizontal):
+            left-panel: top-section (Horizontal):
+                            screen-section (Static, VRAM 80x24)
+                            disasm-tabs (TabbedContent: Disassembly|Memory|Stack)
+                        log-pane (RichLog, lokiviestit)
+                        cmd-output-pane (RichLog, komentotulosteet)
+            editor-pane: TextArea (koko korkeus)
+        → bottom-bar (Horizontal):
+            cmd-input-col (Input) | flags-pane (Flags+CPU) | regs-pane (Registers)
 
     Päivityslogiikka:
         _refresh_all() kutsutaan jokaisen muutoksen jälkeen (step, run, reset,
@@ -249,22 +293,23 @@ class KCPU16TUI(App[None]):
         muuttua IO-operaatioilla ilman explisiittistä refreshiä).
     """
 
-    TITLE = "kCPU16 Debugger v1.0"
+    TITLE = "kCPU16 Emulator"
     SUB_TITLE = "16-bit CPU Emulator"
 
     # Textual CSS: Määrittelee koko sovelluksen visuaalisen layoutin.
     #
     # Rakenne ylhäältä alas:
     #   1. #toolbar          - Yläpalkki: painikkeet (dock: top, height: 3)
-    #   2. #main-area        - Kolmen sarakkeen pääalue (height: 1fr, joustava):
-    #      - #editor-pane    - Lähdekoodi-editori (width: 2fr, vasemmalla)
-    #      - #disasm-pane    - Disassembly-näkymä (width: 2fr, keskellä)
-    #      - #right-sidebar  - Oikea sivupalkki (width: 30, kiinteä):
-    #          #regs-pane, #flags-pane, #cpu-pane päällekkäin
-    #   3. #bottom-tabs      - Alatason välilehdet (dock: bottom, height: 14):
-    #      Log, Screen, Memory, Stack
-    #   4. #cmd-input        - Komentosyöte (dock: bottom, height: 3)
-    #   5. Footer            - Textual Footer (näppäinsidonnaisuudet)
+    #   2. #content-area     - Pääalue (height: 1fr, horizontal):
+    #      - #left-panel     - Vasen paneeli (width: 142): Screen+Disasm | Log | Cmds
+    #        - #top-section  - Yläosa (horizontal): Screen (82) + Disasm tabs (60)
+    #        - #log-pane     - Lokiviestit (height: 1fr)
+    #        - #cmd-output   - Komentotulosteet (height: 1fr)
+    #      - #editor-pane    - Oikea sarake (width: 1fr): Editori (koko korkeus)
+    #   3. #bottom-bar       - Alarivi (dock: bottom, horizontal):
+    #      - #cmd-input-col  - Komentosyöte (width: 142, 1 rivi)
+    #      - #flags-pane     - Liput + CPU-tila (width: auto)
+    #      - #regs-pane      - Rekisterit (width: 1fr)
     CSS = """
     Screen {
         layout: vertical;
@@ -276,7 +321,6 @@ class KCPU16TUI(App[None]):
         height: 3;
         dock: top;
         background: $panel;
-        border-bottom: solid $primary-darken-2;
         layout: horizontal;
     }
     #toolbar Button {
@@ -289,15 +333,72 @@ class KCPU16TUI(App[None]):
         height: 3;
     }
 
-    /* ---- Main 3-column area ---- */
-    #main-area {
+    /* ---- Content area ---- */
+    #content-area {
         height: 1fr;
         layout: horizontal;
     }
 
-    /* Editor (left) */
+    /* -- Left panel: Screen+Disasm top, Log+CmdOutput bottom -- */
+    #left-panel {
+        width: 142;
+        layout: vertical;
+    }
+    #top-section {
+        height: 26;
+        layout: horizontal;
+    }
+    #screen-section {
+        width: 82;
+        height: 26;
+        border: solid $primary-darken-2;
+        border-title-color: $accent;
+    }
+    #screen-view-solo {
+        width: 80;
+        height: 24;
+    }
+    #disasm-tabs {
+        width: 1fr;
+        height: 1fr;
+        border: solid $success-darken-1;
+        border-title-color: $accent;
+    }
+    TabPane {
+        padding: 0;
+    }
+    TabPane VerticalScroll {
+        height: 1fr;
+    }
+    #disasm-content {
+        padding: 0 1;
+    }
+    #memory-view {
+        padding: 0 1;
+    }
+    #stack-view {
+        padding: 0 1;
+    }
+    #log-pane {
+        height: 1fr;
+        border: solid $primary-darken-2;
+        border-title-color: $accent;
+    }
+    #log-view {
+        height: 1fr;
+    }
+    #cmd-output-pane {
+        height: 1fr;
+        border: solid $primary-darken-2;
+        border-title-color: $accent;
+    }
+    #cmd-output {
+        height: 1fr;
+    }
+
+    /* -- Right column: Editor (full height) -- */
     #editor-pane {
-        width: 2fr;
+        width: 1fr;
         min-width: 30;
         border: solid $primary-darken-2;
         border-title-color: $accent;
@@ -306,73 +407,31 @@ class KCPU16TUI(App[None]):
         height: 1fr;
     }
 
-    /* Disassembly (center) */
-    #disasm-pane {
-        width: 2fr;
-        min-width: 24;
-        border: solid $success-darken-1;
-        border-title-color: $accent;
-    }
-    #disasm-content {
-        padding: 0 1;
-    }
-
-    /* Right sidebar */
-    #right-sidebar {
-        width: 30;
-        min-width: 26;
-        max-width: 36;
-    }
-    #regs-pane {
+    /* ---- Bottom bar: Input | Flags+CPU | Registers ---- */
+    #bottom-bar {
+        dock: bottom;
         height: auto;
         max-height: 14;
-        border: solid $warning-darken-1;
-        border-title-color: $accent;
-        padding: 0 1;
+        layout: grid;
+        grid-size: 3;
+        grid-columns: 142 28 1fr;
+    }
+    #cmd-input-col {
+        align: left top;
+    }
+    #cmd-input {
+        width: 1fr;
+        height: 1;
     }
     #flags-pane {
-        height: 5;
         border: solid $warning-darken-1;
         border-title-color: $accent;
         padding: 0 1;
     }
-    #cpu-pane {
-        height: 1fr;
-        min-height: 4;
+    #regs-pane {
         border: solid $warning-darken-1;
         border-title-color: $accent;
         padding: 0 1;
-    }
-
-    /* ---- Bottom tabs ---- */
-    #bottom-tabs {
-        height: 14;
-        dock: bottom;
-        border-top: solid $primary-darken-2;
-    }
-    TabPane {
-        padding: 0;
-    }
-    #log-view {
-        height: 1fr;
-    }
-    #screen-view {
-        height: 1fr;
-        padding: 0 1;
-    }
-    #memory-view {
-        height: 1fr;
-        padding: 0 1;
-    }
-    #stack-view {
-        height: 1fr;
-        padding: 0 1;
-    }
-
-    /* Command input */
-    #cmd-input {
-        dock: bottom;
-        height: 3;
     }
     """
 
@@ -417,9 +476,11 @@ class KCPU16TUI(App[None]):
         self.disassembler = Disassembler()
         self.dbg = DebugState()
         self.current_file: Path | None = None
-        self.mem_view_addr: int = 0x0100
+        self.mem_view_addr: int = BOOT_RAM_START
         self.addr_to_line: dict[int, int] = {}
         self.is_assembled: bool = False
+        self._last_screen_render: str = ""
+        self._cmd_context: bool = False
 
     # ------------------------------------------------------------------
     # Layout
@@ -428,30 +489,23 @@ class KCPU16TUI(App[None]):
     def compose(self) -> ComposeResult:
         """Rakenna sovelluksen widget-puu (Textual compose -pattern).
 
-        Palauttaa kaikki widgetit yield-lauseilla. Textual kutsuu tätä
-        kerran sovelluksen käynnistyessä.
-
         Widget-hierarkia:
-            Header (kellonaika)
             Toolbar (#toolbar): Open, Save, New, Assemble, Step, Run, Reset,
                                 BP, Clear, Help -painikkeet
-            Main area (#main-area, Horizontal):
-                #editor-pane: TextArea (language=None, ei tree-sitter ASM:lle)
-                #disasm-pane: Static (päivitetään _refresh_disassembly():lla)
-                #right-sidebar:
-                    #regs-pane: Rekisterit (Static)
-                    #flags-pane: Liput (Static)
-                    #cpu-pane: CPU-tila (Static)
-            Bottom tabs (#bottom-tabs, TabbedContent):
-                Log (RichLog, max 500 riviä)
-                Screen (Static, VRAM-renderöinti)
-                Memory (Static, hex dump)
-                Stack (Static, pinonäkymä)
-            #cmd-input: Komentosyöte (Input)
-            Footer: Näppäinsidonnaisuudet
+            Content area (#content-area, Horizontal):
+                #left-panel (Vertical, 142 lev.):
+                    #top-section (Horizontal):
+                        #screen-section: Static (VRAM 80x24)
+                        #disasm-tabs (TabbedContent: Disassembly|Memory|Stack)
+                    #log-pane: RichLog (lokiviestit)
+                    #cmd-output-pane: RichLog (komentotulosteet)
+                #editor-pane (Vertical, 1fr, koko korkeus):
+                    TextArea (lähdekoodieditori)
+            Bottom bar (#bottom-bar, Horizontal):
+                #cmd-input-col: Input (komentosyöte, 142 lev., 1 rivi)
+                #flags-pane: Flags + CPU-tila
+                #regs-pane: Rekisterit
         """
-        yield Header(show_clock=True)
-
         # Toolbar
         with Horizontal(id="toolbar"):
             yield Button("Open", id="btn-open", variant="default")
@@ -468,43 +522,56 @@ class KCPU16TUI(App[None]):
             yield Button("Clear F9", id="btn-clear", variant="default")
             yield Button("Help F1", id="btn-help", variant="default")
 
-        # Main area: Editor | Disassembly | Right sidebar
-        with Horizontal(id="main-area"):
+        # Content area: left panel + editor
+        with Horizontal(id="content-area"):
+            # Left panel: Screen+Disasm top, Log+CmdOutput bottom
+            with Vertical(id="left-panel"):
+                with Horizontal(id="top-section"):
+                    with Vertical(id="screen-section"):
+                        yield Static(id="screen-view-solo")
+                    with TabbedContent(id="disasm-tabs"):
+                        with TabPane("Disassembly", id="tab-disasm"):
+                            with VerticalScroll():
+                                yield Static(id="disasm-content")
+                        with TabPane("Memory", id="tab-memory"):
+                            with VerticalScroll():
+                                yield Static(id="memory-view")
+                        with TabPane("Stack", id="tab-stack"):
+                            with VerticalScroll():
+                                yield Static(id="stack-view")
+                with Vertical(id="log-pane"):
+                    yield RichLog(
+                        id="log-view",
+                        wrap=True,
+                        highlight=False,
+                        markup=True,
+                        max_lines=500,
+                    )
+                with Vertical(id="cmd-output-pane"):
+                    yield RichLog(
+                        id="cmd-output",
+                        wrap=True,
+                        highlight=False,
+                        markup=True,
+                        max_lines=500,
+                    )
+
+            # Right column: Editor (full height)
             with Vertical(id="editor-pane"):
-                yield TextArea(
-                    "", language=None, show_line_numbers=True, id="editor"
+                yield TextArea("", language=None, show_line_numbers=True, id="editor")
+
+        # Bottom bar: Command input | Flags+CPU | Registers
+        with Horizontal(id="bottom-bar"):
+            with Vertical(id="cmd-input-col"):
+                yield Input(
+                    placeholder="Command: help, step, run, bp, mem, mset, disk, reset ...",
+                    id="cmd-input",
                 )
-
-            with VerticalScroll(id="disasm-pane"):
-                yield Static(id="disasm-content")
-
-            with Vertical(id="right-sidebar"):
-                with Vertical(id="regs-pane"):
-                    yield Static(id="regs-content")
-                with Vertical(id="flags-pane"):
-                    yield Static(id="flags-content")
-                with Vertical(id="cpu-pane"):
-                    yield Static(id="cpu-content")
-
-        # Bottom tabs
-        with TabbedContent(id="bottom-tabs"):
-            with TabPane("Log", id="tab-log"):
-                yield RichLog(
-                    id="log-view", wrap=True, highlight=False,
-                    markup=True, max_lines=500,
-                )
-            with TabPane("Screen", id="tab-screen"):
-                yield Static(id="screen-view")
-            with TabPane("Memory", id="tab-memory"):
-                yield Static(id="memory-view")
-            with TabPane("Stack", id="tab-stack"):
-                yield Static(id="stack-view")
-
-        yield Input(
-            placeholder="Komento: help, step, run, bp, mem, load, assemble ...",
-            id="cmd-input",
-        )
-        yield Footer()
+            with Vertical(id="flags-pane"):
+                yield Static(id="flags-content")
+                yield Static(id="cpu-content")
+            with Vertical(id="regs-pane"):
+                yield Static(id="regs-content")
 
     # ------------------------------------------------------------------
     # Alustus
@@ -522,11 +589,12 @@ class KCPU16TUI(App[None]):
         5. Päivitetään kaikki näkymät (_refresh_all)
         6. Käynnistetään Screen-tabin 0.5s päivitystimer
         """
-        self.query_one("#editor-pane").border_title = "Source Editor"
-        self.query_one("#disasm-pane").border_title = "Disassembly"
+        self.query_one("#editor-pane").border_title = "Editor"
         self.query_one("#regs-pane").border_title = "Registers"
         self.query_one("#flags-pane").border_title = "Flags"
-        self.query_one("#cpu-pane").border_title = "CPU"
+        self.query_one("#screen-section").border_title = "Screen"
+        self.query_one("#cmd-output-pane").border_title = "Commands"
+        self.query_one("#log-pane").border_title = "Log"
 
         self.machine.cold_reset()
         self.dbg.snapshot_registers(self.machine.dump_registers())
@@ -549,8 +617,23 @@ class KCPU16TUI(App[None]):
         )
         self._log("[dim]Type 'help' for command list.[/dim]")
 
+        # Lataa käynnistysparametreilla annetut tiedostot
+        startup_asm: Path | None = getattr(self, "startup_asm", None)
+        startup_dsk: Path | None = getattr(self, "startup_dsk", None)
+
+        if startup_dsk is not None:
+            try:
+                self.machine.storage.load_from_file(startup_dsk)
+                self._log(f"[green]Storage loaded from {startup_dsk}[/green]")
+            except Exception as e:
+                self._log(f"[red]Storage load error: {e}[/red]")
+
+        if startup_asm is not None:
+            self._do_open(startup_asm)
+
         self._refresh_all()
-        self.set_interval(0.5, self._refresh_screen_tab)
+        self.set_interval(1.0, self._refresh_screen_tab)
+        self.query_one("#cmd-input", Input).focus()
 
     # ------------------------------------------------------------------
     # Painikkeet
@@ -586,22 +669,35 @@ class KCPU16TUI(App[None]):
     def on_input_submitted(self, event: Input.Submitted) -> None:
         """Käsittele komentosyöte (Enter-painallus #cmd-input -kentässä).
 
-        Lukee komennon, tyhjentää kentän, logittaa komennon, suorittaa
-        sen _execute_command():lla ja näyttää tuloksen. Virheelliset
-        komennot näytetään punaisella. Päivittää kaikki näkymät lopuksi.
+        Lukee komennon, tyhjentää kentän, näyttää komennon cmd-output:issa,
+        suorittaa sen _execute_command():lla ja näyttää tuloksen.
+
+        Asettaa _cmd_context=True jotta kaikki _log()-kutsut (myös
+        action_show_help, _do_assemble jne.) ohjautuvat cmd-outputiin.
         """
         cmd = event.value.strip()
         event.input.value = ""
         if not cmd:
             return
-        self._log(f"[dim]> {cmd}[/dim]")
-        result = self._execute_command(cmd)
-        if result.ok:
-            if result.message:
-                self._log(result.message)
-        else:
-            self._log(f"[red]{result.message}[/red]")
-        self._refresh_all()
+
+        # Ohjaa kaikki _log()-kutsut cmd-outputiin komennon suorituksen ajaksi
+        self._cmd_context = True
+        try:
+            self._log(f"[dim]> {cmd}[/dim]")
+            result = self._execute_command(cmd)
+
+            if result.ok:
+                if result.message:
+                    self._log(result.message)
+            else:
+                self._log(f"[red]{result.message}[/red]")
+
+            # VAIN step/run komennot päivittävät näkymän
+            cmd_verb = cmd.split()[0].lower()
+            if cmd_verb in {"step", "run", "restart", "asm", "reset"}:
+                self._refresh_all()
+        finally:
+            self._cmd_context = False
 
     # ------------------------------------------------------------------
     # Actions (näppäinsidonnaisuudet)
@@ -630,7 +726,7 @@ class KCPU16TUI(App[None]):
         kerrallaan ja tarkistaa breakpointit jokaisen jälkeen. Logittaa
         tuloksen ja päivittää näkymät.
         """
-        result = self._run_with_breakpoints(10000)
+        result = self._run_with_breakpoints(DEFAULT_RUN_CYCLES)
         self._log(result)
         self._update_exec_line()
         self._refresh_all()
@@ -705,7 +801,7 @@ class KCPU16TUI(App[None]):
     def action_clear_screen(self) -> None:
         """Tyhjennä VRAM-näyttömuisti (F9).
 
-        Nollaa kaikki VRAM-osoitteet (0xF800-0xFFCF). Hyödyllistä
+        Nollaa kaikki VRAM-osoitteet (0xF800-0xFF7F). Hyödyllistä
         kun haluaa aloittaa piirron puhtaalta ruudulta ilman resettiä.
         """
         self.machine.clear_screen_memory()
@@ -726,11 +822,35 @@ class KCPU16TUI(App[None]):
         self._log("  F7/F10  Step 1 instr    F5      Run (stops at BP)")
         self._log("  Ctrl+R  Reset machine   F9      Clear VRAM")
         self._log("  Ctrl+Q  Quit            F1      This help")
-        self._log("[bold]Commands:[/bold]")
-        self._log("  step [n], run [n], reset, assemble")
-        self._log("  bp <addr>, bp list, bp clear")
-        self._log("  mem <addr>, open <path>, save <path>")
-        self._log("  load <example>, examples, regs, status, spec, disasm")
+        self._log("[bold cyan]File & Assembly:[/bold cyan]")
+        self._log("  open <path>              Load .asm file")
+        self._log("  save [path]              Save editor")
+        self._log("  asm                      Assemble + load into memory")
+        self._log("  check                    Syntax check (no load)")
+        self._log("[bold cyan]CPU Control:[/bold cyan]")
+        self._log("  step [n]                 Step n instructions")
+        self._log("  run [n]                  Run to BP/halt (max n cycles)")
+        self._log("  stop                     Halt CPU")
+        self._log("  restart                  Reassemble and restart")
+        self._log("[bold cyan]Breakpoints:[/bold cyan]")
+        self._log("  bp <addr>                Toggle breakpoint")
+        self._log("  bp list / bp clear       List / clear all")
+        self._log("[bold cyan]Memory:[/bold cyan]")
+        self._log("  mem <addr> [count]       Read word(s)")
+        self._log("  mset <addr> <value>      Write word")
+        self._log("  mfill <addr> <n> <val>   Fill range")
+        self._log("[bold cyan]Disk (Storage):[/bold cyan]")
+        self._log("  disk <block>             Show block hex dump")
+        self._log("  disk load|save <file>    Load/save .dsk file")
+        self._log("  dset <blk> <off> <val>   Edit word in block")
+        self._log("  dfill <block> <value>    Fill block")
+        self._log("[bold cyan]Reset:[/bold cyan]")
+        self._log("  reset                    Memory + CPU (storage intact)")
+        self._log("  reset deep               Memory + CPU + storage")
+        self._log("  reset cpu                CPU only (memory intact)")
+        self._log("[bold cyan]Other:[/bold cyan]")
+        self._log("  cls                      Clear VRAM")
+        self._log("  spec                     Architecture spec")
         self._log("---")
 
     # ------------------------------------------------------------------
@@ -818,25 +938,6 @@ class KCPU16TUI(App[None]):
             self._log(f"[red]Assembly error: {e}[/red]")
             self.is_assembled = False
 
-    def _do_load_example(self, name: str) -> None:
-        """Lataa esimerkkiohjelma editoriin ja assembloi se.
-
-        Hakee esimerkin nimen perusteella examples-moduulista,
-        asettaa sen editoriin ja kutsuu automaattisesti _do_assemble().
-        Jos nimeä ei löydy, näyttää virheen ja kehottaa kokeilemaan
-        'examples'-komentoa.
-        """
-        try:
-            source = get_source(name)
-            self.query_one("#editor", TextArea).text = source
-            self.current_file = None
-            self._log(f"Loaded example: [bold]{name}[/bold]")
-            self._do_assemble()
-        except KeyError:
-            self._log(f"[red]Unknown example: {name}[/red]. Type 'examples'.")
-        except Exception as e:
-            self._log(f"[red]Error: {e}[/red]")
-
     # ------------------------------------------------------------------
     # Breakpoint-tietoinen suoritus
     # ------------------------------------------------------------------
@@ -885,17 +986,17 @@ class KCPU16TUI(App[None]):
     # ------------------------------------------------------------------
 
     def _refresh_all(self) -> None:
-        """Päivitä kaikki näkymäpaneelit kerralla.
+        """Päivitä kaikki näkymäpaneelit kerralla (paitsi Screen).
 
         Kutsutaan jokaisen tilan muutoksen jälkeen (step, run, reset,
-        assemble, komentosyöte). Ei timer-pollausta - paitsi Screen-tab
-        jolla on oma 0.5s intervalli (ks. on_mount).
+        assemble, komentosyöte). Screen-näyttö päivittyy omalla 1s timerilla
+        eikä tässä, jotta komentojen suoritus pysyy ketteränä.
         """
         self._refresh_disassembly()
         self._refresh_registers()
         self._refresh_flags()
         self._refresh_cpu_status()
-        self._refresh_screen_tab()
+        # self._refresh_screen_tab()  # Käytetään vain 1s timeria
         self._refresh_memory()
         self._refresh_stack()
 
@@ -945,7 +1046,7 @@ class KCPU16TUI(App[None]):
         # Clamp: show at most 10 words before PC
         start = max(start, pc - 10)
 
-        end = min(0xFFFF, pc + 80)
+        end = min(WORD_MASK, pc + 80)
         words = [self.machine.memory.read(a) for a in range(start, end + 1)]
         raw = self.disassembler.disassemble(words, start_addr=start)
 
@@ -973,9 +1074,7 @@ class KCPU16TUI(App[None]):
             display = self._fmt_disasm_line(raw_line)
 
             if addr == pc:
-                lines.append(
-                    f"{bp}[bold white on #3a3a3a]\u25b6 {display}[/]"
-                )
+                lines.append(f"{bp}[bold white on #3a3a3a]\u25b6 {display}[/]")
             else:
                 lines.append(f"{bp}  {display}")
 
@@ -1075,9 +1174,7 @@ class KCPU16TUI(App[None]):
                 parts.append(f"[bold green]{name}:1[/]")
             else:
                 parts.append(f"[dim]{name}:0[/]")
-        mode = (
-            "[bold green]KERNEL[/]" if r.in_kernel_mode else "[yellow]USER[/]"
-        )
+        mode = "[bold green]KERNEL[/]" if r.in_kernel_mode else "[yellow]USER[/]"
         self.query_one("#flags-content", Static).update(
             f"{' '.join(parts)}\nMode: {mode}"
         )
@@ -1100,26 +1197,21 @@ class KCPU16TUI(App[None]):
 
         lines = [f"State: {state}", f"Cycles: {cpu.instruction_counter}"]
         if self.dbg.breakpoints:
-            bp_list = ", ".join(
-                f"0x{a:04X}" for a in sorted(self.dbg.breakpoints)
-            )
+            bp_list = ", ".join(f"0x{a:04X}" for a in sorted(self.dbg.breakpoints))
             lines.append(f"[dim]BP: {bp_list}[/dim]")
         self.query_one("#cpu-content", Static).update("\n".join(lines))
 
     def _refresh_screen_tab(self) -> None:
-        """Päivitä Screen-välilehden VRAM-renderöinti.
+        """Päivitä Screen-näytön VRAM-renderöinti (1s timer).
 
-        Kutsuu screen.render_with_rich_colors() joka lukee VRAM-alueen
-        (0xF800-0xFFCF, 80x25) ja tuottaa Rich-muotoillun tekstin
-        väreillä (FG/BG). Kutsutaan sekä _refresh_all():sta että
-        0.5s intervallitimerista (VRAM voi muuttua IO-operaatiolla
-        ilman explisiittistä refreshiä, esim. DWRITE-käskyn aikana).
+        Käyttää cachea: Static.update() kutsutaan vain kun VRAM-sisältö
+        on oikeasti muuttunut edellisestä kerrasta.
         """
         try:
-            rendered = self.machine.screen.render_with_rich_colors(
-                self.machine.memory
-            )
-            self.query_one("#screen-view", Static).update(rendered)
+            rendered = self.machine.screen.render_with_rich_colors(self.machine.memory)
+            if rendered != self._last_screen_render:
+                self._last_screen_render = rendered
+                self.query_one("#screen-view-solo", Static).update(rendered)
         except Exception:
             pass
 
@@ -1139,13 +1231,13 @@ class KCPU16TUI(App[None]):
         lines = [f"[bold]Memory at 0x{addr:04X}:[/]\n"]
         for row in range(16):
             row_addr = addr + row * 8
-            if row_addr > 0xFFFF:
+            if row_addr > WORD_MASK:
                 break
             hex_parts = []
             ascii_parts = []
             for col in range(8):
                 a = row_addr + col
-                if a > 0xFFFF:
+                if a > WORD_MASK:
                     hex_parts.append("    ")
                     ascii_parts.append(" ")
                 else:
@@ -1170,12 +1262,10 @@ class KCPU16TUI(App[None]):
         sp = self.machine.regs.sp
         lines = [f"[bold]Stack (SP=0x{sp:04X}):[/]\n"]
         for i in range(20):
-            addr = (sp + 1 + i) & 0xFFFF
+            addr = (sp + 1 + i) & WORD_MASK
             word = self.machine.memory.read(addr)
             marker = "[yellow]\u2192[/] " if i == 0 else "  "
-            lines.append(
-                f"{marker}[cyan]{addr:04X}[/]: 0x{word:04X}  ({word})"
-            )
+            lines.append(f"{marker}[cyan]{addr:04X}[/]: 0x{word:04X}  ({word})")
         self.query_one("#stack-view", Static).update("\n".join(lines))
 
     # ------------------------------------------------------------------
@@ -1226,8 +1316,7 @@ class KCPU16TUI(App[None]):
         if opcode in OPCODE_TABLE:
             mnemonic, op_count, _ = OPCODE_TABLE[opcode]
             ops = [
-                f"0x{self.machine.memory.read(pc + 1 + i):04X}"
-                for i in range(op_count)
+                f"0x{self.machine.memory.read(pc + 1 + i):04X}" for i in range(op_count)
             ]
             instr = f"{mnemonic} {', '.join(ops)}" if ops else mnemonic
         else:
@@ -1238,8 +1327,7 @@ class KCPU16TUI(App[None]):
         if line_no:
             line_info = f" [dim](line {line_no})[/dim]"
         self._log(
-            f"[dim]IC={ic}[/dim] PC=0x{pc:04X}: "
-            f"[bold]{instr}[/bold]{line_info}"
+            f"[dim]IC={ic}[/dim] PC=0x{pc:04X}: " f"[bold]{instr}[/bold]{line_info}"
         )
         if self.machine.cpu.halted:
             self._log("[green]CPU halted (HALT).[/green]")
@@ -1253,41 +1341,67 @@ class KCPU16TUI(App[None]):
     def _execute_command(self, command: str) -> CommandResult:
         """Komentotulkki: parsii ja suorittaa komentosyötteen.
 
-        Tukee seuraavat komennot:
-            help              -- Näytä ohje
-            step [n]          -- Steppaa n käskyä (oletus 1)
-            run [n]           -- Aja n sykliä breakpointein (oletus 10000)
-            reset             -- Cold reset
-            bp <addr>         -- Toggle breakpoint osoitteeseen
-            bp list           -- Listaa breakpointit
-            bp clear          -- Poista kaikki breakpointit
-            mem [addr]        -- Näytä/vaihda muistinäkymän osoite
-            examples          -- Listaa saatavilla olevat esimerkit
-            load <name>       -- Lataa esimerkki editoriin ja assembloi
-            open <path>       -- Avaa tiedosto
-            save <path>       -- Tallenna tiedosto
-            assemble          -- Assembloi editorin koodi
-            regs              -- Näytä rekisterit yhdellä rivillä
-            status            -- Näytä CPU:n tila
-            spec              -- Näytä arkkitehtuurin spesifikaatio
-            disasm            -- Näytä disassembly lokissa
-            screen            -- Päivitä Screen-näkymä
-
-        Parametrit:
-            command: Käyttäjän syöttämä komentorivi.
-
-        Palauttaa:
-            CommandResult(ok, message) - ok=False virhetilanteessa.
+        Komennot:
+            --- Tiedostot & assembly ---
+            open <path>                  -- Avaa .asm tiedosto editoriin
+            save [path]                  -- Tallenna editori tiedostoon
+            asm                          -- Käännä, reset, lataa muistiin
+            check                        -- Tarkista syntaksi
+            --- CPU-ohjaus ---
+            step [n]                     -- Steppaa n käskyä (oletus 1)
+            run [n]                      -- Aja breakpointiin/halttiin
+            stop                         -- Pysäytä CPU
+            restart                      -- Käännä uudelleen ja aloita alusta
+            --- Breakpointit ---
+            bp <addr>                    -- Toggle breakpoint
+            bp list / bp clear           -- Listaa / poista kaikki
+            --- Muisti ---
+            mem <addr> [count]           -- Lue muistia
+            mset <addr> <value>          -- Kirjoita muistiin
+            mfill <addr> <count> <value> -- Täytä muistialue
+            --- Tallennustila ---
+            disk <block>                 -- Näytä blokki
+            disk load|save <path>        -- Lataa/tallenna .dsk
+            dset <block> <offset> <val>  -- Muokkaa tavu blokissa
+            dfill <block> <value>        -- Täytä blokki
+            --- Reset ---
+            reset                        -- Muisti + CPU (storage säilyy)
+            reset deep                   -- Muisti + CPU + storage
+            reset cpu                    -- Vain CPU (muisti säilyy)
+            --- Muut ---
+            cls                          -- Nollaa VRAM
+            help                         -- Näytä ohje
+            spec                         -- Arkkitehtuuriraportti
         """
         parts = command.split()
         op = parts[0].lower()
         args = parts[1:]
 
         try:
-            if op == "help":
-                self.action_show_help()
+            # --- Tiedostot & assembly ---
+            if op == "open":
+                if not args:
+                    return CommandResult(False, "Usage: open <path>")
+                self._do_open(Path(" ".join(args)))
                 return CommandResult(True, "")
 
+            if op == "save":
+                if not args:
+                    if self.current_file:
+                        self._do_save(self.current_file)
+                        return CommandResult(True, "")
+                    return CommandResult(False, "Usage: save <path>")
+                self._do_save(Path(" ".join(args)))
+                return CommandResult(True, "")
+
+            if op == "asm":
+                self._do_assemble()
+                return CommandResult(True, "")
+
+            if op == "check":
+                return self._do_syntax_check()
+
+            # --- CPU-ohjaus ---
             if op == "step":
                 count = int(args[0], 0) if args else 1
                 for _ in range(max(1, count)):
@@ -1299,76 +1413,58 @@ class KCPU16TUI(App[None]):
                 return CommandResult(True, f"Stepped {max(1, count)}. IC={ic}")
 
             if op == "run":
-                cycles = int(args[0], 0) if args else 10000
+                cycles = int(args[0], 0) if args else DEFAULT_RUN_CYCLES
                 result = self._run_with_breakpoints(max(1, cycles))
                 self._update_exec_line()
                 return CommandResult(True, result)
 
-            if op == "reset":
-                self.machine.cold_reset()
-                self.is_assembled = False
-                self.addr_to_line = {}
-                self.dbg.snapshot_registers(self.machine.dump_registers())
-                return CommandResult(True, "[green]Machine reset.[/green]")
+            if op == "stop":
+                self.machine.cpu.halted = True
+                return CommandResult(True, "[red]CPU halted.[/red]")
 
-            if op == "bp":
-                return self._handle_bp_command(args)
-
-            if op in ("mem", "memory"):
-                if args:
-                    self.mem_view_addr = int(args[0], 0)
-                return CommandResult(
-                    True, f"Memory view at 0x{self.mem_view_addr:04X}"
-                )
-
-            if op == "examples":
-                lines = [
-                    f"  [cyan]{n:<16}[/cyan] {d}" for n, d in list_examples()
-                ]
-                return CommandResult(True, "Examples:\n" + "\n".join(lines))
-
-            if op == "load":
-                if not args:
-                    return CommandResult(False, "Usage: load <example-name>")
-                self._do_load_example(args[0])
-                return CommandResult(True, "")
-
-            if op == "open":
-                if not args:
-                    return CommandResult(False, "Usage: open <path>")
-                self._do_open(Path(" ".join(args)))
-                return CommandResult(True, "")
-
-            if op == "save":
-                if not args:
-                    return CommandResult(False, "Usage: save <path>")
-                self._do_save(Path(" ".join(args)))
-                return CommandResult(True, "")
-
-            if op == "assemble":
+            if op == "restart":
                 self._do_assemble()
                 return CommandResult(True, "")
 
-            if op == "regs":
-                items = [
-                    f"{n}=0x{v:04X}"
-                    for n, v in self.machine.dump_registers().items()
-                ]
-                return CommandResult(True, " | ".join(items))
+            # --- Breakpointit ---
+            if op == "bp":
+                return self._handle_bp_command(args)
 
-            if op == "status":
-                return CommandResult(True, self._format_status())
+            # --- Muisti ---
+            if op == "mem":
+                return self._handle_mem_command(args)
+
+            if op == "mset":
+                return self._handle_mset_command(args)
+
+            if op == "mfill":
+                return self._handle_mfill_command(args)
+
+            # --- Tallennustila ---
+            if op == "disk":
+                return self._handle_disk_command(args)
+
+            if op == "dset":
+                return self._handle_dset_command(args)
+
+            if op == "dfill":
+                return self._handle_dfill_command(args)
+
+            # --- Reset ---
+            if op == "reset":
+                return self._handle_reset_command(args)
+
+            # --- Näyttö & muut ---
+            if op == "cls":
+                self.machine.clear_screen_memory()
+                return CommandResult(True, "[green]VRAM cleared.[/green]")
+
+            if op == "help":
+                self.action_show_help()
+                return CommandResult(True, "")
 
             if op == "spec":
                 return CommandResult(True, format_arch_spec_report())
-
-            if op == "disasm":
-                self._show_disasm_in_log()
-                return CommandResult(True, "")
-
-            if op == "screen":
-                self._refresh_screen_tab()
-                return CommandResult(True, "Screen refreshed.")
 
             return CommandResult(False, f"Unknown: {op}. Type 'help'.")
         except Exception as exc:
@@ -1383,15 +1479,11 @@ class KCPU16TUI(App[None]):
         - bp (ilman argumentteja): Näytä käyttöohje.
         """
         if not args:
-            return CommandResult(
-                False, "Usage: bp <addr> | bp list | bp clear"
-            )
+            return CommandResult(False, "Usage: bp <addr> | bp list | bp clear")
         if args[0] == "list":
             if not self.dbg.breakpoints:
                 return CommandResult(True, "No breakpoints.")
-            bps = ", ".join(
-                f"0x{a:04X}" for a in sorted(self.dbg.breakpoints)
-            )
+            bps = ", ".join(f"0x{a:04X}" for a in sorted(self.dbg.breakpoints))
             return CommandResult(True, f"Breakpoints: {bps}")
         if args[0] == "clear":
             self.dbg.clear_breakpoints()
@@ -1399,84 +1491,208 @@ class KCPU16TUI(App[None]):
         addr = int(args[0], 0)
         added = self.dbg.toggle_breakpoint(addr)
         if added:
-            return CommandResult(
-                True, f"[red]Breakpoint SET at 0x{addr:04X}[/red]"
-            )
+            return CommandResult(True, f"[red]Breakpoint SET at 0x{addr:04X}[/red]")
         return CommandResult(True, f"Breakpoint REMOVED at 0x{addr:04X}")
 
-    def _format_status(self) -> str:
-        """Muotoile CPU:n tilaraportti tekstimuotoon.
+    # ------------------------------------------------------------------
+    # Uudet komentokäsittelijät
+    # ------------------------------------------------------------------
 
-        Palauttaa monirivisen merkkijonon jossa:
-        - Tila: READY / HALTED / EXITED
-        - Syklit: suoritettujen käskyjen kokonaismäärä
-        - PC, SP, SR: tärkeimmät rekisteriarvot hex-muodossa
-        """
-        cpu = self.machine.cpu
-        if cpu.halted:
-            s = "HALTED"
-        elif self.machine.process_exited:
-            s = "EXITED"
-        else:
-            s = "READY"
-        return (
-            f"State: {s}  Cycles: {cpu.instruction_counter}\n"
-            f"PC: 0x{self.machine.regs.pc:04X}  "
-            f"SP: 0x{self.machine.regs.sp:04X}  "
-            f"SR: 0x{self.machine.regs.sr:04X}"
+    def _do_syntax_check(self) -> CommandResult:
+        """Tarkista editorin assembly-koodin syntaksi ilman latausta muistiin."""
+        source = self.query_one("#editor", TextArea).text.strip()
+        if not source:
+            return CommandResult(False, "[yellow]Editor is empty.[/yellow]")
+        try:
+            words = self.assembler.assemble(source)
+            return CommandResult(
+                True,
+                f"[green]Syntax OK — {len(words)} words.[/green]",
+            )
+        except Exception as e:
+            return CommandResult(False, f"[red]Syntax error: {e}[/red]")
+
+    def _format_hex_dump(self, words: list[int], base_addr: int) -> str:
+        """Muotoile sanalista hex-dumpiksi (8 sanaa/rivi)."""
+        lines: list[str] = []
+        for row_start in range(0, len(words), 8):
+            addr = base_addr + row_start
+            row = words[row_start : row_start + 8]
+            hex_part = " ".join(f"{w:04X}" for w in row)
+            lines.append(f"  0x{addr:04X}: {hex_part}")
+        return "\n".join(lines)
+
+    def _handle_mem_command(self, args: list[str]) -> CommandResult:
+        """Lue muistia: mem <addr> [count]."""
+        if not args:
+            return CommandResult(False, "Usage: mem <addr> [count]")
+        addr = int(args[0], 0)
+        self.mem_view_addr = addr
+        if len(args) >= 2:
+            count = int(args[1], 0)
+            words = [self.machine.memory.read(addr + i) for i in range(count)]
+            dump = self._format_hex_dump(words, addr)
+            return CommandResult(True, dump)
+        val = self.machine.memory.read(addr)
+        return CommandResult(True, f"0x{addr:04X}: 0x{val:04X} ({val})")
+
+    def _handle_mset_command(self, args: list[str]) -> CommandResult:
+        """Kirjoita muistiin: mset <addr> <value>."""
+        if len(args) < 2:
+            return CommandResult(False, "Usage: mset <addr> <value>")
+        addr = int(args[0], 0)
+        value = int(args[1], 0)
+        self.machine.memory.write(addr, value)
+        return CommandResult(
+            True, f"[green]0x{addr:04X} = 0x{value & WORD_MASK:04X}[/green]"
         )
 
-    def _show_disasm_in_log(self) -> None:
-        """Näytä disassembly loki-widgetissä (disasm-komento).
+    def _handle_mfill_command(self, args: list[str]) -> CommandResult:
+        """Täytä muistialue: mfill <addr> <count> <value>."""
+        if len(args) < 3:
+            return CommandResult(False, "Usage: mfill <addr> <count> <value>")
+        addr = int(args[0], 0)
+        count = int(args[1], 0)
+        value = int(args[2], 0)
+        for i in range(count):
+            self.machine.memory.write(addr + i, value)
+        end = (addr + count - 1) & WORD_MASK
+        return CommandResult(
+            True,
+            f"[green]Filled 0x{addr:04X}–0x{end:04X} with 0x{value & WORD_MASK:04X}[/green]",
+        )
 
-        Lukee 30 sanaa muistista alkaen PC-6 ja disassembloi ne.
-        Nykyinen PC korostetaan vihreällä taustalla (> -merkki).
-        Tämä on vaihtoehto disassembly-paneelille - hyödyllinen
-        kun haluaa nähdä disassemblyn loki-kontekstissa.
-        """
-        pc = self.machine.regs.pc
-        start = max(0, pc - 6)
-        words = [self.machine.memory.read(start + i) for i in range(30)]
-        result = self.disassembler.disassemble(words, start)
-        self._log("[bold]Disassembly:[/bold]")
-        for line in result.split("\n"):
-            addr_part = line.split(":")[0].strip()
-            try:
-                addr = int(addr_part, 16)
-                if addr == pc:
-                    self._log(f"[bold on dark_green]> {line}[/]")
-                else:
-                    self._log(f"  {line}")
-            except ValueError:
-                self._log(f"  {line}")
+    def _handle_disk_command(self, args: list[str]) -> CommandResult:
+        """Tallennustilan komennot: disk <block> | disk load|save <path>."""
+        if not args:
+            return CommandResult(
+                False, "Usage: disk <block> | disk load <file> | disk save <file>"
+            )
+        sub = args[0].lower()
+        if sub == "load":
+            if len(args) < 2:
+                return CommandResult(False, "Usage: disk load <filename.dsk>")
+            path = Path(" ".join(args[1:]))
+            self.machine.storage.load_from_file(path)
+            return CommandResult(True, f"[green]Disk loaded from {path}[/green]")
+        if sub == "save":
+            if len(args) < 2:
+                return CommandResult(False, "Usage: disk save <filename.dsk>")
+            path = Path(" ".join(args[1:]))
+            self.machine.storage.save_to_file(path)
+            return CommandResult(True, f"[green]Disk saved to {path}[/green]")
+        block_idx = int(args[0], 0)
+        data = self.machine.storage.read_block(block_idx)
+        base = block_idx * self.machine.storage.block_size_words
+        dump = self._format_hex_dump(data, base)
+        return CommandResult(True, f"Block {block_idx}:\n{dump}")
+
+    def _handle_dset_command(self, args: list[str]) -> CommandResult:
+        """Muokkaa tallennustilaa: dset <block> <offset> <value>."""
+        if len(args) < 3:
+            return CommandResult(False, "Usage: dset <block> <offset> <value>")
+        block = int(args[0], 0)
+        offset = int(args[1], 0)
+        value = int(args[2], 0)
+        word_addr = block * self.machine.storage.block_size_words + offset
+        self.machine.storage.write_word(word_addr, value)
+        return CommandResult(
+            True,
+            f"[green]Block {block} offset {offset} = 0x{value & WORD_MASK:04X}[/green]",
+        )
+
+    def _handle_dfill_command(self, args: list[str]) -> CommandResult:
+        """Täytä tallenustilan blokki: dfill <block> <value>."""
+        if len(args) < 2:
+            return CommandResult(False, "Usage: dfill <block> <value>")
+        block_idx = int(args[0], 0)
+        value = int(args[1], 0) & WORD_MASK
+        bsw = self.machine.storage.block_size_words
+        data = [value] * bsw
+        self.machine.storage.write_block(block_idx, data)
+        return CommandResult(
+            True,
+            f"[green]Block {block_idx} filled with 0x{value:04X}[/green]",
+        )
+
+    def _handle_reset_command(self, args: list[str]) -> CommandResult:
+        """Resetoi: reset | reset deep | reset cpu."""
+        if not args:
+            # Normaali reset: VRAM + muisti + CPU. Storage säilyy.
+            self.machine.cold_reset()
+            self.is_assembled = False
+            self.addr_to_line = {}
+            self.dbg.snapshot_registers(self.machine.dump_registers())
+            return CommandResult(
+                True, "[green]Reset (memory + CPU). Storage intact.[/green]"
+            )
+        sub = args[0].lower()
+        if sub == "deep":
+            self.machine.cold_reset()
+            self.machine.storage.reset()
+            self.is_assembled = False
+            self.addr_to_line = {}
+            self.dbg.snapshot_registers(self.machine.dump_registers())
+            return CommandResult(
+                True, "[green]Deep reset (memory + CPU + storage).[/green]"
+            )
+        if sub == "cpu":
+            self.machine.cpu.reset()
+            self.dbg.snapshot_registers(self.machine.dump_registers())
+            return CommandResult(True, "[green]CPU reset. Memory preserved.[/green]")
+        return CommandResult(False, "Usage: reset | reset deep | reset cpu")
 
     # ------------------------------------------------------------------
     # Apumetodit
     # ------------------------------------------------------------------
 
     def _log(self, message: str) -> None:
-        """Kirjoita viesti Log-välilehden RichLog-widgettiin.
+        """Kirjoita viesti Log-välilehden tai cmd-output:in RichLog-widgettiin.
 
+        Jos _cmd_context on True (komennon suorituksen aikana),
+        ohjaa viesti cmd-output:iin Log-tabin sijaan.
         Tukee Rich-markupia (esim. [bold], [red], [dim]).
-        Hiljaisesti ohittaa poikkeukset jos widget ei ole käytettävissä
-        (esim. sovelluksen sammutuksen aikana).
         """
         try:
-            self.query_one("#log-view", RichLog).write(message)
+            if self._cmd_context:
+                self.query_one("#cmd-output", RichLog).write(message)
+            else:
+                self.query_one("#log-view", RichLog).write(message)
+        except Exception:
+            pass
+
+    def _log_cmd_output(self, message: str) -> None:
+        """Kirjoita komentotulos Command Output -widgettiin.
+
+        Tukee Rich-markupia (esim. [bold], [red], [dim]).
+        Käytetään hex-dumppeihin, listan tulostukseen ja muihin
+        komentojen tuottamiin tulosteisiin. Log-tab saa status-viestit.
+        """
+        try:
+            self.query_one("#cmd-output", RichLog).write(message)
         except Exception:
             pass
 
 
-def run_tui() -> int:
+def run_tui(
+    startup_asm: Path | None = None,
+    startup_dsk: Path | None = None,
+) -> int:
     """Käynnistä kCPU16 TUI-sovellus.
 
     Entry point jota kutsutaan CLI:stä (esim. __main__.py tai console_scripts).
     Luo KCPU16TUI-instanssin ja käynnistää Textual-tapahtumasilmukan.
     Palaa vasta kun käyttäjä sulkee sovelluksen (Ctrl+Q).
 
+    Args:
+        startup_asm: .asm-tiedosto ladattavaksi editoriin käynnistyksessä.
+        startup_dsk: .dsk-tiedosto ladattavaksi storageen käynnistyksessä.
+
     Palauttaa:
         int: Exit-koodi (0 = normaali lopetus).
     """
     app = KCPU16TUI()
+    app.startup_asm = startup_asm
+    app.startup_dsk = startup_dsk
     app.run()
     return 0

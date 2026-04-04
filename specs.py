@@ -34,6 +34,8 @@ from .constants import (
     INT_PRIVILEGE_VIOLATION,
     INT_STACK_OVERFLOW,
     INT_TIMER,
+    INT_VECTOR_BASE,
+    INT_VECTOR_COUNT,
     KERNEL_STACK_END,
     KERNEL_STACK_START,
     MEMORY_WORDS,
@@ -50,15 +52,31 @@ from .devices.storage import BlockStorageDevice
 # =============================================================================
 
 INTERRUPTS: list[tuple[int, int, str]] = [
-    (INT_DIV_ZERO, 0x0000, "Jako nollalla (DIV jakaja = 0)"),
-    (INT_INVALID_OPCODE, 0x0001, "Tuntematon kasky (Invalid Opcode)"),
-    (INT_STACK_OVERFLOW, 0x0002, "Pinon ylivuoto"),
-    (INT_BREAKPOINT, 0x0003, "Debug / Breakpoint"),
-    (INT_PRIVILEGE_VIOLATION, 0x0004, "Privilege Violation"),
-    (INT_MEMORY_ACCESS_FAULT, 0x0005, "Memory Access Fault"),
-    (INT_KEYBOARD, 0x0006, "Nappaimistokeskeytys"),
-    (INT_TIMER, 0x0007, "Ajastinkeskeytys"),
-    (INT_PROCESS_EXIT, 0x0008, "Prosessin hallittu lopetus (EXIT)"),
+    (INT_DIV_ZERO, INT_VECTOR_BASE + INT_DIV_ZERO, "Jako nollalla (DIV jakaja = 0)"),
+    (
+        INT_INVALID_OPCODE,
+        INT_VECTOR_BASE + INT_INVALID_OPCODE,
+        "Tuntematon kasky (Invalid Opcode)",
+    ),
+    (INT_STACK_OVERFLOW, INT_VECTOR_BASE + INT_STACK_OVERFLOW, "Pinon ylivuoto"),
+    (INT_BREAKPOINT, INT_VECTOR_BASE + INT_BREAKPOINT, "Debug / Breakpoint"),
+    (
+        INT_PRIVILEGE_VIOLATION,
+        INT_VECTOR_BASE + INT_PRIVILEGE_VIOLATION,
+        "Privilege Violation",
+    ),
+    (
+        INT_MEMORY_ACCESS_FAULT,
+        INT_VECTOR_BASE + INT_MEMORY_ACCESS_FAULT,
+        "Memory Access Fault",
+    ),
+    (INT_KEYBOARD, INT_VECTOR_BASE + INT_KEYBOARD, "Nappaimistokeskeytys"),
+    (INT_TIMER, INT_VECTOR_BASE + INT_TIMER, "Ajastinkeskeytys"),
+    (
+        INT_PROCESS_EXIT,
+        INT_VECTOR_BASE + INT_PROCESS_EXIT,
+        "Prosessin hallittu lopetus (EXIT)",
+    ),
 ]
 
 
@@ -68,10 +86,18 @@ INTERRUPTS: list[tuple[int, int, str]] = [
 # =============================================================================
 
 MEMORY_MAP: list[tuple[int, int, str]] = [
-    (0x0000, 0x0008, "Keskeytysvektoritaulukko"),
-    (0x0009, 0x00FF, "Varattu kayttojarjestelman sisaiselle kaytolle"),
+    (
+        INT_VECTOR_BASE,
+        INT_VECTOR_BASE + INT_VECTOR_COUNT - 1,
+        "Keskeytysvektoritaulukko",
+    ),
+    (
+        INT_VECTOR_BASE + INT_VECTOR_COUNT,
+        BOOT_RAM_START - 1,
+        "Varattu kayttojarjestelman sisaiselle kaytolle",
+    ),
     (BOOT_RAM_START, BOOT_RAM_END, "Bootloaderin latausalue"),
-    (0x0200, 0xF7FF, "Vapaa RAM (OS asettaa MPR:n tanne)"),
+    (BOOT_RAM_END + 1, VRAM_START - 1, "Vapaa RAM (OS asettaa MPR:n tanne)"),
     (VRAM_START, VRAM_END, "Video RAM (nayttomuisti, MMIO)"),
     (KERNEL_STACK_START, KERNEL_STACK_END, "Kernel Stack"),
 ]

@@ -25,6 +25,7 @@ Tama mahdollistaa myos dataosuuksien tarkastelun.
 from __future__ import annotations
 
 from .instruction import OPCODE_TABLE
+from .constants import WORD_MASK
 
 # Kaanteinen hakutaulukko: opcode -> (mnemonic, operand_count, privileged)
 # Kaytamme samaa formaattia kuin OPCODE_TABLE
@@ -70,7 +71,7 @@ class Disassembler:
 
         while i < len(words):
             # Lue opcode-sana
-            opcode = words[i] & 0xFFFF
+            opcode = words[i] & WORD_MASK
 
             # Yrita etsia vastaava kasky taulukosta
             meta = REVERSE_TABLE.get(opcode)
@@ -92,7 +93,7 @@ class Disassembler:
                 if i + 1 + j >= len(words):
                     break
                 # Muotoile operandi heksana
-                operands.append(f"0x{(words[i + 1 + j] & 0xFFFF):04X}")
+                operands.append(f"0x{(words[i + 1 + j] & WORD_MASK):04X}")
 
             # Rakenna tulostusrivi
             line = f"{pc:04X}: {mnemonic}"

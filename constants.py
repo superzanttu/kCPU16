@@ -18,6 +18,15 @@ prosessorin emuloinnissa. Vakiot on jaettu loogisiin ryhmiin:
 # 16-bittinen maski - rajaa kaikki arvot valille 0x0000-0xFFFF
 WORD_MASK = 0xFFFF
 
+# Etumerkkilipun bitti (ylin bitti 16-bittisessa sanassa)
+WORD_SIGN_BIT = 0x8000
+
+# Sanan bittileveysarvo (SHL/SHR-laskuissa)
+WORD_BITS = 16
+
+# 3-bitin rekisteriindeksimaski (rekisterit koodataan 3 alimmalla bitilla)
+REG_IDX_MASK = 0x7
+
 # Kokonaismuistiavaruus sanoina (2^16 = 65536 sanaa)
 MEMORY_WORDS = 0x10000
 
@@ -59,34 +68,30 @@ BOOT_RAM_END = 0x01FF  # Viimeinen bootloaderin osoite RAM:ssa
 #   Bitit 12-14: Edusta-väri (FG, 0-7, 3 bittiä)
 #   Bitit 15:    Tausta-väri (BG, 1-bittinen ensin, sitten laajennetaan)
 VRAM_START = 0xF800  # Nayttomuistin alkuosoite (vasen ylanurkka)
-VRAM_END = 0xFFCF    # Nayttomuistin loppuosoite (80x25 = 2000 sanaa)
-VRAM_WORDS = 2000    # 80 cols x 25 rows
+VRAM_END = 0xFF7F  # Nayttomuistin loppuosoite (80x24 = 1920 sanaa)
+VRAM_WORDS = 1920  # 80 cols x 24 rows
 
 # Nayton mitat merkkeina
 SCREEN_COLS = 80  # Sarakkeet (leveys)
-SCREEN_ROWS = 25  # Rivit (korkeus)
+SCREEN_ROWS = 24  # Rivit (korkeus)
 
 # =============================================================================
 # VÄRIJÄRJESTELMÄ - VRAM:N BITTIKENTÄT
 # =============================================================================
 
-# VRAM-sanan ASCII-merkki ja attribuutit
+# VRAM-sanan ASCII-merkki
 VRAM_CHAR_MASK = 0x00FF  # Bitit 0-7: ASCII-merkki
 VRAM_CHAR_SHIFT = 0
 
-# Attribuutit (Bitit 8-12) - lihavointi, kursiivi, vilkku, alleviivaus, yliviivaus
-VRAM_ATTR_BOLD = 0x0100       # Bitti 8: Lihavointi
-VRAM_ATTR_ITALIC = 0x0200    # Bitti 9: Kursiivi
-VRAM_ATTR_BLINK = 0x0400     # Bitti 10: Vilkku
-VRAM_ATTR_UNDERLINE = 0x0800  # Bitti 11: Alleviivaus
-VRAM_ATTR_STRIKETHROUGH = 0x1000  # Bitti 12: Yliviivaus
-VRAM_ATTR_MASK = 0x1F00      # Kaikki attribuutit
+# Värit (Bitit 8-13)
+VRAM_FG_MASK = 0x0700  # Bitit 8-10: Edusta-väri (FG, 3 bittiä = 8 väriä)
+VRAM_FG_SHIFT = 8
+VRAM_BG_MASK = 0x3800  # Bitit 11-13: Tausta-väri (BG, 3 bittiä = 8 väriä)
+VRAM_BG_SHIFT = 11
 
-# Värit (Bitit 12-15)
-VRAM_FG_MASK = 0x7000        # Bitit 12-14: Edusta-väri (FG, 3 bittiä = 0-7)
-VRAM_FG_SHIFT = 12
-VRAM_BG_MASK = 0x8000        # Bitti 15: Tausta-väri (BG, aluksi 1-bittinen)
-VRAM_BG_SHIFT = 15
+# Attribuutit (Bitit 14-15)
+VRAM_ATTR_BOLD = 0x4000  # Bitti 14: Lihavointi
+VRAM_ATTR_BLINK = 0x8000  # Bitti 15: Vilkkuminen
 
 # Värikoodit (0-7 tai 0-1 taustalle)
 COLOR_BLACK = 0
@@ -112,8 +117,8 @@ COLOR_NAMES = {
 
 # Kernel-pino: Kayttojarjestelman sisainen pino keskeytyksille yms.
 # Sijaitsee muistin lopussa, VRAM:n yläpuolella
-KERNEL_STACK_START = 0xFFD0  # Kernelin pino alkaa VRAM:n jälkeen
-KERNEL_STACK_END = 0xFFFF    # Muistin loppu
+KERNEL_STACK_START = 0xFF80  # Kernelin pino alkaa VRAM:n jälkeen
+KERNEL_STACK_END = 0xFFFF  # Muistin loppu
 
 # =============================================================================
 # OLETUSARVOT JARJESTELMAREKISTEREILLE
@@ -134,6 +139,29 @@ DEFAULT_TIMER_INTERVAL = 0
 
 MODE_KERNEL = 1  # Taydellat oikeudet kaikkeen muistiin ja kaikkiin kaskyihin
 MODE_USER = 0  # Rajoitetut oikeudet (MPR:n mukainen muistisuojaus)
+
+# =============================================================================
+# TALLENNUSLAITTEEN VAKIOT
+# =============================================================================
+
+# Blokin koko sanoina (256 sanaa = 512 tavua)
+STORAGE_BLOCK_SIZE = 0x0100
+
+# Blokkien maara (256 blokkia)
+STORAGE_BLOCK_COUNT = 0x0100
+
+# =============================================================================
+# SUORITUKSEN OLETUSSYKLIMAARAT
+# =============================================================================
+
+# CLI run-komennon oletussyklit
+DEFAULT_RUN_CYCLES = 10000
+
+# CLI examples --run -oletussyklit
+DEFAULT_EXAMPLE_CYCLES = 50000
+
+# REPL-tilan oletussyklit (run ilman argumenttia)
+DEFAULT_REPL_CYCLES = 1000
 
 # =============================================================================
 # TILAREKISTERIN (SR) BITTI-INDEKSIT

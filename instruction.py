@@ -88,6 +88,12 @@ OPCODE_TABLE: dict[int, tuple[str, int, bool]] = {
         False,
     ),  # READ_IND regD, regS - Lue epäsuorasti [regS] -> regD
     0x0006: ("STORE_IND", 2, False),  # STORE_IND regD, regS - Kirjoita [regD] <- regS
+    0x0007: ("READ_REL", 2, False),  # READ_REL reg, imm - Lue [FP + imm] rekisteriin
+    0x0008: (
+        "STORE_REL",
+        2,
+        False,
+    ),  # STORE_REL reg, imm - Kirjoita rekisteri [FP + imm]
     # -------------------------------------------------------------------------
     # ARITMEETTISET KASKYT (Arithmetic & Logic)
     # -------------------------------------------------------------------------
@@ -111,13 +117,27 @@ OPCODE_TABLE: dict[int, tuple[str, int, bool]] = {
     0x0016: ("OR", 2, False),  # OR  regD, regS - Bittitason TAI: regD = regD | regS
     0x0017: ("XOR", 2, False),  # XOR regD, regS - Bittitason XOR: regD = regD ^ regS
     0x0018: ("NOT", 1, False),  # NOT reg        - Bittitason NOT: reg = ~reg
-    0x0019: ("SHL", 2, False),  # SHL regD, regS - Bittisiirto vasemmalle: regD = regD << regS
-    0x001A: ("SHR", 2, False),  # SHR regD, regS - Bittisiirto oikealle:   regD = regD >> regS
+    0x0019: (
+        "SHL",
+        2,
+        False,
+    ),  # SHL regD, regS - Bittisiirto vasemmalle: regD = regD << regS
+    0x001A: (
+        "SHR",
+        2,
+        False,
+    ),  # SHR regD, regS - Bittisiirto oikealle:   regD = regD >> regS
+    0x001B: (
+        "ADC",
+        2,
+        False,
+    ),  # ADC regD, regS - Yhteenlasku carryn kanssa: regD = regD + regS + C
     # -------------------------------------------------------------------------
     # PINOKASKYT (Stack Operations)
     # -------------------------------------------------------------------------
     0x0020: ("PUSH", 1, False),  # PUSH reg - Tallenna rekisteri pinoon
     0x0021: ("POP", 1, False),  # POP reg - Hae pinosta rekisteriin
+    0x0022: ("SWSP", 2, False),  # SWSP regD, regS - regD = SP; SP = regS
     # -------------------------------------------------------------------------
     # HYPPYKASKYT (Control Flow)
     # -------------------------------------------------------------------------
@@ -128,7 +148,11 @@ OPCODE_TABLE: dict[int, tuple[str, int, bool]] = {
     0x0034: ("JNZ", 1, False),  # JNZ addr - Hyppa jos Z=0 (tulos ei ollut nolla)
     0x0035: ("JLT", 1, False),  # JLT addr - Hyppa jos N!=V (pienempi kuin)
     0x0036: ("JGT", 1, False),  # JGT addr - Hyppa jos Z=0 ja N=V (suurempi kuin)
-    0x0037: ("JLE", 1, False),  # JLE addr - Hyppa jos Z=1 tai N!=V (pienempi tai yhtasuuri)
+    0x0037: (
+        "JLE",
+        1,
+        False,
+    ),  # JLE addr - Hyppa jos Z=1 tai N!=V (pienempi tai yhtasuuri)
     0x0038: ("JGE", 1, False),  # JGE addr - Hyppa jos N=V (suurempi tai yhtasuuri)
     # -------------------------------------------------------------------------
     # KESKEYTYSKASKYT (Interrupt Handling)
@@ -150,4 +174,6 @@ OPCODE_TABLE: dict[int, tuple[str, int, bool]] = {
     0x0047: ("SMPR", 1, True),  # SMPR reg - Aseta MPR (muistisuojaraja) [KERNEL]
     0x0048: ("STMR", 1, True),  # STMR reg - Aseta TMR (ajastinvali) [KERNEL]
     0x0049: ("EXIT", 0, False),  # EXIT - Prosessin hallittu lopetus (INT 8)
+    0x004A: ("KGET", 1, False),  # KGET reg - Lue nappaimistopuskuri rekisteriin
+    0x004B: ("TSL", 2, False),  # TSL reg, addr - Test and Set Lock, atominen
 }
