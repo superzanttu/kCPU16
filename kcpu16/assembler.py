@@ -24,6 +24,10 @@ SYNTAKSI:
   - .db TAVU, TAVU, ... (esim. .db 0x41, 0x42, 255)
   - .dstr "TEKSTI" (esim. .dstr "Hello!", automaattinen null-terminaattori)
   - .at OSOITE (esim. .at 0xF800, siirtyy uuteen muistiosoitteeseen)
+  - .expect_reg REK, ARVO (esim. .expect_reg R0, 120, testaukseen)
+  - .expect_flag LIPPU, ARVO (esim. .expect_flag Z, 0, testaukseen)
+  - .expect_mem OSOITE, ARVO (esim. .expect_mem 0x0300, 0xFF, testaukseen)
+  - .expect_storage OSOITE, ARVO (tallennuslaiteen testaus)
 
 ESIMERKKI:
 ----------
@@ -269,6 +273,10 @@ class Assembler:
                 addr += len(self._parse_dstr_values(line))
                 continue
 
+            # .expect_*-direktiivit: ainoastaan testaukseen, ei tuota koodia
+            if line.lower().startswith(".expect_"):
+                continue
+
             # Muuten tama on kasky - laske sen koko
             # "ADD R0, R1" -> ["ADD", "R0", "R1"]
             mnemonic = line.replace(",", " ").split()[0].upper()
@@ -335,6 +343,10 @@ class Assembler:
             # .dstr direktiivi: emittoi null-terminoitu merkkijono
             if line.lower().startswith(".dstr"):
                 current_words.extend(self._parse_dstr_values(line))
+                continue
+
+            # .expect_*-direktiivit: testaukseen, ei tuota koodia
+            if line.lower().startswith(".expect_"):
                 continue
 
             # Parsi kasky: "ADD R0, R1" -> ["ADD", "R0", "R1"]

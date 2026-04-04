@@ -11,6 +11,7 @@ KAYTTO:
     python main.py --dsk image.dsk        # Kaynnista TUI ja lataa .dsk storageen
     python main.py program.asm --dsk d.dsk  # Molemmat
     python main.py --check program.asm    # Tarkista syntaksi (ei kaynnista TUI:a)
+    python main.py --test program.asm     # Suorita testiohjelma ja tarkista odotukset
 """
 
 from __future__ import annotations
@@ -51,6 +52,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="Tarkista .asm-tiedoston syntaksi (ei kaynnista TUI:a)",
     )
 
+    parser.add_argument(
+        "--test",
+        type=Path,
+        default=None,
+        metavar="FILE",
+        help="Suorita testiohjelma ja vertaa tulosta .expect_*-direktiiveihin",
+    )
+
     return parser
 
 
@@ -77,6 +86,17 @@ def _check_syntax(path: Path) -> int:
     return 0
 
 
+def _run_test(path: Path) -> int:
+    """Suorita .asm-testiohjelma ja vertaa tilaa .expect_*-odotuksiin.
+
+    Returns:
+        0 jos kaikki odotukset taytetty, 1 muuten tai virhetilanteessa.
+    """
+    from .testrunner import run_test
+
+    return run_test(path)
+
+
 def main(argv: list[str] | None = None) -> int:
     """CLI:n paafunktio.
 
@@ -94,6 +114,10 @@ def main(argv: list[str] | None = None) -> int:
     # --check: tarkista syntaksi ja poistu
     if args.check is not None:
         return _check_syntax(args.check)
+
+    # --test: suorita testiohjelma ja poistu
+    if args.test is not None:
+        return _run_test(args.test)
 
     # Kaynnista TUI
     try:
