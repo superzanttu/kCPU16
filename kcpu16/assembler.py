@@ -61,7 +61,7 @@ VRAM_DATA-symboli osoittaa 0xF800.
 
 from __future__ import annotations
 
-from .constants import BOOT_RAM_START, STORAGE_BLOCK_SIZE, WORD_MASK
+from .constants import ARCH_SYMBOLS, BOOT_RAM_START, STORAGE_BLOCK_SIZE, WORD_MASK
 from .instruction import OPCODE_TABLE
 
 
@@ -135,7 +135,7 @@ class Assembler:
         expanded_source, start_addr = self._pass0_expand_macros_and_origin(
             source, start_addr
         )
-        # Pass 1: Kerataan labelit
+        # Pass 1: Kerätään labelit (arkkitehtuurivakiot esitaytettyna)
         labels = self._pass1_collect_labels(expanded_source, start_addr)
         # Pass 2: Tuotetaan konekieli segmentteina
         segments = self._pass2_emit(expanded_source, labels, start_addr)
@@ -266,6 +266,9 @@ class Assembler:
         """
         labels: dict[str, int] = {}
         addr = start_addr  # Nykyinen osoite (kasvaa kaskyjen mukana)
+
+        # Esitayta arkkitehtuurivakiot - koodari voi kayttaa niita suoraan
+        labels.update({name.upper(): val for name, val in ARCH_SYMBOLS.items()})
 
         for raw_line in source.splitlines():
             # Poista kommentit (puolipiste ja kaikki sen jalkeen)
