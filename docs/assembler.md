@@ -23,15 +23,16 @@ label:                  ; Label (valinnainen, omalla rivillä tai käskyn edess�
 
 # 2. Operandien merkintätavat
 
-| Syntaksi     | Tyyppi                                | Esimerkki             |
-| ------------ | ------------------------------------- | --------------------- |
-| `R0`–`SP`    | Rekisteri (kirjainkoosta riippumaton) | `ADD R0, R1`          |
-| `42`         | Desimaali-literaali                   | `LOAD R0, 42`         |
-| `0xFF`       | Heksadesimaali-literaali              | `LOAD R0, 0xFF`       |
-| `0b1010`     | Binääri-literaali                     | `LOAD R0, 0b1010`     |
-| `0o52`       | Oktaali-literaali                     | `LOAD R0, 0o52`       |
-| `label`      | Label-viittaus                        | `JUMP loop`           |
-| `VRAM_START` | Arkkitehtuurivakio (ks. kohta 4)      | `LOAD R0, VRAM_START` |
+| Syntaksi     | Tyyppi                                  | Esimerkki              |
+| ------------ | --------------------------------------- | ---------------------- |
+| `R0`–`SP`    | Rekisteri (kirjainkoosta riippumaton)   | `ADD R0, R1`           |
+| `42`         | Desimaali-literaali                     | `LOAD R0, 42`          |
+| `0xFF`       | Heksadesimaali-literaali                | `LOAD R0, 0xFF`        |
+| `0b1010`     | Binääri-literaali                       | `LOAD R0, 0b1010`      |
+| `0o52`       | Oktaali-literaali                       | `LOAD R0, 0o52`        |
+| `label`      | Label-viittaus                          | `JUMP loop`            |
+| `VRAM_START` | Arkkitehtuurivakio (ks. kohta 4)        | `LOAD R0, VRAM_START`  |
+| `NIMI`       | Käyttäjän vakio (`.const`, ks. kohta 5) | `LOAD R0, BUFFER_SIZE` |
 
 Rekisterit: `R0`, `R1`, `R2`, `R3`, `FP`, `SP`. Kirjainkoosta riippumaton.
 
@@ -46,6 +47,7 @@ Rekisterit: `R0`, `R1`, `R2`, `R3`, `FP`, `SP`. Kirjainkoosta riippumaton.
 | `.db val, val, …`            | Tallenna raakoja 16-bittisiä sanoja suoraan muistiin                  |
 | `.dstr "teksti"`             | Tallenna null-terminoitu merkkijono (ASCII-sanat)                     |
 | `.diskblock N`               | Assemblauksen jälkeen tallenna konekieli tallennuslaitteen blokkiin N |
+| `.const NIMI, ARVO`          | Määrittele nimetty vakio (kokonaisluku tai heksa; ks. kohta 5)        |
 | `.macro NIMI`                | Aloita makromäärittely                                                |
 | `.endmacro`                  | Lopeta makromäärittely                                                |
 | `.expect_reg R, arvo`        | Testidirektiiivi: tarkista rekisterin arvo ajon jälkeen               |
@@ -92,9 +94,54 @@ Ne voidaan käyttää suoraan operandeina ilman erillistä määrittelyä.
 
 ---
 
-# 5. Esimerkit
+# 5. Käyttäjän vakiot (.const)
 
-## 5.1 Peruslaskelma
+Koodin luettavuuden parantamiseksi voi määritellä nimettyjä vakioita `.const`-direktiivillä.
+Vakio näkyy koko tiedostossa ja sitä käytetään kuten arkkitehtuurivakiota.
+
+```asm
+.const BUFFER_SIZE, 256
+.const DELAY,       0x0064
+.const MAX_INT,     0x7FFF
+```
+
+| Sääntö    | Kuvaus                                                           |
+| --------- | ---------------------------------------------------------------- |
+| Syntaksi  | `.const NIMI, ARVO` — välilyönti tai pilkku erottimena           |
+| Nimi      | Kirjainkoosta riippumaton; tallennetaan isoin kirjaimin          |
+| Arvo      | Desimaali tai `0x`-heksaliteraali; leikataan 16-bittiseen sanaan |
+| Järjestys | Voi sijaita missä tahansa kohtaa tiedostoa                       |
+
+## 5.1 Symbolien yksillöllisyys
+
+Kaikki symbolinimet ovat **globaalisti uniikkeja** kolmen nimiavaruuden kesken:
+
+| Nimiavaruus         | Lähde                                    |
+| ------------------- | ---------------------------------------- |
+| Arkkitehtuurivakiot | Automaattisesti injektoitu (ks. kohta 4) |
+| Käyttäjän vakiot    | `.const NIMI, ARVO` -direktiivi          |
+| Labelit             | `NIMI:` -määrittely koodissa             |
+
+Lisäksi rekisterinimet `R0`, `R1`, `R2`, `R3`, `FP`, `SP` ovat aina varattuja
+eikä niitä voi käyttää minkäänlaisena symbolinimenä.
+
+Kolliisiovirheiden esimerkkejä:
+
+```
+.const VRAM_START, 100     ; VIRHE: nimi on jo arkkitehtuurivakio
+.const R0, 42              ; VIRHE: nimi on rekisterin nimi
+.const MY_VAL, 10
+.const MY_VAL, 20          ; VIRHE: .const 'MY_VAL' on jo määritelty
+
+VRAM_START:                ; VIRHE: nimi on jo arkkitehtuurivakio
+MY_CONST:                  ; VIRHE: nimi on jo .const-vakio
+```
+
+---
+
+# 6. Esimerkit
+
+## 6.1 Peruslaskelma
 
 ```asm
 .origin 0x0200
@@ -108,7 +155,22 @@ start:
     HALT
 ```
 
-## 5.2 Makrojen käyttö
+## 6.2 Käyttäjän vakiot (.const)
+
+```asm
+.origin 0x0200
+
+.const BUFFER_SIZE, 256
+.const MAX_VAL,     0x00FF
+
+start:
+    LOAD  R0, BUFFER_SIZE   ; R0 = 256
+    LOAD  R1, MAX_VAL       ; R1 = 255
+    ADD   R0, R1
+    HALT
+```
+
+## 6.3 Makrojen käyttö
 
 ```asm
 .origin 0x0200
@@ -129,7 +191,7 @@ START:
     JUMP  START
 ```
 
-## 5.3 Aliohjelma (CALL/RET)
+## 6.4 Aliohjelma (CALL/RET)
 
 ```asm
 .origin 0x0200
@@ -153,7 +215,7 @@ done:
     RET
 ```
 
-## 5.4 VRAM-kirjoitus
+## 6.5 VRAM-kirjoitus
 
 ```asm
 .origin 0x0200
@@ -164,7 +226,7 @@ done:
     HALT
 ```
 
-## 5.5 Testidirektiivit
+## 6.6 Testidirektiivit
 
 ```asm
 .origin 0x0200

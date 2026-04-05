@@ -25,6 +25,7 @@ SYNTAKSI:
 - Kommentit alkavat puolipisteella: "; tama on kommentti"
 - Direktiivit:
   - .origin OSOITE (esim. .origin 0x0200)
+  - .const NIMI, ARVO (esim. .const MAX_VAL, 100 — käyttäjän vakio)
   - .macro NIMI ... .endmacro (esim. .macro LOAD_MANY ... .endmacro)
   - .db TAVU, TAVU, ... (esim. .db 0x41, 0x42, 255)
   - .dstr "TEKSTI" (esim. .dstr "Hello!", automaattinen null-terminaattori)
@@ -34,6 +35,15 @@ SYNTAKSI:
   - .expect_mem OSOITE, ARVO (esim. .expect_mem 0x0300, 0xFF, testaukseen)
   - .expect_storage OSOITE, ARVO (tallennuslaiteen testaus)
   - .diskblock N (esim. .diskblock 0, tallenna konekieli levyblokkiin N)
+
+SYMBOLINIMIEN YKSILÖLLISYYS:
+-----------------------------
+Labelien, käyttäjän vakioiden (.const) ja arkkitehtuurivakioiden nimet ovat
+globaalisti uniikkeja. Kaikki kolme nimiavaruutta ovat yhteisessä kielessä,
+joten sama nimi ei voi esiintyä missään kahdessa roolissa.
+  - Label ei voi olla sama kuin arkkitehtuurivakio tai .const-vakio
+  - .const-vakio ei voi olla sama kuin arkkitehtuurivakio tai label
+  - Rekisterinimet (R0-R3, FP, SP) ovat aina varattuja
 
 ESIMERKKI:
 ----------
@@ -137,11 +147,11 @@ class Assembler:
         """
         self._disk_block: int | None = None
         # Pass 0: Makrojen ekspansointi, .origin ja .diskblock käsittely
-        expanded_source, start_addr = self._pass0_expand_macros_and_origin(
-            source, start_addr
+        expanded_source, start_addr, user_constants = (
+            self._pass0_expand_macros_and_origin(source, start_addr)
         )
-        # Pass 1: Kerätään labelit (arkkitehtuurivakiot esitaytettyna)
-        labels = self._pass1_collect_labels(expanded_source, start_addr)
+        # Pass 1: Kerätään labelit (arkkitehtuurivakiot ja käyttäjän vakiot esitäytettynä)
+        labels = self._pass1_collect_labels(expanded_source, start_addr, user_constants)
         # Pass 2: Tuotetaan konekieli segmentteina
         segments = self._pass2_emit(expanded_source, labels, start_addr)
         # Validoi koko jos .diskblock on maaratty
@@ -156,18 +166,20 @@ class Assembler:
 
     def _pass0_expand_macros_and_origin(
         self, source: str, start_addr: int
-    ) -> tuple[str, int]:
+    ) -> tuple[str, int, dict[str, int]]:
         """
-        Pass 0: Makrojen ekspansointi ja .origin direktiivin käsittely.
+        Pass 0: Makrojen ekspansointi, .origin ja .const direktiivien käsittely.
 
-        Ensin käsitellään .origin direktiivit, sitten makrot.
+        Ensin käsitellään .origin ja .const direktiivit, sitten makrot.
+        .const-vakioista tarkistetaan syntaksi ja duplikaatit jo tässä.
+        Törmäykset arkkitehtuurivakioihin ja labeleihin tarkistetaan pass 1:ssä.
 
         Args:
             source: Assembly-lahdekoodi
             start_addr: Oletusarvoinen aloitusosoite
 
         Returns:
-            Tuple: (laajennettu_lähdekoodi, käytetty_aloitusosoite)
+            Tuple: (laajennettu_lähdekoodi, käytetty_aloitusosoite, käyttäjän_vakiot)
         """
         lines = source.splitlines()
 
@@ -185,8 +197,9 @@ class Assembler:
                     except ValueError:
                         raise ValueError(f"Invalid .origin value: {parts[1]}")
 
-        # 2. Kerää makrot
+        # 2. Kerää makrot ja .const-vakiot
         macros: dict[str, list[str]] = {}
+        user_constants: dict[str, int] = {}
         expanded_lines = []
         i = 0
         while i < len(lines):
@@ -216,6 +229,26 @@ class Assembler:
                 i += 1
                 continue
 
+            # .const direktiivi: käyttäjän nimetty vakio
+            if stripped.lower().startswith(".const"):
+                rest = stripped[len(".const") :].strip().replace(",", " ")
+                parts = rest.split()
+                if len(parts) < 2:
+                    raise ValueError(
+                        f"Invalid .const syntax: {stripped!r}  "
+                        f"(käyttö: .const NIMI, ARVO)"
+                    )
+                name = parts[0].upper()
+                try:
+                    value = int(parts[1], 0) & WORD_MASK
+                except ValueError:
+                    raise ValueError(f".const '{name}': virheellinen arvo {parts[1]!r}")
+                if name in user_constants:
+                    raise ValueError(f".const '{name}' on jo määritelty")
+                user_constants[name] = value
+                i += 1
+                continue  # Ei lisata expanded_lines:iin
+
             # Etsi .diskblock direktiivi
             if stripped.lower().startswith(".diskblock"):
                 parts = stripped.split()
@@ -228,7 +261,7 @@ class Assembler:
                 i += 1
                 continue  # Ei lisata expanded_lines:iin
 
-            # Ohita .origin ja .macro rivit tulosteesta
+            # Ohita .origin, .org, .macro ja .endmacro rivit tulosteesta
             if (
                 stripped.lower().startswith(".origin")
                 or stripped.lower().startswith(".org")
@@ -249,9 +282,11 @@ class Assembler:
             i += 1
 
         expanded_source = "\n".join(expanded_lines)
-        return expanded_source, start_addr
+        return expanded_source, start_addr, user_constants
 
-    def _pass1_collect_labels(self, source: str, start_addr: int) -> dict[str, int]:
+    def _pass1_collect_labels(
+        self, source: str, start_addr: int, user_constants: dict[str, int]
+    ) -> dict[str, int]:
         """
         Pass 1: Kerataan labelit ja lasketaan niiden muistiosoitteet.
 
@@ -259,21 +294,48 @@ class Assembler:
         kohdalle tuleva osoite. Samalla lasketaan kaskyjen koot
         jotta osoitteet ovat oikein.
 
+        Symboliavaruus on yhteinen kaikille kolmelle symboliteholле:
+        arkkitehtuurivakiot (ARCH_SYMBOLS), käyttäjän vakiot (.const)
+        ja labelit. Nimet ovat uniikkeja koko ohjelman laajuisesti.
+
         Args:
             source: Assembly-lahdekoodi
             start_addr: Aloitusosoite
+            user_constants: Käyttäjän .const-vakiot nimeltä -> arvoksi
 
         Returns:
-            Sanakirja: label-nimi -> muistiosoite
+            Sanakirja: symbolin nimi -> arvo/osoite (kaikki kolme tyyppiä)
 
         Raises:
-            ValueError: Jos sama label maaritellaan kahdesti
+            ValueError: Jos nimi törmää toiseen symboliin tai rekisteriin
         """
-        labels: dict[str, int] = {}
-        addr = start_addr  # Nykyinen osoite (kasvaa kaskyjen mukana)
+        # Arkkitehtuurivakiot (vain luku, ei voi ylikirjoittaa)
+        arch_sym: dict[str, int] = {
+            name.upper(): val for name, val in ARCH_SYMBOLS.items()
+        }
+        # Rekisterinimet ovat aina varattuja
+        reserved_reg: set[str] = set(REGISTER_TO_ID.keys())
 
-        # Esitayta arkkitehtuurivakiot - koodari voi kayttaa niita suoraan
-        labels.update({name.upper(): val for name, val in ARCH_SYMBOLS.items()})
+        # Validoi käyttäjän vakiot: ei törmäyksiä arkkitehtuurivakioihin tai rekisterinimiin
+        for name in user_constants:
+            if name in arch_sym:
+                raise ValueError(
+                    f".const '{name}': nimi on jo arkkitehtuurivakio — "
+                    f"valitse toinen nimi"
+                )
+            if name in reserved_reg:
+                raise ValueError(
+                    f".const '{name}': nimi on rekisterin nimi — "
+                    f"valitse toinen nimi"
+                )
+
+        # Rakennetaan yhteinen symbolitaulukko: arch_sym + user_constants
+        # (järjestyksellä ei ole väliä, koska nimet on jo validoitu unikeiksi)
+        symbols: dict[str, int] = {}
+        symbols.update(arch_sym)
+        symbols.update(user_constants)
+
+        addr = start_addr  # Nykyinen osoite (kasvaa kaskyjen mukana)
 
         for raw_line in source.splitlines():
             # Poista kommentit (puolipiste ja kaikki sen jalkeen)
@@ -283,12 +345,27 @@ class Assembler:
 
             # Onko tama label? (paattyy kaksoispisteeseen)
             if line.endswith(":"):
-                # "loop:" -> "LOOP"
                 label_name = line[:-1].strip().upper()
-                if label_name in labels:
-                    raise ValueError(f"Duplicate label: {label_name}")
-                # Tallenna labelin osoite
-                labels[label_name] = addr
+                # Tarkista ettei törmää mihinkään olemassa olevaan symboliin tai rekisteriin
+                if label_name in arch_sym:
+                    raise ValueError(
+                        f"Label '{label_name}': nimi on jo arkkitehtuurivakio — "
+                        f"valitse toinen nimi"
+                    )
+                if label_name in user_constants:
+                    raise ValueError(
+                        f"Label '{label_name}': nimi on jo .const-vakio — "
+                        f"valitse toinen nimi"
+                    )
+                if label_name in reserved_reg:
+                    raise ValueError(
+                        f"Label '{label_name}': nimi on rekisterin nimi — "
+                        f"valitse toinen nimi"
+                    )
+                if label_name in symbols:
+                    raise ValueError(f"Label '{label_name}' on jo määritelty")
+                # Tallenna labelin osoite yhdistettyyn symbolitaulukkoon
+                symbols[label_name] = addr
                 continue  # Label ei kuluta muistia
 
             # .at direktiivi: siirry uuteen muistiosoitteeseen (uusi segmentti)
@@ -326,7 +403,7 @@ class Assembler:
             # Kaskyn koko = 1 (opcode) + operandien maara
             addr += 1 + operand_count
 
-        return labels
+        return symbols
 
     def _pass2_emit(
         self, source: str, labels: dict[str, int], start_addr: int
@@ -356,6 +433,10 @@ class Assembler:
 
             # Ohita tyhjat rivit ja labelit
             if not line or line.endswith(":"):
+                continue
+
+            # .const direktiivit on jo käsitelty pass 0:ssa — ohita
+            if line.lower().startswith(".const"):
                 continue
 
             # .at direktiivi: tallenna nykyinen segmentti, aloita uusi
