@@ -489,6 +489,7 @@ class KCPU16TUI(App[None]):
         self.disassembler = Disassembler()
         self.dbg = DebugState()
         self.current_file: Path | None = None
+        self.current_disk_file: Path | None = None
         self.code_dir: Path = Path(__file__).resolve().parent / "code"
         self.code_dir.mkdir(exist_ok=True)
         self.storage_dir: Path = Path(__file__).resolve().parent / "storage"
@@ -780,8 +781,9 @@ class KCPU16TUI(App[None]):
     def action_save_file(self) -> None:
         """Tallenna editorin sisältö tiedostoon (Ctrl+S).
 
-        Jos tiedosto on jo avattu (current_file), tallennetaan suoraan.
-        Muuten ohjataan käyttäjä kirjoittamaan polku komentosyötteeseen.
+        Jos tiedosto on jo avattu tai aiemmin tallennettu (current_file),
+        tallennetaan suoraan. Muuten ohjataan käyttäjä kirjoittamaan
+        polku komentosyötteeseen.
         """
         if self.current_file:
             self._do_save(self.current_file)
@@ -789,7 +791,9 @@ class KCPU16TUI(App[None]):
             cmd_input = self.query_one("#cmd-input", Input)
             cmd_input.focus()
             cmd_input.value = "save "
-            self._log("Type filename after 'save' and press Enter.")
+            self._log(
+                "[yellow]Ei tallennettua tiedostoa. Kirjoita nimi komennon jälkeen.[/yellow]"
+            )
 
     def action_assemble_code(self) -> None:
         """Assembloi editorin koodi ja lataa se muistiin (Ctrl+B).
@@ -848,7 +852,9 @@ class KCPU16TUI(App[None]):
         self._log("[bold cyan]Disk (Storage):[/bold cyan]")
         self._log("  disk <block>                 Show block as hex dump")
         self._log("  disk load <path>             Load .dsk file into storage")
-        self._log("  disk save <path>             Save storage to .dsk file")
+        self._log(
+            "  disk save [path]             Save storage to .dsk (omit path to reuse last)"
+        )
         self._log("  dset <block> <offset> <value>  Write value at block + offset")
         self._log("  dfill <block> <value>        Fill entire block with value")
         self._log(
@@ -895,7 +901,20 @@ class KCPU16TUI(App[None]):
         self.current_file = None
         self.is_assembled = False
         self.addr_to_line = {}
+        self._update_editor_title()
         self._log("New document.")
+
+    def _update_editor_title(self) -> None:
+        """Päivitä Editor-paneelin alaotsikko näyttämään nykyinen tiedostonimi."""
+        pane = self.query_one("#editor-pane")
+        pane.border_subtitle = self.current_file.name if self.current_file else ""
+
+    def _update_disk_title(self) -> None:
+        """Päivitä Disassembly-paneelin alaotsikko näyttämään nykyinen levytiedosto."""
+        tabs = self.query_one("#disasm-tabs")
+        tabs.border_subtitle = (
+            self.current_disk_file.name if self.current_disk_file else ""
+        )
 
     def _do_open(self, path: Path) -> None:
         """Avaa tiedosto ja lataa sen sisältö editoriin.
@@ -909,6 +928,7 @@ class KCPU16TUI(App[None]):
             self.query_one("#editor", TextArea).text = content
             self.current_file = path
             self.is_assembled = False
+            self._update_editor_title()
             self._log(f"Opened: [bold]{path.name}[/bold] ({len(content)} chars)")
         except Exception as e:
             self._log(f"[red]Error: {e}[/red]")
@@ -924,6 +944,7 @@ class KCPU16TUI(App[None]):
             content = self.query_one("#editor", TextArea).text
             path.write_text(content, encoding="utf-8")
             self.current_file = path
+            self._update_editor_title()
             self._log(f"Saved: [bold]{path.name}[/bold]")
         except Exception as e:
             self._log(f"[red]Error: {e}[/red]")
@@ -1404,7 +1425,7 @@ class KCPU16TUI(App[None]):
             mfill <addr> <count> <value> -- Täytä muistialue
             --- Tallennustila ---
             disk <block>                 -- Näytä blokki
-            disk load|save <path>        -- Lataa/tallenna .dsk
+            disk load|save <path>        -- Lataa/tallenna .dsk (save: polku valinnainen)
             dset <block> <offset> <val>  -- Muokkaa tavu blokissa
             dfill <block> <value>        -- Täytä blokki
             mem2disk <addr> <block>      -- Kopioi muistista blokkiin
@@ -1440,7 +1461,10 @@ class KCPU16TUI(App[None]):
                     if self.current_file:
                         self._do_save(self.current_file)
                         return CommandResult(True, "")
-                    return CommandResult(False, "Usage: save <filename>")
+                    return CommandResult(
+                        False,
+                        "[yellow]Ei tallennettua tiedostoa. Käytä: save <nimi>[/yellow]",
+                    )
                 path = Path(" ".join(args))
                 if not path.suffix:
                     path = path.with_suffix(".asm")
@@ -1631,7 +1655,7 @@ class KCPU16TUI(App[None]):
         """Tallennustilan komennot: disk <block> | disk load|save <path>."""
         if not args:
             return CommandResult(
-                False, "Usage: disk <block> | disk load <file> | disk save <file>"
+                False, "Usage: disk <block> | disk load <file> | disk save [file]"
             )
         sub = args[0].lower()
         if sub == "load":
@@ -1643,17 +1667,30 @@ class KCPU16TUI(App[None]):
             if not path.is_absolute():
                 path = self.storage_dir / path
             self.machine.storage.load_from_file(path)
-            return CommandResult(True, f"[green]Disk loaded from {path}[/green]")
+            self.current_disk_file = path
+            self._update_disk_title()
+            return CommandResult(True, f"[green]Disk loaded from {path.name}[/green]")
         if sub == "save":
             if len(args) < 2:
-                return CommandResult(False, "Usage: disk save <filename>")
+                if self.current_disk_file:
+                    self.machine.storage.save_to_file(self.current_disk_file)
+                    return CommandResult(
+                        True,
+                        f"[green]Disk saved to {self.current_disk_file.name}[/green]",
+                    )
+                return CommandResult(
+                    False,
+                    "[yellow]Ei tallennettua levytiedostoa. Käytä: disk save <nimi>[/yellow]",
+                )
             path = Path(" ".join(args[1:]))
             if path.suffix.lower() != ".dsk":
                 path = path.with_suffix(".dsk")
             if not path.is_absolute():
                 path = self.storage_dir / path
             self.machine.storage.save_to_file(path)
-            return CommandResult(True, f"[green]Disk saved to {path}[/green]")
+            self.current_disk_file = path
+            self._update_disk_title()
+            return CommandResult(True, f"[green]Disk saved to {path.name}[/green]")
         block_idx = int(args[0], 0)
         data = self.machine.storage.read_block(block_idx)
         base = block_idx * self.machine.storage.block_size_words
