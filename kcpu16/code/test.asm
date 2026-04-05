@@ -1,9 +1,9 @@
-; kCPU16 Assembly
-; Ctrl+O = Open | Ctrl+B = Assemble | F7 = Step | F5 = Run
-;
-; Example:
-;   LOAD R0, #42
-;   LOAD R1, #8
-;   ADD  R0, R1
-;   HALT
-; TEST
+; testi
+
+.orgin 0x100
+
+        LOAD      r0, vram_start
+        LOAD      r1, vram_end
+
+SILMU:
+store_ind 1,r0

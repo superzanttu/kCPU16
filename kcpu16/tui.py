@@ -842,6 +842,9 @@ class KCPU16TUI(App[None]):
         )
         self._log("  asm                          Assemble, reset and load into memory")
         self._log("  check                        Syntax check only (no load)")
+        self._log(
+            "  fmt                          Format code (indent, UPPERCASE, align comments)"
+        )
         self._log("[bold cyan]CPU Control:[/bold cyan]")
         self._log("  step [n]                     Step n instructions (default 1)")
         self._log("  run  [n]                     Run to BP/halt (max n cycles)")
@@ -1451,6 +1454,7 @@ class KCPU16TUI(App[None]):
             save [path]                  -- Tallenna editori tiedostoon
             asm                          -- Käännä, reset, lataa muistiin
             check                        -- Tarkista syntaksi
+            fmt                          -- Muotoile koodi (sisentää, isot kirjaimet, kommentit)
             --- CPU-ohjaus ---
             step [n]                     -- Steppaa n käskyä (oletus 1)
             run [n]                      -- Aja breakpointiin/halttiin
@@ -1519,6 +1523,15 @@ class KCPU16TUI(App[None]):
 
             if op == "check":
                 return self._do_syntax_check()
+
+            if op == "fmt":
+                editor = self.query_one("#editor", TextArea)
+                source = editor.text
+                if not source.strip():
+                    return CommandResult(False, "[yellow]Editor is empty.[/yellow]")
+                formatted = self._format_asm_source(source)
+                editor.load_text(formatted)
+                return CommandResult(True, "[green]Code formatted.[/green]")
 
             # --- CPU-ohjaus ---
             if op == "step":
@@ -1625,6 +1638,142 @@ class KCPU16TUI(App[None]):
     # ------------------------------------------------------------------
     # Uudet komentokäsittelijät
     # ------------------------------------------------------------------
+
+    def _format_asm_source(self, source: str) -> str:
+        """Muotoile assembly-lähdekoodi hyvien käytäntöjen mukaisesti.
+
+        Säännöt:
+            - Poistetaan rivien lopusta turhat välilyönnit
+            - Peräkkäiset tyhjät rivit tiivistetään yhdeksi
+            - Johtavat ja lopussa olevat tyhjät rivit poistetaan
+            - Kommentti-rivit (alkavat ;): säilytetään sellaisenaan
+            - Labelit: ei sisennystä, UPPERCASE, muoto LABEL:
+            - Direktiivit (.at, .db, .dstr, .const, .macro, .endmacro,
+              .diskblock, .org): 8 välilyönnin sisennys
+            - Käskyt: 8 välilyönnin sisennys, mnemoniikka UPPERCASE,
+              padattu 10 merkkiin, operandeissa välilyönti pilkun jälkeen
+            - Inline-kommentit: tasattu sarakkeeseen 40
+        """
+        INDENT = "        "  # 8 spaces
+        MNE_WIDTH = 10  # mnemonic column width (padded)
+        CMT_COL = 40  # target column for inline comments
+
+        def _split_comment(line: str) -> tuple[str, str]:
+            """Erota koodi ja inline-kommentti toisistaan (string-literaalit huomioiden)."""
+            in_sq = False
+            in_dq = False
+            for i, ch in enumerate(line):
+                if ch == "'" and not in_dq:
+                    in_sq = not in_sq
+                elif ch == '"' and not in_sq:
+                    in_dq = not in_dq
+                elif ch == ";" and not in_sq and not in_dq:
+                    return line[:i], line[i:]
+            return line, ""
+
+        def _fmt_comment(comment: str) -> str:
+            """Normalisoi kommenttiteksti: '  ; teksti' → '; teksti'."""
+            text = comment.lstrip().lstrip(";").strip()
+            return f"; {text}" if text else ""
+
+        raw_lines = source.splitlines()
+        out: list[str] = []
+        blank_run = 0
+
+        for raw in raw_lines:
+            line = raw.rstrip()
+            stripped = line.strip()
+
+            # Tyhjä rivi
+            if not stripped:
+                blank_run += 1
+                if blank_run <= 1:
+                    out.append("")
+                continue
+            blank_run = 0
+
+            # Pelkkä kommentti
+            if stripped.startswith(";"):
+                out.append(line)
+                continue
+
+            code_raw, cmt_raw = _split_comment(stripped)
+            code = code_raw.strip()
+            cmt = _fmt_comment(cmt_raw) if cmt_raw else ""
+
+            if not code:
+                # Pelkkä kommentti splitin jälkeen (ei pitäisi tapahtua, mutta varmuuden vuoksi)
+                out.append(line)
+                continue
+
+            # Label (muoto SANA: ilman välilyöntejä ennen kaksoispistettä)
+            # Tuetaan myös LABEL: KÄSKY -rivit: label erotetaan omaksi riviksi
+            if ":" in code:
+                colon_idx = code.index(":")
+                potential_label = code[:colon_idx].strip()
+                if " " not in potential_label and potential_label:
+                    label_str = potential_label.upper() + ":"
+                    if cmt:
+                        out.append(f"{label_str}  {cmt}")
+                    else:
+                        out.append(label_str)
+                    # Jos labelin jälkeen on käsky samalla rivillä, lisää se seuraavaksi
+                    rest = code[colon_idx + 1 :].strip()
+                    if rest:
+                        code = rest
+                        cmt = ""
+                        # Käsitellään alla olevalla logiikalla — aseta stripped ja jatka
+                        # (tehdään fall-through kääntelemällä muuttujia)
+                        stripped = rest
+                        code_raw2, cmt_raw2 = _split_comment(rest)
+                        code = code_raw2.strip()
+                        cmt = _fmt_comment(cmt_raw2) if cmt_raw2 else ""
+                    else:
+                        continue
+
+            # Direktiivi (alkaa pisteellä)
+            if code.startswith("."):
+                parts = code.split(None, 1)
+                directive = parts[0].lower()
+                rest = parts[1] if len(parts) > 1 else ""
+                formatted = directive
+                if rest:
+                    formatted += f" {rest}"
+                if cmt:
+                    pad = max(1, CMT_COL - len(formatted))
+                    formatted += " " * pad + cmt
+                out.append(formatted)
+                continue
+
+            # Käsky
+            # Erota mnemoniikka ja operandit
+            parts = code.split(None, 1)
+            mnemonic = parts[0].upper()
+            ops = ""
+            if len(parts) > 1:
+                # Normalisoi operandien pilkut: välilyönti pilkun jälkeen
+                raw_ops = parts[1]
+                # Pilko operandit pilkuilla, trimmaa jokainen ja liitä uudelleen
+                op_list = [p.strip() for p in raw_ops.split(",")]
+                ops = ", ".join(op_list)
+
+            if ops:
+                formatted = f"{INDENT}{mnemonic:<{MNE_WIDTH}}{ops}"
+            else:
+                formatted = f"{INDENT}{mnemonic}"
+
+            if cmt:
+                pad = max(1, CMT_COL - len(formatted))
+                formatted += " " * pad + cmt
+            out.append(formatted)
+
+        # Poista johtavat ja loppuiset tyhjät rivit
+        while out and not out[0].strip():
+            out.pop(0)
+        while out and not out[-1].strip():
+            out.pop()
+
+        return "\n".join(out)
 
     def _do_syntax_check(self) -> CommandResult:
         """Tarkista editorin assembly-koodin syntaksi ilman latausta muistiin."""
