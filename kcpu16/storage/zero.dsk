@@ -1,0 +1,8 @@
+{
+  "format": "kCPU16-disk",
+  "version": 1,
+  "block_size_words": 256,
+  "block_count": 256,
+  "device_checksum": "0x7EE8CDCD",
+  "blocks": []
+}

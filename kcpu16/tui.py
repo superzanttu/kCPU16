@@ -490,6 +490,8 @@ class KCPU16TUI(App[None]):
         self.current_file: Path | None = None
         self.code_dir: Path = Path(__file__).resolve().parent / "code"
         self.code_dir.mkdir(exist_ok=True)
+        self.storage_dir: Path = Path(__file__).resolve().parent / "storage"
+        self.storage_dir.mkdir(exist_ok=True)
         self.mem_view_addr: int = BOOT_RAM_START
         self.addr_to_line: dict[int, int] = {}
         self.is_assembled: bool = False
@@ -1600,12 +1602,16 @@ class KCPU16TUI(App[None]):
             if len(args) < 2:
                 return CommandResult(False, "Usage: disk load <filename.dsk>")
             path = Path(" ".join(args[1:]))
+            if not path.is_absolute():
+                path = self.storage_dir / path
             self.machine.storage.load_from_file(path)
             return CommandResult(True, f"[green]Disk loaded from {path}[/green]")
         if sub == "save":
             if len(args) < 2:
                 return CommandResult(False, "Usage: disk save <filename.dsk>")
             path = Path(" ".join(args[1:]))
+            if not path.is_absolute():
+                path = self.storage_dir / path
             self.machine.storage.save_to_file(path)
             return CommandResult(True, f"[green]Disk saved to {path}[/green]")
         block_idx = int(args[0], 0)
