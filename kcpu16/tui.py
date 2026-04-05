@@ -851,6 +851,10 @@ class KCPU16TUI(App[None]):
         self._log("  disk save <path>             Save storage to .dsk file")
         self._log("  dset <block> <offset> <value>  Write value at block + offset")
         self._log("  dfill <block> <value>        Fill entire block with value")
+        self._log(
+            "  mem2disk <addr> <block>      Copy one block of words from mem to disk"
+        )
+        self._log("  disk2mem <block> <addr>      Copy disk block to memory")
         self._log("[bold cyan]Reset:[/bold cyan]")
         self._log("  reset                        Memory + CPU (storage intact)")
         self._log("  reset deep                   Memory + CPU + storage")
@@ -1403,6 +1407,8 @@ class KCPU16TUI(App[None]):
             disk load|save <path>        -- Lataa/tallenna .dsk
             dset <block> <offset> <val>  -- Muokkaa tavu blokissa
             dfill <block> <value>        -- Täytä blokki
+            mem2disk <addr> <block>      -- Kopioi muistista blokkiin
+            disk2mem <block> <addr>      -- Kopioi blokki muistiin
             --- Reset ---
             reset                        -- Muisti + CPU (storage säilyy)
             reset deep                   -- Muisti + CPU + storage
@@ -1498,6 +1504,12 @@ class KCPU16TUI(App[None]):
 
             if op == "dfill":
                 return self._handle_dfill_command(args)
+
+            if op == "mem2disk":
+                return self._handle_mem2disk_command(args)
+
+            if op == "disk2mem":
+                return self._handle_disk2mem_command(args)
 
             # --- Reset ---
             if op == "reset":
@@ -1674,6 +1686,36 @@ class KCPU16TUI(App[None]):
         return CommandResult(
             True,
             f"[green]Block {block_idx} filled with 0x{value:04X}[/green]",
+        )
+
+    def _handle_mem2disk_command(self, args: list[str]) -> CommandResult:
+        """Kopioi muistista yhden blokin verran sanoja levylle: mem2disk <addr> <block>."""
+        if len(args) < 2:
+            return CommandResult(False, "Usage: mem2disk <addr> <block>")
+        addr = int(args[0], 0) & WORD_MASK
+        block_idx = int(args[1], 0)
+        bsw = self.machine.storage.block_size_words
+        data = [self.machine.memory.read(addr + i) for i in range(bsw)]
+        self.machine.storage.write_block(block_idx, data)
+        return CommandResult(
+            True,
+            f"[green]Mem 0x{addr:04X}–0x{(addr + bsw - 1) & WORD_MASK:04X} "
+            f"→ disk block {block_idx}.[/green]",
+        )
+
+    def _handle_disk2mem_command(self, args: list[str]) -> CommandResult:
+        """Kopioi levyblokki muistiin: disk2mem <block> <addr>."""
+        if len(args) < 2:
+            return CommandResult(False, "Usage: disk2mem <block> <addr>")
+        block_idx = int(args[0], 0)
+        addr = int(args[1], 0) & WORD_MASK
+        bsw = self.machine.storage.block_size_words
+        data = self.machine.storage.read_block(block_idx)
+        for i, word in enumerate(data):
+            self.machine.memory.write(addr + i, word)
+        return CommandResult(
+            True,
+            f"[green]Disk block {block_idx} → mem 0x{addr:04X}–0x{(addr + bsw - 1) & WORD_MASK:04X}.[/green]",
         )
 
     def _handle_reset_command(self, args: list[str]) -> CommandResult:
