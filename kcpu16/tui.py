@@ -433,14 +433,11 @@ class KCPU16TUI(App[None]):
 
     /* ---- Bottom bar: Flags+CPU | Registers ---- */
     #bottom-bar {
-        dock: bottom;
         height: auto;
         max-height: 14;
-        layout: grid;
-        grid-size: 3;
-        grid-columns: 142 28 1fr;
     }
     #flags-pane {
+        width: 30;
         border: solid $warning-darken-1;
         border-title-color: $accent;
         padding: 0 1;
@@ -578,18 +575,15 @@ class KCPU16TUI(App[None]):
                         id="cmd-input",
                     )
 
-            # Right column: Editor (full height)
+            # Right column: Editor + bottom info
             with Vertical(id="editor-pane"):
                 yield TextArea("", language=None, show_line_numbers=True, id="editor")
-
-        # Bottom bar: Flags+CPU | Registers
-        with Horizontal(id="bottom-bar"):
-            yield Static("", id="bottom-spacer")
-            with Vertical(id="flags-pane"):
-                yield Static(id="flags-content")
-                yield Static(id="cpu-content")
-            with Vertical(id="regs-pane"):
-                yield Static(id="regs-content")
+                with Horizontal(id="bottom-bar"):
+                    with Vertical(id="flags-pane"):
+                        yield Static(id="flags-content")
+                        yield Static(id="cpu-content")
+                    with Vertical(id="regs-pane"):
+                        yield Static(id="regs-content")
 
     # ------------------------------------------------------------------
     # Alustus
