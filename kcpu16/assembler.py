@@ -187,9 +187,12 @@ class Assembler:
         # 1. Etsi .origin direktiivi
         for line in lines:
             stripped = line.split(";", 1)[0].strip()
-            if stripped.lower().startswith(".origin") or stripped.lower().startswith(
-                ".org"
-            ):
+            sl = stripped.lower()
+            # Täsmällinen tarkistus: direktiivi on joko yksin tai sen jälkeen tulee välilyönti
+            # (estää .orgin-tyyppiset kirjoitusvirheet menemästä läpi hiljaa)
+            is_origin = sl == ".origin" or sl.startswith(".origin ")
+            is_org = sl == ".org" or sl.startswith(".org ")
+            if is_origin or is_org:
                 # Parse: ".origin 0x0200" -> 0x0200
                 parts = stripped.split()
                 if len(parts) > 1:
@@ -263,9 +266,12 @@ class Assembler:
                 continue  # Ei lisata expanded_lines:iin
 
             # Ohita .origin, .org, .macro ja .endmacro rivit tulosteesta
+            sl = stripped.lower()
             if (
-                stripped.lower().startswith(".origin")
-                or stripped.lower().startswith(".org")
+                sl == ".origin"
+                or sl.startswith(".origin ")
+                or sl == ".org"
+                or sl.startswith(".org ")
                 or stripped.lower().startswith(".macro")
                 or stripped.lower().startswith(".endmacro")
             ):
