@@ -56,18 +56,14 @@ priv_handler:
     READ_IND R1, R0     ; R1 = old_PC
     READ_IND R2, R1     ; R2 = opcode
 
-    ; Käskyn koko: SMPR(0x47) ja STMR(0x48) ovat 2 sanaa, muut 1
-    LOAD  R0, 1         ; oletus 1 sana
-    LOAD  R1, 0x0047
-    CMP   R2, R1
-    JZ    ph_two
-    LOAD  R1, 0x0048
-    CMP   R2, R1
-    JZ    ph_two
-    JUMP  ph_skip
-ph_two:
-    LOAD  R0, 2         ; 2 sanan käsky
-ph_skip:
+    ; Käskyn koko OPS-kentästä (bitit 7:6): size = 1 + OPS
+    LOAD  R0, 6
+    SHR   R2, R0        ; R2 = opcode >> 6
+    LOAD  R0, 3
+    AND   R2, R0        ; R2 = OPS kenttä (0-2)
+    LOAD  R0, 1
+    ADD   R0, R2        ; R0 = käskyn koko sanoina (1 + OPS)
+
     ; Lisää käskyn koko old_PC:hen
     LOAD  R1, 5
     ADD   R1, SP        ; R1 = SP + 5 = &old_PC

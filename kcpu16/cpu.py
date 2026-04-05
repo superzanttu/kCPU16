@@ -61,7 +61,13 @@ from .exceptions import (
     PrivilegeViolationError,
     StackOverflowError,
 )
-from .instruction import DecodedInstruction, OPCODE_TABLE
+from .instruction import (
+    DecodedInstruction,
+    OPCODE_TABLE,
+    OPCODE_PRIV_SHIFT,
+    OPCODE_NOPS_SHIFT,
+    OPCODE_NOPS_MASK,
+)
 from .memory import Memory
 from .registers import RegisterFile
 
@@ -224,12 +230,16 @@ class CPU:
         # Lue opcode-sana
         opcode = self.memory.read(pc)
 
-        # Etsi vastaava kasky taulukosta
+        # Etsi mnemonic taulukosta (taulukko on opcode -> (mnemonic, nops, priv))
         if opcode not in OPCODE_TABLE:
             raise InvalidOpcodeError(f"Unknown opcode: 0x{opcode:04X}")
 
-        # Pura metatiedot taulukosta
-        mnemonic, operand_count, privileged = OPCODE_TABLE[opcode]
+        mnemonic, operand_count, _ = OPCODE_TABLE[opcode]
+
+        # Johda operandien maara ja privilege suoraan opcode-biteista
+        # (OPS-kentta bits 7:6, P-bitti bit 15)
+        operand_count = (opcode >> OPCODE_NOPS_SHIFT) & OPCODE_NOPS_MASK
+        privileged = bool((opcode >> OPCODE_PRIV_SHIFT) & 1)
 
         # Lue operandit perakkaisista muistiosoitteista
         operands: list[int] = []

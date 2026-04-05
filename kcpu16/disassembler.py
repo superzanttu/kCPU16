@@ -41,7 +41,7 @@ class Disassembler:
 
     Example:
         >>> dis = Disassembler()
-        >>> words = [0x0001, 0x0000, 0x002A, 0x0044]
+        >>> words = [0x1080, 0x0000, 0x002A, 0xF000]
         >>> print(dis.disassemble(words))
         0000: LOAD 0x0000, 0x002A
         0003: HALT
