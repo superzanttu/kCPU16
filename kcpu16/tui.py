@@ -81,6 +81,7 @@ from .disassembler import Disassembler
 from .instruction import OPCODE_TABLE
 from .machine import KCPU16Machine
 from .specs import format_arch_spec_report
+from . import __version__
 
 
 # ---------------------------------------------------------------------------
@@ -615,7 +616,7 @@ class KCPU16TUI(App[None]):
             ";   HALT\n"
         )
 
-        self._log("[bold]kCPU16 Debugger[/bold] ready.")
+        self._log(f"[bold]kCPU16 Debugger[/bold] v{__version__} ready.")
         self._log(
             "[dim]F7/F10=Step  F5=Run  F2=Breakpoint  "
             "Ctrl+B=Assemble  Ctrl+O=Open[/dim]"
@@ -1407,6 +1408,8 @@ class KCPU16TUI(App[None]):
                 if not args:
                     return CommandResult(False, "Usage: load <filename>")
                 path = Path(" ".join(args))
+                if not path.suffix:
+                    path = path.with_suffix(".asm")
                 if not path.is_absolute():
                     path = self.code_dir / path
                 self._do_open(path)
@@ -1497,6 +1500,9 @@ class KCPU16TUI(App[None]):
 
             if op == "spec":
                 return CommandResult(True, format_arch_spec_report())
+
+            if op == "version":
+                return CommandResult(True, f"kCPU16 v{__version__}")
 
             return CommandResult(False, f"Unknown: {op}. Type 'help'.")
         except Exception as exc:
@@ -1604,16 +1610,20 @@ class KCPU16TUI(App[None]):
         sub = args[0].lower()
         if sub == "load":
             if len(args) < 2:
-                return CommandResult(False, "Usage: disk load <filename.dsk>")
+                return CommandResult(False, "Usage: disk load <filename>")
             path = Path(" ".join(args[1:]))
+            if path.suffix.lower() != ".dsk":
+                path = path.with_suffix(".dsk")
             if not path.is_absolute():
                 path = self.storage_dir / path
             self.machine.storage.load_from_file(path)
             return CommandResult(True, f"[green]Disk loaded from {path}[/green]")
         if sub == "save":
             if len(args) < 2:
-                return CommandResult(False, "Usage: disk save <filename.dsk>")
+                return CommandResult(False, "Usage: disk save <filename>")
             path = Path(" ".join(args[1:]))
+            if path.suffix.lower() != ".dsk":
+                path = path.with_suffix(".dsk")
             if not path.is_absolute():
                 path = self.storage_dir / path
             self.machine.storage.save_to_file(path)
