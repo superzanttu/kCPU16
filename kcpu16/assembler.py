@@ -11,12 +11,17 @@ Pass 2: Luodaan konekieli korvaamalla labelit osoitteilla
 
 SYNTAKSI:
 ---------
-- Yksi kasky per rivi
-- Labelit omalla rivillaan, paattyvat kaksoispisteeseen: "loop:"
-- Tokenit erotetaan valilyonnilla/pilkulla
-- Rekisterit: R0, R1, R2, R3, FP, SP (case-insensitive)
-- Numerot: 42, 0xFF, #42, #0xFF, $F800
+- Yksi käsky per rivi
+- Labelit omalla rivillaan, päättyvät kaksoispisteeseen: "loop:"
+- Operandit erotetaan välilyönnillä tai pilkulla
+- Rekisterit: R0, R1, R2, R3, FP, SP (ei merkkisensitiiviä)
+- Numeroliteraalit:
+    - Desimaali:       42, 255, 65535
+    - Heksadesimaali:  0xFF, 0xF800
+    - Binääri:         0b1010, 0b11001100
+    - Oktaali:         0o52
 - Label-viittaukset suoraan operandina: "JUMP loop"
+- Arkkitehtuurivakiot suoraan operandina: "LOAD R0, VRAM_START"
 - Kommentit alkavat puolipisteella: "; tama on kommentti"
 - Direktiivit:
   - .origin OSOITE (esim. .origin 0x0200)
@@ -406,24 +411,31 @@ class Assembler:
         """
         Parsi yksittainen operandi.
 
-        Tunnistetaan:
-        - Rekisterinimet: R0, R1, R2, R3, FP, SP
-        - Labelit: loop, DONE, jne.
-        - Numeroliteraalit: 42, 0xFF, #42, #0xFF
+        Tunnistetaan tässä järjestyksessä:
+        1. Rekisterinimet: R0, R1, R2, R3, FP, SP (case-insensitive)
+        2. Labelit ja arkkitehtuurivakiot: loop, VRAM_START, jne.
+        3. Numeroliteraalit:
+           - Desimaali:       42, 255, 65535
+           - Heksadesimaali:  0xFF, 0xF800
+           - Binääri:         0b1010, 0b11001100
+           - Oktaali:         0o52
 
         Args:
-            token: Operandin teksti (esim. "R0", "loop", "42")
-            labels: Tunnetut labelit ja niiden osoitteet
+            token: Operandin teksti (esim. "R0", "loop", "42", "0xFF")
+            labels: Tunnetut labelit ja osoitteet
 
         Returns:
             Numeerinen arvo operandille
+
+        Raises:
+            ValueError: Jos token ei ole rekisteri, label eikä tunnistettu luku
 
         Example:
             >>> asm._parse_operand("R0", {})
             0
             >>> asm._parse_operand("loop", {"LOOP": 0x0100})
             256
-            >>> asm._parse_operand("#0xFF", {})
+            >>> asm._parse_operand("0xFF", {})
             255
         """
         upper = token.upper()
@@ -432,17 +444,17 @@ class Assembler:
         if upper in REGISTER_TO_ID:
             return REGISTER_TO_ID[upper]
 
-        # Onko label?
+        # Onko label tai arkkitehtuurivakio?
         if upper in labels:
             return labels[upper]
 
-        # Poista mahdollinen #-etuliite (immediate-merkki)
-        if upper.startswith("#"):
-            upper = upper[1:]
-
-        # Muunna numeroksi (tue 0x, 0b, ja desimaali)
-        # int(x, 0) tunnistaa formaatin automaattisesti
-        return int(upper, 0)
+        # Numeroliteraali: tue 0x, 0b, 0o ja desimaali
+        try:
+            return int(upper, 0)
+        except ValueError:
+            raise ValueError(
+                f"Tuntematon operandi: '{token}' " f"(ei rekisteri, label eikä luku)"
+            )
 
     def _parse_db_values(self, line: str) -> list[int]:
         """

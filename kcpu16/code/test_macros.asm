@@ -4,9 +4,9 @@
 .origin 0x0300
 
 .macro INIT_REGS
-    LOAD R0, #10
-    LOAD R1, #20
-    LOAD R2, #0
+    LOAD R0, 10
+    LOAD R1, 20
+    LOAD R2, 0
 .endmacro
 
 .macro ADD_THREE
@@ -18,8 +18,11 @@ START:
     ; Initialize registers
     INIT_REGS
 
-    ; Add values
-    ADD R2, #5
+    ; Add immediate 5 to R2 via temporary register
+    LOAD R3, 5
+    ADD  R2, R3
+
+    ; Add all three: R0 = R0 + R1 + R2 = 10 + 20 + 5 = 35
     ADD_THREE
 
     ; Store result in R3

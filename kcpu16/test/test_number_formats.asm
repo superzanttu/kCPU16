@@ -1,11 +1,11 @@
 ; =============================================================
-; TESTI: Lukuformaatit (decimal, hex, binary, #-prefix)
+; TESTI: Lukuformaatit (decimal, hex, binary, octal)
 ; =============================================================
-; Testaa kaikki assemblerin tukemat lukuformaatit:
-; - Desimaali: 42
+; Testaa kaikki assemblerin tukemat numeroliteraalimuodot:
+; - Desimaali:      42
 ; - Heksadesimaali: 0xFF
-; - Binääri: 0b1010
-; - #-etuliite: #42, #0xFF, #0b1010
+; - Binääri:        0b1010
+; - Oktaali:        0o52
 ; =============================================================
 
 .origin 0x0200
@@ -19,12 +19,12 @@ LOAD  R1, 0xAB
 ; Binääri
 LOAD  R2, 0b11001100
 
-; #-etuliitteellä (immediate marker)
-LOAD  R3, #50
+; Oktaali (sama arvo eri muodossa)
+LOAD  R3, 0o62        ; 0o62 == 50 (desimaali)
 
-; #-etuliite + hex
-STORE R0, 0x0300
-READ  R1, #0x0300      ; sama kuin READ R1, 0x0300 (# ei muuta arvoa)
+; Muistioperaatiot eri formaateilla
+STORE R0, 0x0300      ; mem[0x0300] = 100 (hex-osoite)
+READ  R1, 0x0300      ; R1 = mem[0x0300] = 100
 
 ; Nolla eri formaateissa
 LOAD  R0, 0
