@@ -28,6 +28,7 @@ SYNTAKSI:
   - .expect_flag LIPPU, ARVO (esim. .expect_flag Z, 0, testaukseen)
   - .expect_mem OSOITE, ARVO (esim. .expect_mem 0x0300, 0xFF, testaukseen)
   - .expect_storage OSOITE, ARVO (tallennuslaiteen testaus)
+  - .diskblock N (esim. .diskblock 0, tallenna konekieli levyblokkiin N)
 
 ESIMERKKI:
 ----------
@@ -60,7 +61,7 @@ VRAM_DATA-symboli osoittaa 0xF800.
 
 from __future__ import annotations
 
-from .constants import BOOT_RAM_START, WORD_MASK
+from .constants import BOOT_RAM_START, STORAGE_BLOCK_SIZE, WORD_MASK
 from .instruction import OPCODE_TABLE
 
 
@@ -103,6 +104,11 @@ class Assembler:
         [(256, [1, 0, 42, 68])]  # [(start_addr, [LOAD, R0=0, 42, HALT])]
     """
 
+    @property
+    def disk_block(self) -> int | None:
+        """Palattaa .diskblock-direktiivin blokkiindeksin tai None."""
+        return self._disk_block
+
     def assemble(
         self, source: str, start_addr: int = BOOT_RAM_START
     ) -> list[tuple[int, list[int]]]:
@@ -124,14 +130,24 @@ class Assembler:
             >>> asm.assemble("LOAD R0, 10\\nHALT", start_addr=0x0200)
             [(512, [1, 0, 10, 68])]
         """
-        # Pass 0: Makrojen ekspansointi ja .origin käsittely
+        self._disk_block: int | None = None
+        # Pass 0: Makrojen ekspansointi, .origin ja .diskblock käsittely
         expanded_source, start_addr = self._pass0_expand_macros_and_origin(
             source, start_addr
         )
         # Pass 1: Kerataan labelit
         labels = self._pass1_collect_labels(expanded_source, start_addr)
         # Pass 2: Tuotetaan konekieli segmentteina
-        return self._pass2_emit(expanded_source, labels, start_addr)
+        segments = self._pass2_emit(expanded_source, labels, start_addr)
+        # Validoi koko jos .diskblock on maaratty
+        if self._disk_block is not None:
+            total = sum(len(w) for _, w in segments)
+            if total > STORAGE_BLOCK_SIZE:
+                raise ValueError(
+                    f".diskblock: koodi on liian suuri blokkiin "
+                    f"({total} sanaa, max {STORAGE_BLOCK_SIZE})"
+                )
+        return segments
 
     def _pass0_expand_macros_and_origin(
         self, source: str, start_addr: int
@@ -194,6 +210,18 @@ class Assembler:
                     i += 1
                 i += 1
                 continue
+
+            # Etsi .diskblock direktiivi
+            if stripped.lower().startswith(".diskblock"):
+                parts = stripped.split()
+                if len(parts) < 2:
+                    raise ValueError(f"Invalid .diskblock syntax: {stripped}")
+                try:
+                    self._disk_block = int(parts[1], 0)
+                except ValueError:
+                    raise ValueError(f"Invalid .diskblock block number: {parts[1]}")
+                i += 1
+                continue  # Ei lisata expanded_lines:iin
 
             # Ohita .origin ja .macro rivit tulosteesta
             if (

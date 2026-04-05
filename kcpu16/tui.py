@@ -957,6 +957,20 @@ class KCPU16TUI(App[None]):
                 f"[green]Assembled: {total_words} words in {len(segments)} "
                 f"segment(s) at 0x{self.machine.regs.pc:04X}. F7=Step, F5=Run.[/green]"
             )
+            # .diskblock-direktiivi: kirjoita konekieli levyblokkiin
+            blk = self.assembler.disk_block
+            if blk is not None:
+                blk_size = self.machine.storage.block_size_words
+                code: list[int] = []
+                for _, words in segments:
+                    code.extend(words)
+                # Täytä loppublokki nollilla
+                code = (code + [0] * blk_size)[:blk_size]
+                self.machine.storage.write_block(blk, code)
+                self._log(
+                    f"[cyan].diskblock: {total_words} sanaa tallennettu "
+                    f"levyblokkiin {blk}.[/cyan]"
+                )
             self._update_exec_line()
             self._refresh_all()
         except Exception as e:
