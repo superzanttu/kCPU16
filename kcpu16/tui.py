@@ -458,7 +458,7 @@ class KCPU16TUI(App[None]):
         Binding("f7", "step_once", "Step F7", priority=True),
         Binding("f10", "step_once", "Step", priority=True),
         Binding("ctrl+r", "reset_machine", "Reset", priority=True),
-        Binding("ctrl+o", "open_file", "Open", priority=True),
+        Binding("ctrl+o", "open_file", "Load", priority=True),
         Binding("ctrl+s", "save_file", "Save", priority=True),
         Binding("ctrl+b", "assemble_code", "Asm ^B", priority=True),
         Binding("f9", "clear_screen", "Clr F9", priority=True),
@@ -522,7 +522,7 @@ class KCPU16TUI(App[None]):
         """
         # Toolbar
         with Horizontal(id="toolbar"):
-            yield Button("Open", id="btn-open", variant="default")
+            yield Button("Load", id="btn-open", variant="default")
             yield Button("Save", id="btn-save", variant="default")
             yield Button("New", id="btn-new", variant="default")
             yield Static(" ", classes="sep")
@@ -766,10 +766,10 @@ class KCPU16TUI(App[None]):
         """
         cmd_input = self.query_one("#cmd-input", Input)
         path_str = cmd_input.value.strip()
-        if not path_str or path_str.startswith("open "):
+        if not path_str or path_str.startswith("load "):
             cmd_input.focus()
-            cmd_input.value = "open "
-            self._log("Type filename after 'open' and press Enter.")
+            cmd_input.value = "load "
+            self._log("Type filename after 'load' and press Enter.")
             return
         path = Path(path_str)
         if not path.is_absolute():
@@ -825,8 +825,10 @@ class KCPU16TUI(App[None]):
         self._log("  Ctrl+Q  Quit            F1      This help")
         self._log("")
         self._log("[bold cyan]File & Assembly:[/bold cyan]")
-        self._log("  open <filename>              Load .asm from code/ directory")
-        self._log("  save [filename]              Save editor to code/ directory")
+        self._log("  load <filename>              Load .asm from code/ directory")
+        self._log(
+            "  save [filename]              Save editor to code/ directory (adds .asm if no suffix)"
+        )
         self._log("  asm                          Assemble, reset and load into memory")
         self._log("  check                        Syntax check only (no load)")
         self._log("[bold cyan]CPU Control:[/bold cyan]")
@@ -1365,7 +1367,7 @@ class KCPU16TUI(App[None]):
 
         Komennot:
             --- Tiedostot & assembly ---
-            open <path>                  -- Avaa .asm tiedosto editoriin
+            load <path>                  -- Avaa .asm tiedosto editoriin
             save [path]                  -- Tallenna editori tiedostoon
             asm                          -- Käännä, reset, lataa muistiin
             check                        -- Tarkista syntaksi
@@ -1401,9 +1403,9 @@ class KCPU16TUI(App[None]):
 
         try:
             # --- Tiedostot & assembly ---
-            if op == "open":
+            if op == "load":
                 if not args:
-                    return CommandResult(False, "Usage: open <filename>")
+                    return CommandResult(False, "Usage: load <filename>")
                 path = Path(" ".join(args))
                 if not path.is_absolute():
                     path = self.code_dir / path
@@ -1417,6 +1419,8 @@ class KCPU16TUI(App[None]):
                         return CommandResult(True, "")
                     return CommandResult(False, "Usage: save <filename>")
                 path = Path(" ".join(args))
+                if not path.suffix:
+                    path = path.with_suffix(".asm")
                 if not path.is_absolute():
                     path = self.code_dir / path
                 self._do_save(path)
