@@ -28,7 +28,8 @@ SYNTAKSI:
   - .const NIMI, ARVO (esim. .const MAX_VAL, 100 — käyttäjän vakio)
   - .macro NIMI ... .endmacro (esim. .macro LOAD_MANY ... .endmacro)
   - .db TAVU, TAVU, ... (esim. .db 0x41, 0x42, 255)
-  - .dstr "TEKSTI" (esim. .dstr "Hello!", automaattinen null-terminaattori)
+  - .dstr "TEKSTI" tai .dstr 'TEKSTI' (esim. .dstr "Hello!", null-terminoitu;
+              escape-sekvenssit: \\\\ \\" \\' \\n \\t \\0)
   - .at OSOITE (esim. .at 0xF800, siirtyy uuteen muistiosoitteeseen)
   - .expect_reg REK, ARVO (esim. .expect_reg R0, 120, testaukseen)
   - .expect_flag LIPPU, ARVO (esim. .expect_flag Z, 0, testaukseen)
@@ -573,25 +574,68 @@ class Assembler:
         sen ASCII-arvoksi (bitit 0–7) ja lisää automaattisesti
         null-terminaattorin (0x00) loppuun.
 
+        Tuetut lainausmerkit: "..." ja '...'
+        Tuetut escape-sekvenssit:
+            \\  → kenoviiva
+            \"  → lainausmerkki (")
+            \'  → heittomerkki (')
+            \n  → rivinvaihto (0x0A)
+            \t  → tabulaattori (0x09)
+            \0  → nollatavu (0x00)
+
         Args:
-            line: Direktiiviriivi, esim. '.dstr "Hello!"'
+            line: Direktiiviriivi, esim. '.dstr "Hello!"' tai ".dstr 'Hi'"
 
         Returns:
             Lista kokonaislukuja (ASCII-arvot + 0), kukin väliltä 0–255.
 
         Raises:
-            ValueError: Jos lainausmerkkejä ei löydy.
+            ValueError: Jos lainausmerkkejä ei löydy tai syntaksi on virheellinen.
 
         Example:
             >>> asm._parse_dstr_values('.dstr "Hi"')
             [72, 105, 0]
+            >>> asm._parse_dstr_values(".dstr 'Hi'")
+            [72, 105, 0]
+            >>> asm._parse_dstr_values('.dstr "say \\"hi\\""')
+            [115, 97, 121, 32, 34, 104, 105, 34, 0]
         """
-        # Poista ".dstr" etuliite
         rest = line[5:].strip()
-        # Etsi lainausmerkkien välinen teksti
-        start = rest.find('"')
-        end = rest.rfind('"')
-        if start == -1 or start == end:
+        if not rest or rest[0] not in ('"', "'"):
             raise ValueError(f"Invalid .dstr syntax (missing quotes): {line}")
-        text = rest[start + 1 : end]
-        return [ord(c) & 0xFF for c in text] + [0x00]
+
+        quote_char = rest[0]
+        chars: list[int] = []
+        i = 1
+        closed = False
+
+        _escapes: dict[str, int] = {
+            "\\": ord("\\"),
+            '"': ord('"'),
+            "'": ord("'"),
+            "n": 0x0A,
+            "t": 0x09,
+            "0": 0x00,
+        }
+
+        while i < len(rest):
+            c = rest[i]
+            if c == "\\":
+                if i + 1 >= len(rest):
+                    raise ValueError(f"Invalid .dstr: unterminated escape in: {line}")
+                esc = rest[i + 1]
+                if esc not in _escapes:
+                    raise ValueError(f"Unknown .dstr escape '\\{esc}' in: {line}")
+                chars.append(_escapes[esc])
+                i += 2
+            elif c == quote_char:
+                closed = True
+                break
+            else:
+                chars.append(ord(c) & 0xFF)
+                i += 1
+
+        if not closed:
+            raise ValueError(f"Invalid .dstr syntax (unterminated string): {line}")
+
+        return chars + [0x00]

@@ -40,19 +40,19 @@ Rekisterit: `R0`, `R1`, `R2`, `R3`, `FP`, `SP`. Kirjainkoosta riippumaton.
 
 # 3. Direktiivit
 
-| Direktiivi                   | Kuvaus                                                                |
-| ---------------------------- | --------------------------------------------------------------------- |
-| `.origin addr` / `.org addr` | Aseta koodin aloitusosoite (oletus: 0x0100)                           |
-| `.at addr`                   | Siirry uuteen muistiosoitteeseen (uusi koodisegmentti)                |
-| `.db val, val, …`            | Tallenna raakoja 16-bittisiä sanoja suoraan muistiin                  |
-| `.dstr "teksti"`             | Tallenna null-terminoitu merkkijono (ASCII-sanat)                     |
-| `.diskblock N`               | Assemblauksen jälkeen tallenna konekieli tallennuslaitteen blokkiin N |
-| `.const NIMI, ARVO`          | Määrittele nimetty vakio (kokonaisluku tai heksa; ks. kohta 5)        |
-| `.macro NIMI`                | Aloita makromäärittely                                                |
-| `.endmacro`                  | Lopeta makromäärittely                                                |
-| `.expect_reg R, arvo`        | Testidirektiiivi: tarkista rekisterin arvo ajon jälkeen               |
-| `.expect_flag F, arvo`       | Testidirektiiivi: tarkista tipalipun arvo ajon jälkeen                |
-| `.expect_mem addr, arvo`     | Testidirektiiivi: tarkista muistipaikan arvo ajon jälkeen             |
+| Direktiivi                          | Kuvaus                                                                     |
+| ----------------------------------- | -------------------------------------------------------------------------- |
+| `.origin addr` / `.org addr`        | Aseta koodin aloitusosoite (oletus: 0x0100)                                |
+| `.at addr`                          | Siirry uuteen muistiosoitteeseen (uusi koodisegmentti)                     |
+| `.db val, val, …`                   | Tallenna raakoja 16-bittisiä sanoja suoraan muistiin                       |
+| `.dstr "teksti"` / `.dstr 'teksti'` | Tallenna null-terminoitu merkkijono; escape: `\\` `\"` `\'` `\n` `\t` `\0` |
+| `.diskblock N`                      | Assemblauksen jälkeen tallenna konekieli tallennuslaitteen blokkiin N      |
+| `.const NIMI, ARVO`                 | Määrittele nimetty vakio (kokonaisluku tai heksa; ks. kohta 5)             |
+| `.macro NIMI`                       | Aloita makromäärittely                                                     |
+| `.endmacro`                         | Lopeta makromäärittely                                                     |
+| `.expect_reg R, arvo`               | Testidirektiiivi: tarkista rekisterin arvo ajon jälkeen                    |
+| `.expect_flag F, arvo`              | Testidirektiiivi: tarkista tipalipun arvo ajon jälkeen                     |
+| `.expect_mem addr, arvo`            | Testidirektiiivi: tarkista muistipaikan arvo ajon jälkeen                  |
 
 ---
 
