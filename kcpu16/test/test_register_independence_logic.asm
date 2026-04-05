@@ -40,7 +40,7 @@
 
 ; Tarkista rekisteriarvot
 .expect_reg   R0, 0x3D3F      ; SHR-tulos
-.expect_reg   R1, 0xAF34      ; SHL-tulos (0xABCD << 2 = 0x2AF34 → & 0xFFFF = 0xAF34)
+.expect_reg   R1, 0xAF34      ; SHL-tulos (0xABCD=43981 << 2 = 175924 = 0x2AF34, katkaistaan 16 bittiin → 0xAF34)
 .expect_reg   R2, 0x0907      ; NOT-tulos (~0xF6F8 = 0x0907)
 .expect_reg   R3, 2           ; R3 muuttui vain kun teimme LOAD R3, 2
 .expect_reg   FP, 0x0400      ; FP muuttumaton kaikkien operaatioiden läpi

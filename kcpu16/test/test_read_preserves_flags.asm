@@ -4,7 +4,7 @@
 ;   LOAD reg, [addr]      (READ suora)
 ;   LOAD reg, [regS]      (READ_IND epäsuora)
 ;   LOAD reg, [FP+imm]    (READ_REL FP-suhteellinen)
-; Kun liput ovat 1 ennen LATEe, ne pysyvät 1:nä sen jälkeen.
+; Kun liput ovat 1 ennen LOAD-käskyä, ne pysyvät 1:nä sen jälkeen.
 ; =============================================================================
 
         .origin 0x0200
