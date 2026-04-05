@@ -1,6 +1,6 @@
 # kCPU16 Arkkitehtuurispesifikaatio
 
-Versio 4.1
+Versio 5.0
 
 Tämä dokumentti on kCPU16-prosessorin virallinen tekninen spesifikaatio. Se sisältää kaikki tarvittavat tiedot emulaattorin rakentamiseksi tai assembly-ohjelmien kirjoittamiseksi.
 
@@ -10,15 +10,15 @@ Tämä dokumentti on kCPU16-prosessorin virallinen tekninen spesifikaatio. Se si
 
 kCPU16 on 16-bittinen von Neumann -arkkitehtuuriin perustuva prosessori.
 
-| Ominaisuus            | Arvo                                            |
-| --------------------- | ----------------------------------------------- |
-| Sanan leveys          | 16 bittiä                                       |
-| Muistiavaruus         | 65 536 sanaa (0x0000–0xFFFF)                    |
-| Osoitustyyppi         | Sana-osoitettu (word-addressed)                 |
-| Arkkitehtuurimalli    | Von Neumann (koodi ja data samassa muistissa)   |
-| Tavujärjestys         | Ei oleellinen (sana = pienin osoitettava yksikkö) |
-| Suojaustilat          | Kernel Mode ja User Mode                        |
-| Käskyn koko           | 1–3 sanaa (opcode + 0–2 operandia)              |
+| Ominaisuus         | Arvo                                              |
+| ------------------ | ------------------------------------------------- |
+| Sanan leveys       | 16 bittiä                                         |
+| Muistiavaruus      | 65 536 sanaa (0x0000–0xFFFF)                      |
+| Osoitustyyppi      | Sana-osoitettu (word-addressed)                   |
+| Arkkitehtuurimalli | Von Neumann (koodi ja data samassa muistissa)     |
+| Tavujärjestys      | Ei oleellinen (sana = pienin osoitettava yksikkö) |
+| Suojaustilat       | Kernel Mode ja User Mode                          |
+| Käskyn koko        | 1–3 sanaa (opcode + 0–2 operandia)                |
 
 ---
 
@@ -28,44 +28,44 @@ kCPU16 on 16-bittinen von Neumann -arkkitehtuuriin perustuva prosessori.
 
 Neljä 16-bittistä yleiskäyttöistä rekisteriä. Käskyissä koodataan 3-bittisellä indeksillä.
 
-| Rekisteri | Indeksi | Kuvaus                                    |
-| --------- | ------- | ----------------------------------------- |
-| R0        | 0       | Yleiskäyttöinen datarekisteri             |
-| R1        | 1       | Yleiskäyttöinen datarekisteri             |
-| R2        | 2       | Yleiskäyttöinen datarekisteri             |
-| R3        | 3       | Yleiskäyttöinen / paluuarvorekisteri      |
+| Rekisteri | Indeksi | Kuvaus                               |
+| --------- | ------- | ------------------------------------ |
+| R0        | 0       | Yleiskäyttöinen datarekisteri        |
+| R1        | 1       | Yleiskäyttöinen datarekisteri        |
+| R2        | 2       | Yleiskäyttöinen datarekisteri        |
+| R3        | 3       | Yleiskäyttöinen / paluuarvorekisteri |
 
 ## 2.2 Erikoisrekisterit
 
-| Rekisteri | Indeksi | Kuvaus                                                         |
-| --------- | ------- | -------------------------------------------------------------- |
-| FP        | 4       | Frame Pointer — aliohjelman pinokehyksen pohja                 |
-| SP        | 5       | Stack Pointer — pinon huippu, pino kasvaa alaspäin             |
+| Rekisteri | Indeksi | Kuvaus                                                                         |
+| --------- | ------- | ------------------------------------------------------------------------------ |
+| FP        | 4       | Frame Pointer — aliohjelman pinokehyksen pohja                                 |
+| SP        | 5       | Stack Pointer — pinon huippu, pino kasvaa alaspäin                             |
 | PC        | —       | Program Counter — seuraavan käskyn osoite (ei suoraan käytettävissä käskyissä) |
-| SR        | —       | Status Register — tilaliput (ks. 2.4)                          |
+| SR        | —       | Status Register — tilaliput (ks. 2.4)                                          |
 
 ## 2.3 Järjestelmärekisterit
 
 Vain Kernel-tilassa kirjoitettavissa (SMPR, STMR -käskyillä).
 
-| Rekisteri | Kuvaus                                                                |
-| --------- | --------------------------------------------------------------------- |
-| MPR       | Memory Protection Register — User-muistin alaraja                     |
+| Rekisteri | Kuvaus                                                                    |
+| --------- | ------------------------------------------------------------------------- |
+| MPR       | Memory Protection Register — User-muistin alaraja                         |
 | TMR       | Timer Register — ajastinkeskeytyksen väli käskyjen lukumääränä (0 = pois) |
 
 ## 2.4 Tilarekisteri (SR)
 
 SR on 16-bittinen, josta bitit 0–5 ovat käytössä.
 
-| Bitti | Nimi | Kuvaus                                                                               |
-| ----- | ---- | ------------------------------------------------------------------------------------ |
-| 0     | Z    | **Zero** — 1 jos operaation tulos on nolla                                           |
-| 1     | N    | **Negative** — 1 jos tuloksen ylin bitti (bitti 15) on 1                             |
-| 2     | C    | **Carry** — 1 jos tapahtui etumerkitön ylivuoto (unsigned overflow)                  |
-| 3     | V    | **Overflow** — 1 jos tapahtui etumerkillinen ylivuoto (signed overflow)              |
-| 4     | I    | **Interrupt Enable** — 1 = laitteistokeskeytykset sallittu, 0 = estetty             |
-| 5     | P    | **Privilege** — 1 = Kernel Mode, 0 = User Mode                                      |
-| 6–15  | —    | Varattu (tulee olla 0)                                                               |
+| Bitti | Nimi | Kuvaus                                                                  |
+| ----- | ---- | ----------------------------------------------------------------------- |
+| 0     | Z    | **Zero** — 1 jos operaation tulos on nolla                              |
+| 1     | N    | **Negative** — 1 jos tuloksen ylin bitti (bitti 15) on 1                |
+| 2     | C    | **Carry** — 1 jos tapahtui etumerkitön ylivuoto (unsigned overflow)     |
+| 3     | V    | **Overflow** — 1 jos tapahtui etumerkillinen ylivuoto (signed overflow) |
+| 4     | I    | **Interrupt Enable** — 1 = laitteistokeskeytykset sallittu, 0 = estetty |
+| 5     | P    | **Privilege** — 1 = Kernel Mode, 0 = User Mode                          |
+| 6–15  | —    | Varattu (tulee olla 0)                                                  |
 
 **V-lipun laskenta:**
 - ADD/ADC: `V = ((a ^ tulos) & (b ^ tulos) & 0x8000) != 0`
@@ -92,30 +92,30 @@ SR on 16-bittinen, josta bitit 0–5 ovat käytössä.
 
 # 4. Muistikartta
 
-| Osoitealue        | Koko        | Kuvaus                                  |
-| ----------------- | ----------- | --------------------------------------- |
-| $0000 – $0008     | 9 sanaa     | Keskeytysvektoritaulukko                |
-| $0009 – $00FF     | 247 sanaa   | Käyttöjärjestelmän varattu alue         |
-| $0100 – $01FF     | 256 sanaa   | Bootloaderin latausalue                 |
-| $0200 – $F7FF     | 62 464 sanaa | Vapaa RAM (ohjelmat ja data)           |
-| $F800 – $FF7F     | 1920 sanaa  | Video RAM (80 × 24, MMIO)              |
-| $FF80 – $FFFF     | 128 sanaa   | Kernel Stack                            |
+| Osoitealue    | Koko         | Kuvaus                          |
+| ------------- | ------------ | ------------------------------- |
+| $0000 – $0008 | 9 sanaa      | Keskeytysvektoritaulukko        |
+| $0009 – $00FF | 247 sanaa    | Käyttöjärjestelmän varattu alue |
+| $0100 – $01FF | 256 sanaa    | Bootloaderin latausalue         |
+| $0200 – $F7FF | 62 464 sanaa | Vapaa RAM (ohjelmat ja data)    |
+| $F800 – $FF7F | 1920 sanaa   | Video RAM (80 × 24, MMIO)       |
+| $FF80 – $FFFF | 128 sanaa    | Kernel Stack                    |
 
 ## 4.1 Keskeytysvektoritaulukko ($0000–$0008)
 
 Jokainen vektoripaikka sisältää keskeytyskäsittelijän muistiosoitteen.
 
-| Vektori | Osoite | Keskeytys                     |
-| ------- | ------ | ----------------------------- |
-| 0       | $0000  | Jako nollalla                 |
-| 1       | $0001  | Tuntematon käsky              |
-| 2       | $0002  | Pinon ylivuoto                |
-| 3       | $0003  | Debug / Breakpoint            |
-| 4       | $0004  | Privilege Violation           |
-| 5       | $0005  | Memory Access Fault           |
-| 6       | $0006  | Näppäimistökeskeytys          |
-| 7       | $0007  | Ajastinkeskeytys              |
-| 8       | $0008  | Prosessin lopetus (EXIT)      |
+| Vektori | Osoite | Keskeytys                |
+| ------- | ------ | ------------------------ |
+| 0       | $0000  | Jako nollalla            |
+| 1       | $0001  | Tuntematon käsky         |
+| 2       | $0002  | Pinon ylivuoto           |
+| 3       | $0003  | Debug / Breakpoint       |
+| 4       | $0004  | Privilege Violation      |
+| 5       | $0005  | Memory Access Fault      |
+| 6       | $0006  | Näppäimistökeskeytys     |
+| 7       | $0007  | Ajastinkeskeytys         |
+| 8       | $0008  | Prosessin lopetus (EXIT) |
 
 ## 4.2 Video RAM ($F800–$FF7F)
 
@@ -123,15 +123,13 @@ Näyttö on 80 saraketta × 24 riviä = 1920 sanaa. Ensimmäinen osoite ($F800) 
 
 Yhden sanan bittirakenne:
 
-| Bitit   | Kuvaus                           |
-| ------- | -------------------------------- |
-| 0 – 7   | ASCII-merkkikoodi                |
-| 8       | Lihavointi (1 = päällä)          |
-| 9       | Kursiivi (1 = päällä)            |
-| 10      | Vilkku / blink (1 = päällä)      |
-| 11      | Alleviivaus (1 = päällä)         |
-| 12      | Yliviivaus (1 = päällä)          |
-| 13 – 15 | Etustaväri (FG), 3 bittiä        |
+| Bitit   | Kuvaus                              |
+| ------- | ----------------------------------- |
+| 0 – 7   | ASCII-merkkikoodi (0–127)           |
+| 8 – 10  | Edustaväri, FG (3 bittiä = 8 väriä) |
+| 11 – 13 | Taustaväri, BG (3 bittiä = 8 väriä) |
+| 14      | Lihavointi (1 = päällä)             |
+| 15      | Vilkkuminen (1 = päällä)            |
 
 Värikoodit (FG, bitit 13–15):
 
@@ -173,12 +171,12 @@ Tämä palauttaa automaattisesti edellisen suojaustilan (User/Kernel) ja keskeyt
 
 ## 5.3 Keskeytysten luokittelu
 
-| Tyyppi           | Numerot | Laukeaistapa                                    |
-| ---------------- | ------- | ------------------------------------------------ |
+| Tyyppi           | Numerot | Laukeaistapa                                            |
+| ---------------- | ------- | ------------------------------------------------------- |
 | Virhepoikkeukset | 0–2     | Automaattinen: DIV/0, tuntematon opcode, stack overflow |
-| Ohjelmistokesk.  | 3, 8    | `INT`-käskyllä tai `EXIT`-käskyllä               |
-| Suojausvirheet   | 4–5     | Automaattinen: käsky- tai muistisuojausrikkomus  |
-| Laitekesk.       | 6–7     | Laitteiston laukaisema (näppäimistö, ajastin)    |
+| Ohjelmistokesk.  | 3, 8    | `INT`-käskyllä tai `EXIT`-käskyllä                      |
+| Suojausvirheet   | 4–5     | Automaattinen: käsky- tai muistisuojausrikkomus         |
+| Laitekesk.       | 6–7     | Laitteiston laukaisema (näppäimistö, ajastin)           |
 
 ## 5.4 Ajastinkeskeytys (TMR)
 
@@ -193,14 +191,14 @@ Tämä palauttaa automaattisesti edellisen suojaustilan (User/Kernel) ja keskeyt
 
 Jokainen `step()` suorittaa yhden käskyn seuraavassa järjestyksessä:
 
-| Vaihe | Nimi      | Kuvaus                                                                |
-| ----- | --------- | --------------------------------------------------------------------- |
-| 1     | FETCH     | Lue opcode-sana osoitteesta [PC] ja 0–2 operandisanaa                 |
-| 2     | PRIVILEGE | Tarkista käskyoikeus (Kernel-käsky User-tilassa → Int 4)              |
-| 3     | MEMORY    | Tarkista muistiviittausten laillisuus (User: addr < MPR → Int 5)      |
-| 4     | EXECUTE   | Suorita käsky, päivitä rekisterit ja liput                            |
-| 5     | PC UPDATE | PC ← PC + käskyn sanamäärä                                           |
-| 6     | TIMER     | Tarkista ja laukaise ajastinkeskeytys tarvittaessa                    |
+| Vaihe | Nimi      | Kuvaus                                                           |
+| ----- | --------- | ---------------------------------------------------------------- |
+| 1     | FETCH     | Lue opcode-sana osoitteesta [PC] ja 0–2 operandisanaa            |
+| 2     | PRIVILEGE | Tarkista käskyoikeus (Kernel-käsky User-tilassa → Int 4)         |
+| 3     | MEMORY    | Tarkista muistiviittausten laillisuus (User: addr < MPR → Int 5) |
+| 4     | EXECUTE   | Suorita käsky, päivitä rekisterit ja liput                       |
+| 5     | PC UPDATE | PC ← PC + käskyn sanamäärä                                       |
+| 6     | TIMER     | Tarkista ja laukaise ajastinkeskeytys tarvittaessa               |
 
 Jos vaiheissa 2–3 tapahtuu virhe, suoritetaan vastaava keskeytys eikä vaiheita 4–6 tehdä.
 
@@ -210,37 +208,72 @@ Jos vaiheissa 2–3 tapahtuu virhe, suoritetaan vastaava keskeytys eikä vaiheit
 
 ## 7.1 Operandityypit
 
-| Merkintä   | Kuvaus                                                          |
-| ---------- | --------------------------------------------------------------- |
-| `reg`      | Rekisteri: R0, R1, R2, R3, FP, SP (koodattu 3-bittisellä indeksillä) |
-| `regD`     | Kohderekisteri (destination)                                    |
-| `regS`     | Lähderekisteri (source)                                         |
-| `imm`      | 16-bittinen välitön arvo (immediate)                            |
-| `addr`     | 16-bittinen absoluuttinen muistiosoite                          |
+| Merkintä | Kuvaus                                                               |
+| -------- | -------------------------------------------------------------------- |
+| `reg`    | Rekisteri: R0, R1, R2, R3, FP, SP (koodattu 3-bittisellä indeksillä) |
+| `regD`   | Kohderekisteri (destination)                                         |
+| `regS`   | Lähderekisteri (source)                                              |
+| `imm`    | 16-bittinen välitön arvo (immediate)                                 |
+| `addr`   | 16-bittinen absoluuttinen muistiosoite                               |
 
 Käskyissä kohde (destination) on aina **ensimmäisenä** ja lähde (source) **toisena**.
 
 ## 7.2 Lippujen merkintätapa
 
-| Merkintä | Selitys                                               |
-| -------- | ----------------------------------------------------- |
-| `—`      | Käsky ei muuta lippuja                                |
-| `ZNCV`   | Päivittää nimetyt liput tuloksen perusteella          |
-| `ZN——`   | Päivittää vain Z ja N; C ja V nollataan               |
-| `ZNC—`   | Päivittää Z, N ja C; V nollataan                      |
+| Merkintä | Selitys                                      |
+| -------- | -------------------------------------------- |
+| `—`      | Käsky ei muuta lippuja                       |
+| `ZNCV`   | Päivittää nimetyt liput tuloksen perusteella |
+| `ZN——`   | Päivittää vain Z ja N; C ja V nollataan      |
+| `ZNC—`   | Päivittää Z, N ja C; V nollataan             |
 
-## 7.3 Tiedonsiirtokäskyt
+## 7.3 Opcode-bittikentät
 
-| Opcode | Käsky     | Operandit  | Tila | Liput | Kuvaus                                  |
-| ------ | --------- | ---------- | ---- | ----- | --------------------------------------- |
-| 0x0001 | LOAD      | reg, imm   | U    | —     | `reg ← imm`                            |
-| 0x0002 | CPY       | regD, regS | U    | —     | `regD ← regS`                          |
-| 0x0003 | READ      | reg, addr  | U    | —     | `reg ← [addr]`                         |
-| 0x0004 | STORE     | reg, addr  | U    | —     | `[addr] ← reg`                         |
-| 0x0005 | READ_IND  | regD, regS | U    | —     | `regD ← [regS]`                        |
-| 0x0006 | STORE_IND | regD, regS | U    | —     | `[regD] ← regS`                        |
-| 0x0007 | READ_REL  | reg, imm   | U    | —     | `reg ← [FP + imm]`                     |
-| 0x0008 | STORE_REL | reg, imm   | U    | —     | `[FP + imm] ← reg`                     |
+Jokainen opcode on 16-bittinen sana jolla on neljä bittikenttiä:
+
+```
+ Bitti 15   14–12   11–8    7–6    5–0
+      P      GRP     ID     OPS    (varattu, 0)
+```
+
+| Kenttä | Bitit | Kuvaus                            |
+| ------ | ----- | --------------------------------- |
+| P      | 15    | Oikeusbitti: 0 = User, 1 = Kernel |
+| GRP    | 14–12 | Käskyryhmä (1–7)                  |
+| ID     | 11–8  | Käskyindeksi ryhmässä (0–15)      |
+| OPS    | 7–6   | Operandien lukumäärä (0–2)        |
+
+**Koodauskaava:** `opcode = (P << 15) | (GRP << 12) | (ID << 8) | (OPS << 6)`
+
+Käskyn koko sanoina on `1 + OPS` (opcode-sana + operandisanat).
+
+**Ryhmäkoodit (GRP):**
+
+| GRP | P   | Opcode-alue   | Ryhmä                                               |
+| --- | --- | ------------- | --------------------------------------------------- |
+| 0   | 0   | 0x0000–0x0FFF | Virheellinen (nollamuisti, ei koskaan suoritettava) |
+| 1   | 0   | 0x1000–0x1FFF | Tiedonsiirto                                        |
+| 2   | 0   | 0x2000–0x2FFF | Aritmetiikka                                        |
+| 3   | 0   | 0x3000–0x3FFF | Logiikka                                            |
+| 4   | 0   | 0x4000–0x4FFF | Pino                                                |
+| 5   | 0   | 0x5000–0x5FFF | Ohjausrakenne                                       |
+| 6   | 0   | 0x6000–0x6FFF | Keskeytykset (User)                                 |
+| 7   | 0   | 0x7000–0x7FFF | Järjestelmä (User)                                  |
+| 6   | 1   | 0xE000–0xEFFF | Keskeytykset (Kernel)                               |
+| 7   | 1   | 0xF000–0xFFFF | Järjestelmä (Kernel)                                |
+
+## 7.4 Tiedonsiirtokäskyt
+
+| Opcode | Käsky     | Operandit  | Tila | Liput | Kuvaus             |
+| ------ | --------- | ---------- | ---- | ----- | ------------------ |
+| 0x1080 | LOAD      | reg, imm   | U    | —     | `reg ← imm`        |
+| 0x1180 | CPY       | regD, regS | U    | —     | `regD ← regS`      |
+| 0x1280 | READ      | reg, addr  | U    | —     | `reg ← [addr]`     |
+| 0x1380 | STORE     | reg, addr  | U    | —     | `[addr] ← reg`     |
+| 0x1480 | READ_IND  | regD, regS | U    | —     | `regD ← [regS]`    |
+| 0x1580 | STORE_IND | regD, regS | U    | —     | `[regD] ← regS`    |
+| 0x1680 | READ_REL  | reg, imm   | U    | —     | `reg ← [FP + imm]` |
+| 0x1780 | STORE_REL | reg, imm   | U    | —     | `[FP + imm] ← reg` |
 
 **LOAD** lataa 16-bittisen välittömän arvon (immediate) suoraan rekisteriin. Tämä on ainoa tapa saada vakioarvo rekisteriin. Käsky on 3 sanaa pitkä: opcode, rekisteri-indeksi ja 16-bittinen arvo.
 
@@ -258,16 +291,16 @@ Käskyissä kohde (destination) on aina **ensimmäisenä** ja lähde (source) **
 
 **STORE_REL** kirjoittaa rekisterin arvon FP-suhteelliseen muistiosoitteeseen (FP + imm). Käytetään paikallisten muuttujien tallentamiseen aliohjelman pinokehykseen.
 
-## 7.4 Aritmetiikkakäskyt
+## 7.5 Aritmetiikkakäskyt
 
-| Opcode | Käsky | Operandit  | Tila | Liput | Kuvaus                                             |
-| ------ | ----- | ---------- | ---- | ----- | -------------------------------------------------- |
-| 0x0010 | ADD   | regD, regS | U    | ZNCV  | `regD ← regD + regS`                              |
-| 0x001B | ADC   | regD, regS | U    | ZNCV  | `regD ← regD + regS + C`                          |
-| 0x0011 | SUB   | regD, regS | U    | ZNCV  | `regD ← regD − regS`                              |
-| 0x0012 | MUL   | regD, regS | U    | ZNCV  | `regD ← regD × regS`                              |
-| 0x0013 | DIV   | regD, regS | U    | ZNCV  | `regD ← regD / regS` (kokonaislukujako, Int 0 jos regS = 0) |
-| 0x0014 | CMP   | regA, regB | U    | ZNCV  | Laskee `regA − regB`, asettaa liput, tulosta ei tallenneta |
+| Opcode | Käsky | Operandit  | Tila | Liput | Kuvaus                                                      |
+| ------ | ----- | ---------- | ---- | ----- | ----------------------------------------------------------- |
+| 0x2080 | ADD   | regD, regS | U    | ZNCV  | `regD ← regD + regS`                                        |
+| 0x2180 | SUB   | regD, regS | U    | ZNCV  | `regD ← regD − regS`                                        |
+| 0x2280 | MUL   | regD, regS | U    | ZNCV  | `regD ← regD × regS`                                        |
+| 0x2380 | DIV   | regD, regS | U    | ZNCV  | `regD ← regD / regS` (kokonaislukujako, Int 0 jos regS = 0) |
+| 0x2480 | CMP   | regA, regB | U    | ZNCV  | Laskee `regA − regB`, asettaa liput, tulosta ei tallenneta  |
+| 0x2580 | ADC   | regD, regS | U    | ZNCV  | `regD ← regD + regS + C`                                    |
 
 **ADD** laskee kahden rekisterin summan ja tallentaa tuloksen kohderekisteriin. Päivittää kaikki aritmetiikkaliput: Z (tulos nolla), N (ylin bitti 1), C (etumerkitön ylivuoto) ja V (etumerkillinen ylivuoto). Käytetään yleiseen kokonaislukuaritmetiikkaan ja osoitelaskentaan.
 
@@ -281,16 +314,16 @@ Käskyissä kohde (destination) on aina **ensimmäisenä** ja lähde (source) **
 
 **CMP** laskee regA − regB ja asettaa liput aivan kuten SUB, mutta erotusta ei tallenneta kumpaankaan rekisteriin. Käytetään aina ennen ehdollisia hyppykäskyjä (JZ, JLT, JGT jne.) kahden arvon vertailuun.
 
-## 7.5 Logiikka- ja bittikäskyt
+## 7.6 Logiikka- ja bittikäskyt
 
-| Opcode | Käsky | Operandit  | Tila | Liput | Kuvaus                                           |
-| ------ | ----- | ---------- | ---- | ----- | ------------------------------------------------ |
-| 0x0015 | AND   | regD, regS | U    | ZN——  | `regD ← regD AND regS`                          |
-| 0x0016 | OR    | regD, regS | U    | ZN——  | `regD ← regD OR regS`                           |
-| 0x0017 | XOR   | regD, regS | U    | ZN——  | `regD ← regD XOR regS`                          |
-| 0x0018 | NOT   | reg        | U    | ZN——  | `reg ← NOT reg` (bittitason komplementti)        |
-| 0x0019 | SHL   | regD, regS | U    | ZNC—  | `regD ← regD << regS` (looginen vasen siirto)   |
-| 0x001A | SHR   | regD, regS | U    | ZNC—  | `regD ← regD >> regS` (looginen oikea siirto)   |
+| Opcode | Käsky | Operandit  | Tila | Liput | Kuvaus                                        |
+| ------ | ----- | ---------- | ---- | ----- | --------------------------------------------- |
+| 0x3080 | AND   | regD, regS | U    | ZN——  | `regD ← regD AND regS`                        |
+| 0x3180 | OR    | regD, regS | U    | ZN——  | `regD ← regD OR regS`                         |
+| 0x3280 | XOR   | regD, regS | U    | ZN——  | `regD ← regD XOR regS`                        |
+| 0x3340 | NOT   | reg        | U    | ZN——  | `reg ← NOT reg` (bittitason komplementti)     |
+| 0x3480 | SHL   | regD, regS | U    | ZNC—  | `regD ← regD << regS` (looginen vasen siirto) |
+| 0x3580 | SHR   | regD, regS | U    | ZNC—  | `regD ← regD >> regS` (looginen oikea siirto) |
 
 **AND** suorittaa bittitason JA-operaation kohde- ja lähderekisterin välillä. Tulos tallennetaan kohderekisteriin. Käytetään tyypillisesti bittimaskien soveltamiseen — esimerkiksi yksittäisen bitin tarkistamiseen tai nollaamiseen. Päivittää Z- ja N-liput; C ja V nollataan.
 
@@ -304,13 +337,13 @@ Käskyissä kohde (destination) on aina **ensimmäisenä** ja lähde (source) **
 
 **SHR** (Shift Right) siirtää bittejä oikealle loogisesti (vasemmalta täytetään nollilla). Viimeinen ulos siirtynyt bitti tallennetaan C-lippuun. Oikea siirto yhdellä vastaa etumerkitöntä jakoa kahdella. Päivittää Z-, N- ja C-liput; V nollataan.
 
-## 7.6 Pinokäskyt
+## 7.7 Pinokäskyt
 
-| Opcode | Käsky | Operandit  | Tila | Liput | Kuvaus                                           |
-| ------ | ----- | ---------- | ---- | ----- | ------------------------------------------------ |
-| 0x0020 | PUSH  | reg        | U    | —     | `[SP] ← reg; SP ← SP − 1`                      |
-| 0x0021 | POP   | reg        | U    | —     | `SP ← SP + 1; reg ← [SP]`                      |
-| 0x0022 | SWSP  | regD, regS | U    | —     | `regD ← SP; SP ← regS`                          |
+| Opcode | Käsky | Operandit  | Tila | Liput | Kuvaus                    |
+| ------ | ----- | ---------- | ---- | ----- | ------------------------- |
+| 0x4040 | PUSH  | reg        | U    | —     | `[SP] ← reg; SP ← SP − 1` |
+| 0x4140 | POP   | reg        | U    | —     | `SP ← SP + 1; reg ← [SP]` |
+| 0x4280 | SWSP  | regD, regS | U    | —     | `regD ← SP; SP ← regS`    |
 
 **PUSH** tallettaa rekisterin arvon pinoon. Ensin kirjoitetaan arvo nykyiseen pinopaikkaan [SP], sitten SP:tä vähennetään yhdellä (pino kasvaa alaspäin kohti pienempiä osoitteita). User-tilassa, jos SP laskee alle MPR-rajan, laukeaa Int 2 (Stack Overflow). Käytetään arvojen väliaikaiseen tallentamiseen, aliohjelmakutsujen parametrien välittämiseen ja rekisterien pelastamiseen.
 
@@ -318,13 +351,13 @@ Käskyissä kohde (destination) on aina **ensimmäisenä** ja lähde (source) **
 
 **SWSP** (Swap Stack Pointer) vaihtaa pinorekisterin atomisesti: tallentaa nykyisen SP:n kohderekisteriin ja lataa uuden SP:n lähderekisteristä. Tämä on yksi atominen operaatio, joten keskeytysten ei tarvitse olla estettyinä. Käytetään ensisijaisesti käyttöjärjestelmän kontekstinvaihtorutiinissa prosessien pinojen vaihtamiseen.
 
-## 7.7 Ohjauskäskyt
+## 7.8 Ohjauskäskyt
 
-| Opcode | Käsky | Operandit | Tila | Liput | Kuvaus                                           |
-| ------ | ----- | --------- | ---- | ----- | ------------------------------------------------ |
-| 0x0030 | JUMP  | addr      | U    | —     | `PC ← addr`                                     |
-| 0x0031 | CALL  | addr      | U    | —     | `PUSH paluuosoite; PC ← addr`                   |
-| 0x0032 | RET   | —         | U    | —     | `POP PC` (paluu aliohjelmasta)                   |
+| Opcode | Käsky | Operandit | Tila | Liput | Kuvaus                         |
+| ------ | ----- | --------- | ---- | ----- | ------------------------------ |
+| 0x5040 | JUMP  | addr      | U    | —     | `PC ← addr`                    |
+| 0x5140 | CALL  | addr      | U    | —     | `PUSH paluuosoite; PC ← addr`  |
+| 0x5200 | RET   | —         | U    | —     | `POP PC` (paluu aliohjelmasta) |
 
 **JUMP** siirtää suorituksen ehdottomasti annettuun osoitteeseen. PC ladataan suoraan operandina annetulla osoitteella. Käytetään silmukoiden, ehdottomien haarojen ja goto-tyypisten siirtymien toteuttamiseen.
 
@@ -336,14 +369,14 @@ Käskyissä kohde (destination) on aina **ensimmäisenä** ja lähde (source) **
 
 Käytetään CMP-käskyn jälkeen. Etumerkillinen vertailu perustuu N- ja V-lippuihin.
 
-| Opcode | Käsky | Ehto             | Kuvaus                        | Alias    |
-| ------ | ----- | ---------------- | ----------------------------- | -------- |
-| 0x0033 | JZ    | Z = 1            | Jump if Equal                 | JE       |
-| 0x0034 | JNZ   | Z = 0            | Jump if Not Equal             | JNE      |
-| 0x0035 | JLT   | N ≠ V            | Jump if Less Than (signed)    | —        |
-| 0x0036 | JGT   | Z = 0 ∧ N = V   | Jump if Greater Than (signed) | —        |
-| 0x0037 | JLE   | Z = 1 ∨ N ≠ V   | Jump if Less or Equal         | —        |
-| 0x0038 | JGE   | N = V            | Jump if Greater or Equal      | —        |
+| Opcode | Käsky | Ehto          | Kuvaus                        | Alias |
+| ------ | ----- | ------------- | ----------------------------- | ----- |
+| 0x5340 | JZ    | Z = 1         | Jump if Equal                 | JE    |
+| 0x5440 | JNZ   | Z = 0         | Jump if Not Equal             | JNE   |
+| 0x5540 | JLT   | N ≠ V         | Jump if Less Than (signed)    | —     |
+| 0x5640 | JGT   | Z = 0 ∧ N = V | Jump if Greater Than (signed) | —     |
+| 0x5740 | JLE   | Z = 1 ∨ N ≠ V | Jump if Less or Equal         | —     |
+| 0x5840 | JGE   | N = V         | Jump if Greater or Equal      | —     |
 
 **JZ** (Jump if Zero / Jump if Equal) hyppää annettuun osoitteeseen, jos Z-lippu on asetettu. CMP-käskyn jälkeen tämä tarkoittaa, että verrattavat arvot ovat yhtä suuret. Assemblerissa voi käyttää myös aliasta JE. Jos ehto ei täyty, suoritus jatkuu normaalisti seuraavasta käskystä.
 
@@ -357,16 +390,16 @@ Käytetään CMP-käskyn jälkeen. Etumerkillinen vertailu perustuu N- ja V-lipp
 
 **JGE** (Jump if Greater or Equal) hyppää, jos ensimmäinen operandi on suurempi tai yhtä suuri kuin toinen. Ehto N = V on yksinkertainen: normaalitilanteessa positiivinen erotus (N=0, V=0) ja ylivuototilanteessa molemmat ovat 1.
 
-## 7.8 Keskeytyskäskyt
+## 7.9 Keskeytyskäskyt
 
-| Opcode | Käsky | Operandit | Tila | Liput | Kuvaus                                           |
-| ------ | ----- | --------- | ---- | ----- | ------------------------------------------------ |
-| 0x0040 | INT   | imm       | U    | —     | Ohjelmallinen keskeytys (syscall). imm = 0–8.    |
-| 0x0041 | IRET  | —         | K    | —     | Paluu keskeytyksestä: `POP SR; POP PC`           |
-| 0x0042 | STI   | —         | K    | —     | Salli keskeytykset: `I ← 1`                     |
-| 0x0043 | CLI   | —         | K    | —     | Estä keskeytykset: `I ← 0`                      |
-| 0x0044 | HALT  | —         | K    | —     | Pysäytä prosessori                               |
-| 0x0049 | EXIT  | —         | U    | —     | Prosessin hallittu lopetus, laukaisee Int 8       |
+| Opcode | Käsky | Operandit | Tila | Liput | Kuvaus                                        |
+| ------ | ----- | --------- | ---- | ----- | --------------------------------------------- |
+| 0x6040 | INT   | imm       | U    | —     | Ohjelmallinen keskeytys (syscall). imm = 0–8. |
+| 0xE100 | IRET  | —         | K    | —     | Paluu keskeytyksestä: `POP SR; POP PC`        |
+| 0xE200 | STI   | —         | K    | —     | Salli keskeytykset: `I ← 1`                   |
+| 0xE300 | CLI   | —         | K    | —     | Estä keskeytykset: `I ← 0`                    |
+| 0xF000 | HALT  | —         | K    | —     | Pysäytä prosessori                            |
+| 0x7500 | EXIT  | —         | U    | —     | Prosessin hallittu lopetus, laukaisee Int 8   |
 
 **INT** laukaisee ohjelmallisen keskeytyksen annetulla vektorinumerolla (0–8). CPU suorittaa normaalin keskeytysprotokollan: tallentaa PC:n ja SR:n pinoon, siirtyy Kernel-tilaan ja estää keskeytykset. Käytetään järjestelmäkutsujen (syscall) toteuttamiseen — User-tilan ohjelma pyytää palvelua kerneliltä INT-käskyllä.
 
@@ -380,16 +413,17 @@ Käytetään CMP-käskyn jälkeen. Etumerkillinen vertailu perustuu N- ja V-lipp
 
 **EXIT** lopettaa nykyisen käyttäjäprosessin hallitusti laukaisemalla keskeytyksen Int 8. Tämä siirtää ohjauksen käyttöjärjestelmän prosessinhallinnan käsittelijään, joka voi siivota prosessin resurssit ja siirtyä seuraavaan prosessiin. Toisin kuin HALT, EXIT on sallittu User-tilassa.
 
-## 7.9 Järjestelmä- ja I/O-käskyt
+## 7.10 Järjestelmä- ja I/O-käskyt
 
-| Opcode | Käsky  | Operandit  | Tila | Liput | Kuvaus                                          |
-| ------ | ------ | ---------- | ---- | ----- | ----------------------------------------------- |
-| 0x0045 | DREAD  | regD, regS | K    | —     | `regD ← storage[regS]`                         |
-| 0x0046 | DWRITE | regS, regD | K    | —     | `storage[regD] ← regS`                         |
-| 0x0047 | SMPR   | reg        | K    | —     | `MPR ← reg`                                    |
-| 0x0048 | STMR   | reg        | K    | —     | `TMR ← reg`                                    |
-| 0x004A | KGET   | reg        | U    | —     | `reg ← keyboard_buffer` (0 jos tyhjä)          |
-| 0x004B | TSL    | reg, addr  | U    | ZN——  | `reg ← [addr]; [addr] ← 1` (atominen)         |
+| Opcode | Käsky  | Operandit  | Tila | Liput | Kuvaus                                |
+| ------ | ------ | ---------- | ---- | ----- | ------------------------------------- |
+| 0xF180 | DREAD  | regD, regS | K    | —     | `regD ← storage[regS]`                |
+| 0xF280 | DWRITE | regS, regD | K    | —     | `storage[regD] ← regS`                |
+| 0xF340 | SMPR   | reg        | K    | —     | `MPR ← reg`                           |
+| 0xF440 | STMR   | reg        | K    | —     | `TMR ← reg`                           |
+| 0x7640 | KGET   | reg        | U    | —     | `reg ← keyboard_buffer` (0 jos tyhjä) |
+| 0x7780 | TSL    | reg, addr  | U    | ZN——  | `reg ← [addr]; [addr] ← 1` (atominen) |
+| 0x7F00 | NOP    | —          | U    | —     | Ei tee mitään                         |
 
 **DREAD** (Device Read) lukee yhden sanan tallennuslaitteelta (block device). Lähderekisteri sisältää lukuosoitteen tallennuslaitteen muistiavaruudessa (0x0000–0xFFFF), ja luettu arvo tallennetaan kohderekisteriin. Käytetään käyttöjärjestelmän bootloaderissa ja levyoperaatioissa. Vaatii Kernel-tilan.
 
@@ -426,20 +460,20 @@ Käytetään CMP-käskyn jälkeen. Etumerkillinen vertailu perustuu N- ja V-lipp
 
 Kylmäkäynnistyksen (cold boot) vaiheet:
 
-| Vaihe | Toiminta                                                                  |
-| ----- | ------------------------------------------------------------------------- |
-| 1     | CPU käynnistyy Kernel-tilassa (P=1, I=0)                                  |
-| 2     | Kaikki rekisterit nollataan, SP ← 0xFFFF, PC ← 0x0100                    |
-| 3     | Laitteisto lukee tallennuslaitteen osoitteet 0x0000–0x00FF (256 sanaa)     |
-| 4     | Data kopioidaan RAM-osoitteisiin $0100–$01FF (bootloader-alue)             |
-| 5     | Suoritus alkaa osoitteesta $0100                                          |
+| Vaihe | Toiminta                                                               |
+| ----- | ---------------------------------------------------------------------- |
+| 1     | CPU käynnistyy Kernel-tilassa (P=1, I=0)                               |
+| 2     | Kaikki rekisterit nollataan, SP ← 0xFFFF, PC ← 0x0100                  |
+| 3     | Laitteisto lukee tallennuslaitteen osoitteet 0x0000–0x00FF (256 sanaa) |
+| 4     | Data kopioidaan RAM-osoitteisiin $0100–$01FF (bootloader-alue)         |
+| 5     | Suoritus alkaa osoitteesta $0100                                       |
 
 Tallennuslaitteen aluejako:
 
-| Osoiteväli      | Kuvaus                                                |
-| --------------- | ----------------------------------------------------- |
+| Osoiteväli      | Kuvaus                                                     |
+| --------------- | ---------------------------------------------------------- |
 | 0x0000 – 0x00FF | Bootloader / Master Boot Record (ladataan automaattisesti) |
-| 0x0100 – 0xFFFF | Vapaa tallennustila (OS, ohjelmat, data)              |
+| 0x0100 – 0xFFFF | Vapaa tallennustila (OS, ohjelmat, data)                   |
 
 ---
 
@@ -455,21 +489,32 @@ label:                  ; Label (valinnainen, omalla rivillä)
 
 ## 10.2 Operandien merkintätavat
 
-| Syntaksi      | Tyyppi                  | Esimerkki            |
-| ------------- | ----------------------- | -------------------- |
-| `R0`–`SP`     | Rekisteri               | `ADD R0, R1`         |
-| `#42`         | Välitön arvo (decimal)  | `LOAD R0, #42`       |
-| `#0xFF`       | Välitön arvo (hex)      | `LOAD R0, #0xFF`     |
-| `$F800`       | Absoluuttinen osoite    | `READ R0, $F800`     |
-| `label`       | Label-viittaus          | `JUMP loop`          |
+| Syntaksi     | Tyyppi                                | Esimerkki             |
+| ------------ | ------------------------------------- | --------------------- |
+| `R0`–`SP`    | Rekisteri (kirjainkoosta riippumaton) | `ADD R0, R1`          |
+| `42`         | Desimaali-literaali                   | `LOAD R0, 42`         |
+| `0xFF`       | Heksadesimaali-literaali              | `LOAD R0, 0xFF`       |
+| `0b1010`     | Binääri-literaali                     | `LOAD R0, 0b1010`     |
+| `0o52`       | Oktaali-literaali                     | `LOAD R0, 0o52`       |
+| `label`      | Label-viittaus                        | `JUMP loop`           |
+| `VRAM_START` | Arkkitehtuurivakio (ks. kohta 10.5)   | `LOAD R0, VRAM_START` |
+
+Rekisterit: `R0`, `R1`, `R2`, `R3`, `FP`, `SP`. Kirjainkoosta riippumaton (`r0` = `R0`).
 
 ## 10.3 Direktiivit
 
-| Direktiivi              | Kuvaus                                              |
-| ----------------------- | --------------------------------------------------- |
-| `.origin addr` / `.org` | Aseta koodin aloitusosoite (oletus: 0x0100)         |
-| `.macro NIMI`           | Aloita makromäärittely                              |
-| `.endmacro`             | Lopeta makromäärittely                              |
+| Direktiivi                   | Kuvaus                                                                |
+| ---------------------------- | --------------------------------------------------------------------- |
+| `.origin addr` / `.org addr` | Aseta koodin aloitusosoite (oletus: 0x0100)                           |
+| `.at addr`                   | Siirry uuteen muistiosoitteeseen (uusi koodisegmentti)                |
+| `.db val, val, …`            | Tallenna raakoja 16-bittisiä sanoja suoraan muistiin                  |
+| `.dstr "teksti"`             | Tallenna null-terminoitu merkkijono (ASCII-sanat)                     |
+| `.diskblock N`               | Assemblauksen jälkeen tallenna konekieli tallennuslaitteen blokkiin N |
+| `.macro NIMI`                | Aloita makromäärittely                                                |
+| `.endmacro`                  | Lopeta makromäärittely                                                |
+| `.expect_reg R, arvo`        | Testidirektiiivi: tarkista rekisterin arvo ajon jälkeen               |
+| `.expect_flag F, arvo`       | Testidirektiiivi: tarkista tipalipun arvo ajon jälkeen                |
+| `.expect_mem addr, arvo`     | Testidirektiiivi: tarkista muistipaikan arvo ajon jälkeen             |
 
 ## 10.4 Assembly-esimerkki
 
@@ -478,12 +523,48 @@ label:                  ; Label (valinnainen, omalla rivillä)
 
 ; Laske 10+20 ja tallenna tulos muistiin
 start:
-    LOAD  R0, #10
-    LOAD  R1, #20
+    LOAD  R0, 10
+    LOAD  R1, 20
     ADD   R0, R1        ; R0 = 30
-    STORE R0, $3000     ; [0x3000] = 30
+    STORE R0, 0x3000    ; [0x3000] = 30
     HALT
 ```
+
+## 10.5 Arkkitehtuurivakiot
+
+Assembler injektoi automaattisesti seuraavat vakiot koodin käyttöön label-niminä.
+Ne voidaan käyttää suoraan operandeina ilman erillistä määrittelyä.
+
+| Vakio            | Arvo   | Kuvaus                              |
+| ---------------- | ------ | ----------------------------------- |
+| `VRAM_START`     | 0xF800 | VRAM:n alkuosoite                   |
+| `VRAM_END`       | 0xFF7F | VRAM:n loppuosoite (viimeinen solu) |
+| `SCREEN_COLS`    | 80     | Näytön leveys sarakkeina            |
+| `SCREEN_ROWS`    | 24     | Näytön korkeus riveinä              |
+| `BOOT_RAM_START` | 0x0100 | Bootloaderin latausalue             |
+| `INT_DIV_ZERO`   | 0      | Jako nollalla (vektori 0)           |
+| `INT_UNKNOWN_OP` | 1      | Tuntematon käsky (vektori 1)        |
+| `INT_STACK_OVER` | 2      | Pinon ylivuoto (vektori 2)          |
+| `INT_DEBUG`      | 3      | Debug/breakpoint (vektori 3)        |
+| `INT_PRIVILEGE`  | 4      | Privilege violation (vektori 4)     |
+| `INT_MEM_FAULT`  | 5      | Muistisuojausrikkomus (vektori 5)   |
+| `INT_KEYBOARD`   | 6      | Näppäimistökeskeytys (vektori 6)    |
+| `INT_TIMER`      | 7      | Ajastinkeskeytys (vektori 7)        |
+| `INT_EXIT`       | 8      | Prosessin lopetus (vektori 8)       |
+| `COLOR_BLACK`    | 0      | Värikoodi: musta                    |
+| `COLOR_RED`      | 1      | Värikoodi: punainen                 |
+| `COLOR_GREEN`    | 2      | Värikoodi: vihreä                   |
+| `COLOR_YELLOW`   | 3      | Värikoodi: keltainen                |
+| `COLOR_BLUE`     | 4      | Värikoodi: sininen                  |
+| `COLOR_MAGENTA`  | 5      | Värikoodi: magenta                  |
+| `COLOR_CYAN`     | 6      | Värikoodi: syaani                   |
+| `COLOR_WHITE`    | 7      | Värikoodi: valkoinen                |
+| `SR_FLAG_Z`      | 0      | Tilarekisterin Z-lipun bittinumero  |
+| `SR_FLAG_N`      | 1      | Tilarekisterin N-lipun bittinumero  |
+| `SR_FLAG_C`      | 2      | Tilarekisterin C-lipun bittinumero  |
+| `SR_FLAG_V`      | 3      | Tilarekisterin V-lipun bittinumero  |
+| `SR_FLAG_I`      | 4      | Tilarekisterin I-lipun bittinumero  |
+| `SR_FLAG_P`      | 5      | Tilarekisterin P-lipun bittinumero  |
 
 ---
 
@@ -491,130 +572,132 @@ start:
 
 ## 11.1 Kaikki käskyt aakkosellisesti järjestettynä
 
-| Opcode | Käsky     | Sanat | Kuvaus                                           |
-| ------ | --------- | ----- | ------------------------------------------------ |
-| 0x0001 | LOAD      | 3     | Lataa välitön arvo rekisteriin                   |
-| 0x0002 | CPY       | 3     | Kopioi rekisterien arvot keskenään               |
-| 0x0003 | READ      | 3     | Lue muistista absoluuttisesti                    |
-| 0x0004 | STORE     | 3     | Kirjoita muistiin absoluuttisesti                |
-| 0x0005 | READ_IND  | 3     | Lue muistista epäsuorasti (osoitinta käyttäen)  |
-| 0x0006 | STORE_IND | 3     | Kirjoita muistiin epäsuorasti (osoitinta käyttäen) |
-| 0x0007 | READ_REL  | 3     | Lue muistista FP-suhteellisesti                  |
-| 0x0008 | STORE_REL | 3     | Kirjoita muistiin FP-suhteellisesti              |
-| 0x0010 | ADD       | 3     | Yhteenlasku: regD = regD + regS                  |
-| 0x0011 | SUB       | 3     | Vähennyslasku: regD = regD - regS                |
-| 0x0012 | MUL       | 3     | Kertolasku: regD = regD × regS                   |
-| 0x0013 | DIV       | 3     | Kokonaislukujako: regD = regD ÷ regS             |
-| 0x0014 | CMP       | 3     | Vertailu: aseta liput regA - regB:n perusteella  |
-| 0x0015 | AND       | 3     | Bittitason JA-operaatio                          |
-| 0x0016 | OR        | 3     | Bittitason TAI-operaatio                         |
-| 0x0017 | XOR       | 3     | Bittitason poissulkeva TAI                       |
-| 0x0018 | NOT       | 2     | Bittitason komplementti (käännä kaikki bitit)    |
-| 0x0019 | SHL       | 3     | Looginen vasen siirto                            |
-| 0x001A | SHR       | 3     | Looginen oikea siirto                            |
-| 0x001B | ADC       | 3     | Yhteenlasku carry:lla: regD = regD + regS + C   |
-| 0x0020 | PUSH      | 2     | Talleta rekisteri pinoon                         |
-| 0x0021 | POP       | 2     | Hae arvo pinosta rekisteriin                     |
-| 0x0022 | SWSP      | 3     | Vaihda pinorekisteri atomisesti                  |
-| 0x0030 | JUMP      | 2     | Ehdoton hyppy (PC = addr)                        |
-| 0x0031 | CALL      | 2     | Kutsu aliohjelmaa (PUSH PC; PC = addr)           |
-| 0x0032 | RET       | 1     | Palaa aliohjelmasta (POP PC)                     |
-| 0x0033 | JZ        | 2     | Hyppy jos yhtä suuri (Z = 1), alias: JE         |
-| 0x0034 | JNZ       | 2     | Hyppy jos eri suuruinen (Z = 0), alias: JNE     |
-| 0x0035 | JLT       | 2     | Hyppy jos pienempi (etumerkillinen, N ≠ V)      |
-| 0x0036 | JGT       | 2     | Hyppy jos suurempi (etumerkillinen, Z=0 ∧ N=V)  |
-| 0x0037 | JLE       | 2     | Hyppy jos pienempi tai yhtä suuri (Z=1 ∨ N≠V)   |
-| 0x0038 | JGE       | 2     | Hyppy jos suurempi tai yhtä suuri (N = V)       |
-| 0x0040 | INT       | 2     | Laukaise ohjelmallinen keskeytys (0–8)          |
-| 0x0041 | IRET      | 1     | Palaa keskeytyksestä (POP SR; POP PC)            |
-| 0x0042 | STI       | 1     | Salli keskeytykset (I = 1, Kernel-tila)         |
-| 0x0043 | CLI       | 1     | Estä keskeytykset (I = 0, Kernel-tila)          |
-| 0x0044 | HALT      | 1     | Pysäytä prosessori (Kernel-tila)                |
-| 0x0045 | DREAD     | 3     | Lue tallennuslaitteelta (Kernel-tila)           |
-| 0x0046 | DWRITE    | 3     | Kirjoita tallennuslaitteelle (Kernel-tila)      |
-| 0x0047 | SMPR      | 2     | Aseta muistisuojarekisteri (Kernel-tila)        |
-| 0x0048 | STMR      | 2     | Aseta ajastinrekisteri (Kernel-tila)            |
-| 0x0049 | EXIT      | 1     | Prosessin hallittu lopetus (Int 8)               |
-| 0x004A | KGET      | 2     | Lue näppäimistön puskurista                      |
-| 0x004B | TSL       | 3     | Atominen testi ja asetus (Test and Set Lock)    |
+| Opcode | Käsky     | Sanat | Kuvaus                                             |
+| ------ | --------- | ----- | -------------------------------------------------- |
+| 0x2580 | ADC       | 3     | Yhteenlasku carry:lla: regD = regD + regS + C      |
+| 0x2080 | ADD       | 3     | Yhteenlasku: regD = regD + regS                    |
+| 0x3080 | AND       | 3     | Bittitason JA-operaatio                            |
+| 0x5140 | CALL      | 2     | Kutsu aliohjelmaa (PUSH PC; PC = addr)             |
+| 0xE300 | CLI       | 1     | Estä keskeytykset (I = 0, Kernel-tila)             |
+| 0x2480 | CMP       | 3     | Vertailu: aseta liput regA - regB:n perusteella    |
+| 0x1180 | CPY       | 3     | Kopioi rekisterien arvot keskenään                 |
+| 0xF180 | DREAD     | 3     | Lue tallennuslaitteelta (Kernel-tila)              |
+| 0xF280 | DWRITE    | 3     | Kirjoita tallennuslaitteelle (Kernel-tila)         |
+| 0x2380 | DIV       | 3     | Kokonaislukujako: regD = regD ÷ regS               |
+| 0x7500 | EXIT      | 1     | Prosessin hallittu lopetus (Int 8)                 |
+| 0xF000 | HALT      | 1     | Pysäytä prosessori (Kernel-tila)                   |
+| 0x6040 | INT       | 2     | Laukaise ohjelmallinen keskeytys (0–8)             |
+| 0xE100 | IRET      | 1     | Paluu keskeytyksestä (POP SR; POP PC)              |
+| 0x5840 | JGE       | 2     | Hyppy jos suurempi tai yhtä suuri (N = V)          |
+| 0x5640 | JGT       | 2     | Hyppy jos suurempi (etumerkillinen, Z=0 ∧ N=V)     |
+| 0x5740 | JLE       | 2     | Hyppy jos pienempi tai yhtä suuri (Z=1 ∨ N≠V)      |
+| 0x5540 | JLT       | 2     | Hyppy jos pienempi (etumerkillinen, N ≠ V)         |
+| 0x5440 | JNZ       | 2     | Hyppy jos eri suuruinen (Z = 0), alias: JNE        |
+| 0x5340 | JZ        | 2     | Hyppy jos yhtä suuri (Z = 1), alias: JE            |
+| 0x5040 | JUMP      | 2     | Ehdoton hyppy (PC = addr)                          |
+| 0x7640 | KGET      | 2     | Lue näppäimistön puskurista                        |
+| 0x1080 | LOAD      | 3     | Lataa välitön arvo rekisteriin                     |
+| 0x2280 | MUL       | 3     | Kertolasku: regD = regD × regS                     |
+| 0x7F00 | NOP       | 1     | Ei tee mitään                                      |
+| 0x3340 | NOT       | 2     | Bittitason komplementti (käännä kaikki bitit)      |
+| 0x3180 | OR        | 3     | Bittitason TAI-operaatio                           |
+| 0x4140 | POP       | 2     | Hae arvo pinosta rekisteriin                       |
+| 0x4040 | PUSH      | 2     | Talleta rekisteri pinoon                           |
+| 0x1280 | READ      | 3     | Lue muistista absoluuttisesti                      |
+| 0x1480 | READ_IND  | 3     | Lue muistista epäsuorasti (osoitinta käyttäen)     |
+| 0x1680 | READ_REL  | 3     | Lue muistista FP-suhteellisesti                    |
+| 0x5200 | RET       | 1     | Palaa aliohjelmasta (POP PC)                       |
+| 0x3480 | SHL       | 3     | Looginen vasen siirto                              |
+| 0x3580 | SHR       | 3     | Looginen oikea siirto                              |
+| 0xF340 | SMPR      | 2     | Aseta muistisuojarekisteri (Kernel-tila)           |
+| 0x1380 | STORE     | 3     | Kirjoita muistiin absoluuttisesti                  |
+| 0x1580 | STORE_IND | 3     | Kirjoita muistiin epäsuorasti (osoitinta käyttäen) |
+| 0x1780 | STORE_REL | 3     | Kirjoita muistiin FP-suhteellisesti                |
+| 0xE200 | STI       | 1     | Salli keskeytykset (I = 1, Kernel-tila)            |
+| 0xF440 | STMR      | 2     | Aseta ajastinrekisteri (Kernel-tila)               |
+| 0x2180 | SUB       | 3     | Vähennyslasku: regD = regD - regS                  |
+| 0x4280 | SWSP      | 3     | Vaihda pinorekisteri atomisesti                    |
+| 0x7780 | TSL       | 3     | Atominen testi ja asetus (Test and Set Lock)       |
+| 0x3280 | XOR       | 3     | Bittitason poissulkeva TAI                         |
 
 ## 11.2 Käskyt kategorioittain
 
-### Tiedonsiirto (0x0001–0x0008)
+### Tiedonsiirto
 
-| Käsky     | Opcode | Kuvaus |
-| --------- | ------ | ------ |
-| LOAD      | 0x0001 | Lataa välitön 16-bittinen arvo rekisteriin |
-| CPY       | 0x0002 | Kopioi yhden rekisterin sisältö toiseen rekisteriin |
-| READ      | 0x0003 | Lue yhden sanan muistista absoluuttisella osoitteella |
-| STORE     | 0x0004 | Kirjoita yhden sanan muistiin absoluuttisella osoitteella |
-| READ_IND  | 0x0005 | Lue muistista käyttäen rekisterissa olevaa osoitetta (epäsuorasti) |
-| STORE_IND | 0x0006 | Kirjoita muistiin käyttäen rekisterissa olevaa osoitetta |
-| READ_REL  | 0x0007 | Lue muistista frame pointerin suhteen (paikallismuuttujat) |
-| STORE_REL | 0x0008 | Kirjoita muistiin frame pointerin suhteen |
+| Käsky     | Opcode | Kuvaus                                                             |
+| --------- | ------ | ------------------------------------------------------------------ |
+| LOAD      | 0x1080 | Lataa välitön 16-bittinen arvo rekisteriin                         |
+| CPY       | 0x1180 | Kopioi yhden rekisterin sisältö toiseen rekisteriin                |
+| READ      | 0x1280 | Lue yhden sanan muistista absoluuttisella osoitteella              |
+| STORE     | 0x1380 | Kirjoita yhden sanan muistiin absoluuttisella osoitteella          |
+| READ_IND  | 0x1480 | Lue muistista käyttäen rekisterissa olevaa osoitetta (epäsuorasti) |
+| STORE_IND | 0x1580 | Kirjoita muistiin käyttäen rekisterissa olevaa osoitetta           |
+| READ_REL  | 0x1680 | Lue muistista frame pointerin suhteen (paikallismuuttujat)         |
+| STORE_REL | 0x1780 | Kirjoita muistiin frame pointerin suhteen                          |
 
-### Aritmetiikka (0x0010–0x0015)
+### Aritmetiikka
 
-| Käsky | Opcode | Kuvaus |
-| ----- | ------ | ------ |
-| ADD   | 0x0010 | Yhteenlasku kahdelle rekisterille, aseta liput (Z, N, C, V) |
-| SUB   | 0x0011 | Vähennyslasku, aseta liput |
-| MUL   | 0x0012 | Kertolasku, tallennetaan alin 16 bittiä, C-lippu ylivuodolle |
-| DIV   | 0x0013 | Kokonaislukujako, nollalla jako laukaisee Int 0 |
-| CMP   | 0x0014 | Vertailu: laskee erotus ja asettaa liput ilman tuloksen tallentamista |
-| ADC   | 0x001B | Yhteenlasku carry-lipun kanssa, 32+ -bittiselle aritmetiikalle |
+| Käsky | Opcode | Kuvaus                                                                |
+| ----- | ------ | --------------------------------------------------------------------- |
+| ADD   | 0x2080 | Yhteenlasku kahdelle rekisterille, aseta liput (Z, N, C, V)           |
+| SUB   | 0x2180 | Vähennyslasku, aseta liput                                            |
+| MUL   | 0x2280 | Kertolasku, tallennetaan alin 16 bittiä, C-lippu ylivuodolle          |
+| DIV   | 0x2380 | Kokonaislukujako, nollalla jako laukaisee Int 0                       |
+| CMP   | 0x2480 | Vertailu: laskee erotus ja asettaa liput ilman tuloksen tallentamista |
+| ADC   | 0x2580 | Yhteenlasku carry-lipun kanssa, 32+ -bittiselle aritmetiikalle        |
 
-### Logiikat ja bittioperaatiot (0x0015–0x001A)
+### Logiikka ja bittioperaatiot
 
-| Käsky | Opcode | Kuvaus |
-| ----- | ------ | ------ |
-| AND   | 0x0015 | Bittitason JA, käytetään maskiille (nollaa C ja V) |
-| OR    | 0x0016 | Bittitason TAI, bittien asettamiseen päälle |
-| XOR   | 0x0017 | Bittitason JOKO-TAI, käytetään bittien kääntöön ja yksinkertaiseen salaukseen |
-| NOT   | 0x0018 | Bittitason komplementti, kääntää kaikki bitit |
-| SHL   | 0x0019 | Looginen vasen siirto N-verran, oikea täytetään nollilla |
-| SHR   | 0x001A | Looginen oikea siirto N-verran, vasen täytetään nollilla |
+| Käsky | Opcode | Kuvaus                                                                        |
+| ----- | ------ | ----------------------------------------------------------------------------- |
+| AND   | 0x3080 | Bittitason JA, käytetään maskeille (nollaa C ja V)                            |
+| OR    | 0x3180 | Bittitason TAI, bittien asettamiseen päälle                                   |
+| XOR   | 0x3280 | Bittitason JOKO-TAI, käytetään bittien kääntöön ja yksinkertaiseen salaukseen |
+| NOT   | 0x3340 | Bittitason komplementti, kääntää kaikki bitit                                 |
+| SHL   | 0x3480 | Looginen vasen siirto N-verran, oikea täytetään nollilla                      |
+| SHR   | 0x3580 | Looginen oikea siirto N-verran, vasen täytetään nollilla                      |
 
-### Pino (0x0020–0x0022)
+### Pino
 
-| Käsky | Opcode | Kuvaus |
-| ----- | ------ | ------ |
-| PUSH  | 0x0020 | Talleta rekisterin arvo pinoon, vähennä SP:tä yhdellä |
-| POP   | 0x0021 | Lisää SP:tä yhdellä, hae arvo pinosta rekisteriin |
-| SWSP  | 0x0022 | Atominen pinorekisterin vaihto (ctx switch), ei keskeytyksiä |
+| Käsky | Opcode | Kuvaus                                                       |
+| ----- | ------ | ------------------------------------------------------------ |
+| PUSH  | 0x4040 | Talleta rekisterin arvo pinoon, vähennä SP:tä yhdellä        |
+| POP   | 0x4140 | Lisää SP:tä yhdellä, hae arvo pinosta rekisteriin            |
+| SWSP  | 0x4280 | Atominen pinorekisterin vaihto (ctx switch), ei keskeytyksiä |
 
-### Ohjaus (0x0030–0x0038)
+### Ohjaus
 
-| Käsky | Opcode | Kuvaus |
-| ----- | ------ | ------ |
-| JUMP  | 0x0030 | Ehdoton hyppy absoluuttiselle osoitteelle |
-| CALL  | 0x0031 | Kutsu aliohjelmaa: talleta paluuosoite ja hyppy |
-| RET   | 0x0032 | Palaa aliohjelmasta palauttamalla PC pinosta |
-| JZ    | 0x0033 | Ehdollinen hyppy, jos Z-lippu = 1 (yhtä suuret), alias: JE |
-| JNZ   | 0x0034 | Ehdollinen hyppy, jos Z-lippu = 0 (eri suuruiset), alias: JNE |
-| JLT   | 0x0035 | Ehdollinen hyppy, jos etumerkillisesti pienempi (signed) |
-| JGT   | 0x0036 | Ehdollinen hyppy, jos etumerkillisesti suurempi |
-| JLE   | 0x0037 | Ehdollinen hyppy, jos etumerkillisesti pienempi tai yhtä suuri |
-| JGE   | 0x0038 | Ehdollinen hyppy, jos etumerkillisesti suurempi tai yhtä suuri |
+| Käsky | Opcode | Kuvaus                                                         |
+| ----- | ------ | -------------------------------------------------------------- |
+| JUMP  | 0x5040 | Ehdoton hyppy absoluuttiselle osoitteelle                      |
+| CALL  | 0x5140 | Kutsu aliohjelmaa: talleta paluuosoite ja hyppy                |
+| RET   | 0x5200 | Palaa aliohjelmasta palauttamalla PC pinosta                   |
+| JZ    | 0x5340 | Ehdollinen hyppy, jos Z-lippu = 1 (yhtä suuret), alias: JE     |
+| JNZ   | 0x5440 | Ehdollinen hyppy, jos Z-lippu = 0 (eri suuruiset), alias: JNE  |
+| JLT   | 0x5540 | Ehdollinen hyppy, jos etumerkillisesti pienempi (signed)       |
+| JGT   | 0x5640 | Ehdollinen hyppy, jos etumerkillisesti suurempi                |
+| JLE   | 0x5740 | Ehdollinen hyppy, jos etumerkillisesti pienempi tai yhtä suuri |
+| JGE   | 0x5840 | Ehdollinen hyppy, jos etumerkillisesti suurempi tai yhtä suuri |
 
-### Keskeytys (0x0040–0x0044)
+### Keskeytykset
 
-| Käsky | Opcode | Kuvaus |
-| ----- | ------ | ------ |
-| INT   | 0x0040 | Laukaise ohjelmallinen keskeytys vektorilla 0–8 (syscall) |
-| IRET  | 0x0041 | Palaa keskeytyskäsittelijästä, palauta SR ja PC, vaatii Kernel-tilan |
-| STI   | 0x0042 | Salli laitteistokeskeytykset (I = 1), vaatii Kernel-tilan |
-| CLI   | 0x0043 | Estä laitteistokeskeytykset (I = 0), vaatii Kernel-tilan |
-| HALT  | 0x0044 | Pysäytä prosessori kokonaan, vaatii Kernel-tilan |
+| Käsky | Opcode | Kuvaus                                                               |
+| ----- | ------ | -------------------------------------------------------------------- |
+| INT   | 0x6040 | Laukaise ohjelmallinen keskeytys vektorilla 0–8 (syscall)            |
+| IRET  | 0xE100 | Palaa keskeytyskäsittelijästä, palauta SR ja PC, vaatii Kernel-tilan |
+| STI   | 0xE200 | Salli laitteistokeskeytykset (I = 1), vaatii Kernel-tilan            |
+| CLI   | 0xE300 | Estä laitteistokeskeytykset (I = 0), vaatii Kernel-tilan             |
 
-### Järjestelmä ja I/O (0x0045–0x004B)
+### Järjestelmä ja I/O
 
-| Käsky     | Opcode | Kuvaus |
-| --------- | ------ | ------ |
-| DREAD     | 0x0045 | Lue tallennuslaitteelta (block device), vaatii Kernel-tilan |
-| DWRITE    | 0x0046 | Kirjoita tallennuslaitteelle, vaatii Kernel-tilan |
-| SMPR      | 0x0047 | Aseta Memory Protection Register, vaatii Kernel-tilan |
-| STMR      | 0x0048 | Aseta Timer Register (ajastinväli), vaatii Kernel-tilan |
-| EXIT      | 0x0049 | Prosessin hallittu lopetus, laukaisee Int 8 |
-| KGET      | 0x004A | Lue merkki näppäimistön FIFO-puskurista, palauttaa 0 jos tyhjä |
-| TSL       | 0x004B | Atominen testi ja asetus: lue [addr] ja kirjoita 1, mutex-käyttöön |
+| Käsky  | Opcode | Kuvaus                                                             |
+| ------ | ------ | ------------------------------------------------------------------ |
+| HALT   | 0xF000 | Pysäytä prosessori kokonaan, vaatii Kernel-tilan                   |
+| DREAD  | 0xF180 | Lue tallennuslaitteelta (block device), vaatii Kernel-tilan        |
+| DWRITE | 0xF280 | Kirjoita tallennuslaitteelle, vaatii Kernel-tilan                  |
+| SMPR   | 0xF340 | Aseta Memory Protection Register, vaatii Kernel-tilan              |
+| STMR   | 0xF440 | Aseta Timer Register (ajastinväli), vaatii Kernel-tilan            |
+| EXIT   | 0x7500 | Prosessin hallittu lopetus, laukaisee Int 8                        |
+| KGET   | 0x7640 | Lue merkki näppäimistön FIFO-puskurista, palauttaa 0 jos tyhjä     |
+| TSL    | 0x7780 | Atominen testi ja asetus: lue [addr] ja kirjoita 1, mutex-käyttöön |
+| NOP    | 0x7F00 | Ei tee mitään                                                      |

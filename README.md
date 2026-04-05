@@ -10,7 +10,7 @@ interaktiivisen Textual-pohjaisen käyttöliittymän.
 - **16-bittinen sana-osoitettu muisti** — 65 536 sanaa (0x0000–0xFFFF)
 - **Rekisterit** — R0–R3 (GPR), FP, SP, PC, SR, MPR, TMR
 - **Tilarekisteri (SR)** — liput Z, N, C, V, I, P (Zero / Negative / Carry / Overflow / Interrupt / Privilege)
-- **Käskykanta** — 44 käskyä (tiedonsiirto, aritmetiikka, logiikka, pino, hyppykäskyt, keskeytykset, järjestelmä)
+- **Käskykanta** — 45 käskyä (tiedonsiirto, aritmetiikka, logiikka, pino, hyppykäskyt, keskeytykset, järjestelmä)
 - **Kolmipassinen assembler** — makrotuki (`.macro`/`.endmacro`), `.origin`-direktiivi, labelit
 - **Disassembler** — konekieli → assembly-teksti
 - **Muistisuojaus** — MPR-rekisteri rajoittaa User-tilan muistinkäyttöä
@@ -118,108 +118,122 @@ TUI on inspiroitu MARS/RARS-, GDB TUI-, Turbo Debugger- ja emu8086-ohjelmistoist
 
 ### Näppäinsidonnaisuudet
 
-| Näppäin  | Toiminto                          |
-|----------|-----------------------------------|
-| F1       | Ohje                              |
+| Näppäin  | Toiminto                             |
+| -------- | ------------------------------------ |
+| F1       | Ohje                                 |
 | F2       | Vaihda breakpoint nykyisellä rivillä |
-| F5       | Run (pysähtyy breakpointiin)      |
-| F7 / F10 | Step (1 käsky kerrallaan)         |
-| F9       | Tyhjennä VRAM                     |
-| Ctrl+B   | Assembloi koodi                   |
-| Ctrl+O   | Avaa tiedosto                     |
-| Ctrl+S   | Tallenna tiedosto                 |
-| Ctrl+R   | Reset kone                        |
-| Ctrl+Q   | Lopeta                            |
+| F5       | Run (pysähtyy breakpointiin)         |
+| F7 / F10 | Step (1 käsky kerrallaan)            |
+| F9       | Tyhjennä VRAM                        |
+| Ctrl+B   | Assembloi koodi                      |
+| Ctrl+O   | Avaa tiedosto                        |
+| Ctrl+S   | Tallenna tiedosto                    |
+| Ctrl+R   | Reset kone                           |
+| Ctrl+Q   | Lopeta                               |
 
 ### Komentotulkki
 
 TUI:n komentoriviltä (`>`) voidaan antaa komentoja kuten:
 
-| Komento            | Kuvaus                                      |
-|--------------------|---------------------------------------------|
-| `step` / `s`       | Suorita yksi käsky                          |
-| `run` / `r`        | Aja ohjelmaa (pysähtyy breakpointiin/HALT)  |
-| `reset`            | Nollaa kone                                 |
-| `bp <addr>`        | Lisää/poista breakpoint osoitteessa         |
-| `mem <addr>`       | Näytä muisti osoitteesta                    |
-| `reg`              | Tulosta rekisterit                          |
-| `load <tiedosto>`  | Lataa .asm-tiedosto editoriin               |
+| Komento                       | Kuvaus                                       |
+| ----------------------------- | -------------------------------------------- |
+| `step` / `s`                  | Suorita yksi käsky                           |
+| `run` / `r`                   | Aja ohjelmaa (pysähtyy breakpointiin/HALT)   |
+| `stop`                        | Keskeytä ajaminen                            |
+| `reset`                       | Nollaa kone                                  |
+| `restart`                     | Kääntää koodin uudelleen ja nollaa koneen    |
+| `asm`                         | Käännä editorin koodi (= Ctrl+B)             |
+| `check`                       | Tarkista syntaksi ilman lataamista           |
+| `bp <addr>`                   | Lisää/poista breakpoint osoitteessa          |
+| `mem <addr>`                  | Näytä muisti osoitteesta                     |
+| `mset <addr> <val>`           | Kirjoita arvo muistiosoitteeseen             |
+| `mfill <addr> <count> <val>`  | Täytä muistialue vakioarvolla                |
+| `disk <block>`                | Näytä tallennuslaitteen blokki               |
+| `dset <block> <offset> <val>` | Kirjoita arvo blokkiin                       |
+| `dfill <block> <val>`         | Täytä koko blokki vakioarvolla               |
+| `mem2disk <addr> <block>`     | Kopioi muistista yhden blokin verran levylle |
+| `disk2mem <block> <addr>`     | Kopioi levyblokki muistiin                   |
+| `load <tiedosto>`             | Lataa .asm-tiedosto editoriin                |
+| `save <tiedosto>`             | Tallenna editorin sisältö tiedostoon         |
+| `cls`                         | Tyhjennä VRAM-näyttö                         |
+| `spec`                        | Näytä arkkitehtuurispesifikaatio             |
+| `help`                        | Näytä komentojen ohjeet                      |
 
 ## Käskykanta (ISA)
 
 ### Tiedonsiirtokäskyt
 
-| Käsky           | Kuvaus                                        |
-|-----------------|-----------------------------------------------|
-| `LOAD reg, imm` | Lataa välitön arvo rekisteriin                |
-| `CPY regD, regS`| Kopioi rekisterin arvo toiseen                |
-| `READ reg, addr`| Lue muistiosoitteesta rekisteriin             |
-| `STORE reg, addr`| Tallenna rekisteri muistiosoitteeseen        |
-| `READ_IND regD, regS` | Lue epäsuorasti: regD ← [regS]          |
-| `STORE_IND regD, regS`| Kirjoita epäsuorasti: [regD] ← regS     |
-| `READ_REL reg, imm`   | Lue [FP + imm] → rekisteriin            |
-| `STORE_REL reg, imm`  | Kirjoita rekisteri → [FP + imm]         |
+| Käsky                  | Kuvaus                                |
+| ---------------------- | ------------------------------------- |
+| `LOAD reg, imm`        | Lataa välitön arvo rekisteriin        |
+| `CPY regD, regS`       | Kopioi rekisterin arvo toiseen        |
+| `READ reg, addr`       | Lue muistiosoitteesta rekisteriin     |
+| `STORE reg, addr`      | Tallenna rekisteri muistiosoitteeseen |
+| `READ_IND regD, regS`  | Lue epäsuorasti: regD ← [regS]        |
+| `STORE_IND regD, regS` | Kirjoita epäsuorasti: [regD] ← regS   |
+| `READ_REL reg, imm`    | Lue [FP + imm] → rekisteriin          |
+| `STORE_REL reg, imm`   | Kirjoita rekisteri → [FP + imm]       |
 
 ### Aritmetiikka
 
-| Käsky           | Kuvaus                                        |
-|-----------------|-----------------------------------------------|
-| `ADD regD, regS`| regD = regD + regS                            |
-| `SUB regD, regS`| regD = regD − regS                            |
-| `MUL regD, regS`| regD = regD × regS                            |
-| `DIV regD, regS`| regD = regD / regS (INT 0 jos jakaja = 0)     |
-| `CMP regA, regB`| Vertailu: asettaa liput, ei tallenna tulosta  |
-| `ADC regD, regS`| regD = regD + regS + Carry                    |
+| Käsky            | Kuvaus                                       |
+| ---------------- | -------------------------------------------- |
+| `ADD regD, regS` | regD = regD + regS                           |
+| `SUB regD, regS` | regD = regD − regS                           |
+| `MUL regD, regS` | regD = regD × regS                           |
+| `DIV regD, regS` | regD = regD / regS (INT 0 jos jakaja = 0)    |
+| `CMP regA, regB` | Vertailu: asettaa liput, ei tallenna tulosta |
+| `ADC regD, regS` | regD = regD + regS + Carry                   |
 
 ### Logiikka
 
-| Käsky           | Kuvaus                                        |
-|-----------------|-----------------------------------------------|
-| `AND regD, regS`| Bittitason AND                                |
-| `OR  regD, regS`| Bittitason OR                                 |
-| `XOR regD, regS`| Bittitason XOR                                |
-| `NOT reg`       | Bittitason NOT                                |
-| `SHL regD, regS`| Bittisiirto vasemmalle                        |
-| `SHR regD, regS`| Bittisiirto oikealle                          |
+| Käsky            | Kuvaus                 |
+| ---------------- | ---------------------- |
+| `AND regD, regS` | Bittitason AND         |
+| `OR  regD, regS` | Bittitason OR          |
+| `XOR regD, regS` | Bittitason XOR         |
+| `NOT reg`        | Bittitason NOT         |
+| `SHL regD, regS` | Bittisiirto vasemmalle |
+| `SHR regD, regS` | Bittisiirto oikealle   |
 
 ### Pino-operaatiot
 
-| Käsky           | Kuvaus                                        |
-|-----------------|-----------------------------------------------|
-| `PUSH reg`      | Tallenna rekisteri pinoon                     |
-| `POP reg`       | Hae pinosta rekisteriin                       |
-| `SWSP regD, regS`| regD = SP; SP = regS                         |
+| Käsky             | Kuvaus                    |
+| ----------------- | ------------------------- |
+| `PUSH reg`        | Tallenna rekisteri pinoon |
+| `POP reg`         | Hae pinosta rekisteriin   |
+| `SWSP regD, regS` | regD = SP; SP = regS      |
 
 ### Hyppykäskyt
 
-| Käsky      | Kuvaus                                             |
-|------------|----------------------------------------------------|
-| `JUMP addr`| Ehdoton hyppy                                      |
-| `CALL addr`| Aliohjelmakutsu (PUSH PC+koko, JUMP addr)          |
-| `RET`      | Paluu aliohjelmasta (POP PC)                       |
-| `JZ addr`  | Hyppy jos Z=1 (tulos oli nolla)                    |
-| `JNZ addr` | Hyppy jos Z=0 (tulos ei ollut nolla)               |
-| `JLT addr` | Hyppy jos N≠V (pienempi kuin, etumerkillinen)      |
-| `JGT addr` | Hyppy jos Z=0 ja N=V (suurempi kuin)               |
-| `JLE addr` | Hyppy jos Z=1 tai N≠V (pienempi tai yhtä suuri)    |
-| `JGE addr` | Hyppy jos N=V (suurempi tai yhtä suuri)            |
+| Käsky       | Kuvaus                                          |
+| ----------- | ----------------------------------------------- |
+| `JUMP addr` | Ehdoton hyppy                                   |
+| `CALL addr` | Aliohjelmakutsu (PUSH PC+koko, JUMP addr)       |
+| `RET`       | Paluu aliohjelmasta (POP PC)                    |
+| `JZ addr`   | Hyppy jos Z=1 (tulos oli nolla)                 |
+| `JNZ addr`  | Hyppy jos Z=0 (tulos ei ollut nolla)            |
+| `JLT addr`  | Hyppy jos N≠V (pienempi kuin, etumerkillinen)   |
+| `JGT addr`  | Hyppy jos Z=0 ja N=V (suurempi kuin)            |
+| `JLE addr`  | Hyppy jos Z=1 tai N≠V (pienempi tai yhtä suuri) |
+| `JGE addr`  | Hyppy jos N=V (suurempi tai yhtä suuri)         |
 
 ### Keskeytykset ja järjestelmä
 
-| Käsky           | Tila   | Kuvaus                                        |
-|-----------------|--------|-----------------------------------------------|
-| `INT imm`       | User   | Ohjelmallinen keskeytys (syscall)             |
-| `IRET`          | Kernel | Paluu keskeytyksenkäsittelijästä (POP SR, PC) |
-| `STI`           | Kernel | Salli keskeytykset (I=1)                      |
-| `CLI`           | Kernel | Estä keskeytykset (I=0)                       |
-| `HALT`          | Kernel | Pysäytä prosessori                            |
-| `EXIT`          | User   | Prosessin hallittu lopetus (INT 8)            |
-| `DREAD regD, regS` | Kernel | Lue lohko tallennuslaitteelta             |
-| `DWRITE regS, regD`| Kernel | Kirjoita lohko tallennuslaitteelle        |
-| `SMPR reg`      | Kernel | Aseta MPR (muistisuojaraja)                   |
-| `STMR reg`      | Kernel | Aseta TMR (ajastinväli)                       |
-| `KGET reg`      | User   | Lue näppäinpuskuri rekisteriin                |
-| `TSL reg, addr` | User   | Test and Set Lock (atominen)                  |
+| Käsky               | Tila   | Kuvaus                                        |
+| ------------------- | ------ | --------------------------------------------- |
+| `INT imm`           | User   | Ohjelmallinen keskeytys (syscall)             |
+| `IRET`              | Kernel | Paluu keskeytyksenkäsittelijästä (POP SR, PC) |
+| `STI`               | Kernel | Salli keskeytykset (I=1)                      |
+| `CLI`               | Kernel | Estä keskeytykset (I=0)                       |
+| `HALT`              | Kernel | Pysäytä prosessori                            |
+| `EXIT`              | User   | Prosessin hallittu lopetus (INT 8)            |
+| `DREAD regD, regS`  | Kernel | Lue lohko tallennuslaitteelta                 |
+| `DWRITE regS, regD` | Kernel | Kirjoita lohko tallennuslaitteelle            |
+| `SMPR reg`          | Kernel | Aseta MPR (muistisuojaraja)                   |
+| `STMR reg`          | Kernel | Aseta TMR (ajastinväli)                       |
+| `KGET reg`          | User   | Lue näppäinpuskuri rekisteriin                |
+| `TSL reg, addr`     | User   | Test and Set Lock (atominen)                  |
 
 ## Muistikartta
 
@@ -248,17 +262,17 @@ Värikoodit: 0=Musta, 1=Punainen, 2=Vihreä, 3=Keltainen, 4=Sininen, 5=Magenta, 
 
 ## Keskeytykset
 
-| Numero | Vektori  | Kuvaus                                 |
-|--------|----------|----------------------------------------|
-| INT 0  | 0x0000   | Jako nollalla (DIV, jakaja = 0)        |
-| INT 1  | 0x0001   | Tuntematon käsky (Invalid Opcode)      |
-| INT 2  | 0x0002   | Pinon ylivuoto                         |
-| INT 3  | 0x0003   | Debug / Breakpoint                     |
-| INT 4  | 0x0004   | Privilege Violation                    |
-| INT 5  | 0x0005   | Memory Access Fault                    |
-| INT 6  | 0x0006   | Näppäimistökeskeytys                   |
-| INT 7  | 0x0007   | Ajastinkeskeytys (TMR)                 |
-| INT 8  | 0x0008   | Prosessin hallittu lopetus (EXIT)      |
+| Numero | Vektori | Kuvaus                            |
+| ------ | ------- | --------------------------------- |
+| INT 0  | 0x0000  | Jako nollalla (DIV, jakaja = 0)   |
+| INT 1  | 0x0001  | Tuntematon käsky (Invalid Opcode) |
+| INT 2  | 0x0002  | Pinon ylivuoto                    |
+| INT 3  | 0x0003  | Debug / Breakpoint                |
+| INT 4  | 0x0004  | Privilege Violation               |
+| INT 5  | 0x0005  | Memory Access Fault               |
+| INT 6  | 0x0006  | Näppäimistökeskeytys              |
+| INT 7  | 0x0007  | Ajastinkeskeytys (TMR)            |
+| INT 8  | 0x0008  | Prosessin hallittu lopetus (EXIT) |
 
 ## Assembly-syntaksi
 
@@ -273,12 +287,13 @@ Värikoodit: 0=Musta, 1=Punainen, 2=Vihreä, 3=Keltainen, 4=Sininen, 5=Magenta, 
 
 START:                ; Label (päättyy kaksoispisteeseen)
     INIT_REGS         ; Makron käyttö
-    LOAD  R0, 42      ; Lataa vakio (desimaalina)
-    LOAD  R1, 0xFF    ; Lataa vakio (heksana)
-    LOAD  R2, $F800   ; $ = heksaprefiksi
-    ADD   R0, R1      ; Rekisterioperaatio
-    STORE R0, 0x0200  ; Tallenna muistiin
-    JUMP  START       ; Hyppy labeliin
+    LOAD  R0, 42           ; Lataa vakio (desimaalina)
+    LOAD  R1, 0xFF         ; Lataa vakio (heksana)
+    LOAD  R2, 0b1010       ; Lataa vakio (binäärinä)
+    LOAD  R3, VRAM_START   ; Arkkitehtuurivakio (= 0xF800)
+    ADD   R0, R1           ; Rekisterioperaatio
+    STORE R0, 0x0200       ; Tallenna muistiin
+    JUMP  START            ; Hyppy labeliin
     HALT
 ```
 
@@ -286,17 +301,17 @@ Rekisterit: `R0`, `R1`, `R2`, `R3`, `FP`, `SP` (kirjainkoosta riippumaton).
 
 ## Esimerkkiohjelmat
 
-| Tiedosto                  | Kuvaus                                              |
-|---------------------------|-----------------------------------------------------|
-| `hello_regs.asm`          | Peruslaskutoimitukset: (10+5)×3−3 = 42, kirjoitus VRAM:iin |
-| `fibonacci.asm`           | Fibonacci-lukujen laskenta iteratiivisesti          |
-| `factorial.asm`           | Kertoman laskenta aliohjelmalla (CALL/RET)          |
-| `countdown.asm`           | Laskulaskuri silmukalla                             |
-| `stack_demo.asm`          | Pinokäskyjen demonstraatio (PUSH/POP/CALL/RET)      |
-| `screen_hello_fill.asm`   | Tekstin kirjoitus näytölle VRAM:n kautta            |
-| `test_screen_colors.asm`  | FG/BG-värien testaus näytöllä                       |
-| `test_macros.asm`         | Makrojen käyttöesimerkki                            |
-| `exit_demo.asm`           | EXIT-käskyn demonstraatio                           |
+| Tiedosto                 | Kuvaus                                                     |
+| ------------------------ | ---------------------------------------------------------- |
+| `hello_regs.asm`         | Peruslaskutoimitukset: (10+5)×3−3 = 42, kirjoitus VRAM:iin |
+| `fibonacci.asm`          | Fibonacci-lukujen laskenta iteratiivisesti                 |
+| `factorial.asm`          | Kertoman laskenta aliohjelmalla (CALL/RET)                 |
+| `countdown.asm`          | Laskulaskuri silmukalla                                    |
+| `stack_demo.asm`         | Pinokäskyjen demonstraatio (PUSH/POP/CALL/RET)             |
+| `screen_hello_fill.asm`  | Tekstin kirjoitus näytölle VRAM:n kautta                   |
+| `test_screen_colors.asm` | FG/BG-värien testaus näytöllä                              |
+| `test_macros.asm`        | Makrojen käyttöesimerkki                                   |
+| `exit_demo.asm`          | EXIT-käskyn demonstraatio                                  |
 
 ## Lisenssi
 
