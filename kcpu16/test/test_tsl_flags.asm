@@ -8,17 +8,17 @@
 
 ; Tapaus 1: vanha arvo = 0 -> Z=1
 LOAD  R0, 0
-STORE R0, 0x0300
+STORE [0x0300], R0
 TSL   R1, 0x0300      ; R1 = 0, Z=1, mem[0x0300] = 1
 
 ; Tapaus 2: vanha arvo = 0x8000 (negatiivinen) -> N=1
 LOAD  R0, 0x8000
-STORE R0, 0x0301
+STORE [0x0301], R0
 TSL   R2, 0x0301      ; R2 = 0x8000, N=1, mem[0x0301] = 1
 
 ; Tapaus 3: vanha arvo = 1 (ei-nolla, positiivinen) -> Z=0, N=0
 LOAD  R0, 1
-STORE R0, 0x0302
+STORE [0x0302], R0
 TSL   R3, 0x0302      ; R3 = 1
 
 HALT

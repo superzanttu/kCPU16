@@ -1,28 +1,28 @@
 ; =============================================================================
-; test_storei.asm — STORE imm, addr (välitön arvo suoraan muistiosoitteeseen)
-; Assembler valitsee automaattisesti STOREI-opkoodin kun ensimmäinen
-; operandi ei ole rekisteri.
+; test_storei.asm — STORE [addr], imm (välitön arvo suoraan muistiosoitteeseen)
+; Kirjoittaa vakioarvon suoraan muistiosoitteeseen ilman rekisteriä.
+; Assembler tuottaa STOREI-opkoodin kun STORE:n lähde ei ole rekisteri.
 ; =============================================================================
 
         .origin 0x0200
 
         ; Kirjoita desimaaliluku suoraan muistiosoitteeseen
-        STORE     77, 0x0300       ; muisti[0x0300] = 77
+        STORE [0x0300], 77  ; muisti[0x0300] = 77
 
         ; Kirjoita heksaluku muistiosoitteeseen
-        STORE     0xABCD, 0x0301   ; muisti[0x0301] = 0xABCD
+        STORE [0x0301], 0xABCD  ; muisti[0x0301] = 0xABCD
 
         ; Kirjoita nolla muistiosoitteeseen (erityistapaus)
-        STORE     0, 0x0302        ; muisti[0x0302] = 0
+        STORE [0x0302], 0  ; muisti[0x0302] = 0
 
         ; Kirjoita 0xFFFF muistiosoitteeseen (maksimarvo)
-        STORE     0xFFFF, 0x0303   ; muisti[0x0303] = 0xFFFF
+        STORE [0x0303], 0xFFFF  ; muisti[0x0303] = 0xFFFF
 
         ; Lue takaisin ja tarkista
-        READ      R0, 0x0300       ; R0 = 77
-        READ      R1, 0x0301       ; R1 = 0xABCD
-        READ      R2, 0x0302       ; R2 = 0
-        READ      R3, 0x0303       ; R3 = 0xFFFF
+        LOAD R0, [0x0300]  ; R0 = 77
+        LOAD R1, [0x0301]  ; R1 = 0xABCD
+        LOAD R2, [0x0302]  ; R2 = 0
+        LOAD R3, [0x0303]  ; R3 = 0xFFFF
 
         HALT
 

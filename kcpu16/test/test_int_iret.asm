@@ -18,7 +18,7 @@
 
 ; Aseta keskeytysvektori 3 (breakpoint) osoittamaan handler:iin
 LOAD  R0, handler
-STORE R0, 0x0003      ; vektori 3 = handler:in osoite
+STORE [0x0003], R0  ; vektori 3 = handler:in osoite
 
 ; Aseta testiarvo
 LOAD  R0, 0

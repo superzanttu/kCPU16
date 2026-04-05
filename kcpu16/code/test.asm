@@ -6,6 +6,6 @@
         LOAD      r1, vram_end
 
 SILMU:
-       
-        STORE_IND r0, 77
+
+        STORE [R0], 77
         EXIT

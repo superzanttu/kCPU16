@@ -37,7 +37,7 @@
         ; -----------------------------------------------
         LOAD  FP, 0xF860 ; FP = näyttöpointteri
         LOAD  R3, 0xE053 ; R3 = 'S' (valkoinen)
-        STORE_IND FP, R3 ; Kirjoita 'S' näytölle
+        STORE [FP], R3  ; Kirjoita 'S' näytölle
 
         ; -----------------------------------------------
         ; Alusta rekisterit arvoilla 1, 2, 3
@@ -56,7 +56,7 @@
 
         ; Tulosta 'P' (Push tehty)
         LOAD  R3, 0xE050 ; R3 = 'P'
-        STORE R3, 0xF861 ; Suora osoitus näyttöön
+        STORE [0xF861], R3  ; Suora osoitus näyttöön
 
         ; -----------------------------------------------
         ; POP-vaihe: Hae arvot pinosta (LIFO-järjestys)
@@ -68,7 +68,7 @@
 
         ; Tulosta 'O' (Output ready)
         LOAD  R3, 0xE04F ; R3 = 'O'
-        STORE R3, 0xF862
+        STORE [0xF862], R3
 
         ; -----------------------------------------------
         ; Lopputulos:

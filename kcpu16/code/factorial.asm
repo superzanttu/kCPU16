@@ -64,15 +64,15 @@
         LOAD  R2, 1        ; R2 = 1 (näyttöpoitnerin askel)
 
         LOAD  FP, 0xE031   ; '1'
-        STORE_IND R3, FP
+        STORE [R3], FP
         ADD   R3, R2
 
         LOAD  FP, 0xE032   ; '2'
-        STORE_IND R3, FP
+        STORE [R3], FP
         ADD   R3, R2
 
         LOAD  FP, 0xE030   ; '0'
-        STORE_IND R3, FP
+        STORE [R3], FP
 
         ; -----------------------------------------------
         ; Lopeta ohjelma
@@ -120,17 +120,17 @@ fact_loop:
         ; Tulosta laskurin arvo näytölle (debug)
         ; Muunna numero merkiksi: '0' + laskuri
         ; -----------------------------------------------
-        STORE R0, 0x0212   ; Tallenna tulos väliaikaisesti muistiin
+        STORE [0x0212], R0  ; Tallenna tulos väliaikaisesti muistiin
         CPY   FP, R1       ; FP = laskurin kopio
         LOAD  R0, 0xE030   ; R0 = valkoinen '0' -pohja
         ADD   FP, R0       ; FP = '0' + laskuri = numeromerkki
-        READ  R0, 0x0212   ; Palauta tulos R0:aan
-        STORE_IND R3, FP   ; Kirjoita merkki näytölle
+        LOAD R0, [0x0212]  ; Palauta tulos R0:aan
+        STORE [R3], FP  ; Kirjoita merkki näytölle
         ADD   R3, R2       ; Seuraava näyttöpaikka
 
         ; Tulosta välilyönti
         LOAD  FP, 0xE020   ; ' '
-        STORE_IND R3, FP
+        STORE [R3], FP
         ADD   R3, R2
 
         ; -----------------------------------------------

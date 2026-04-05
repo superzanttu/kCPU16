@@ -12,11 +12,11 @@
 
 ; Aseta INT 3 -vektori
 LOAD  R0, int3_handler
-STORE R0, 0x0003
+STORE [0x0003], R0
 
 ; Aseta INT 8 -vektori (EXIT)
 LOAD  R0, exit_handler
-STORE R0, 0x0008
+STORE [0x0008], R0
 
 ; Kernel modessa alkuun: P=1
 LOAD  R0, 1           ; merkki: kernel-vaihe suoritettu

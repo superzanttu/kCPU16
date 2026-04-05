@@ -9,7 +9,7 @@
 
         ; Alusta lukko vapaaaksi (0 = vapaa)
         LOAD  R0, 0
-        STORE R0, 0x0300
+        STORE [0x0300], R0
 
         ; Ensimmäinen TSL: lukko oli vapaa → R1 = 0, lukko lukittuu
         TSL   R1, 0x0300      ; R1 = 0 (vapaa), muisti[0x0300] = 1

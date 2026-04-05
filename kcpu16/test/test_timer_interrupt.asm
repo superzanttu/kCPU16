@@ -12,7 +12,7 @@
 
 ; Aseta INT 7 handler (timer)
 LOAD  R0, timer_handler
-STORE R0, 0x0007
+STORE [0x0007], R0
 
 ; R3 = 0 (handler asettaa 0xBEEF)
 LOAD  R3, 0

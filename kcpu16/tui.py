@@ -105,13 +105,6 @@ REG_NAMES = {0: "R0", 1: "R1", 2: "R2", 3: "R3", 4: "FP", 5: "SP"}
 _REG_FIRST = {
     "LOAD",
     "CPY",
-    "READ",
-    "STORE",
-    "READ_IND",
-    "STORE_IND",
-    "STOREI_IND",
-    "READ_REL",
-    "STORE_REL",
     "ADD",
     "ADC",
     "SUB",
@@ -148,8 +141,6 @@ _REG_SECOND = {
     "XOR",
     "SHL",
     "SHR",
-    "READ_IND",
-    "STORE_IND",
     "SWSP",
     "DREAD",
     "DWRITE",
@@ -1206,21 +1197,62 @@ class KCPU16TUI(App[None]):
     def _fmt_operands(self, mnemonic: str, ops_str: str) -> str:
         """Muunna operandit luettavaan muotoon (rekisterinimet, värit).
 
-        Disassembler palauttaa operandit numeerisina (esim. "0, 42").
-        Tämä metodi muuntaa ne ihmisluettaviksi käyttäen REG_NAMES-lookuppia:
-        - _REG_FIRST kertoo, odottaako 1. operandi rekisteri-indeksiä
-        - _REG_SECOND kertoo, odottaako 2. operandi rekisteri-indeksiä
-        - Jos kyseessä on rekisteri, haetaan nimi REG_NAMES-dictistä (0→R0, jne.)
-          ja värjätään siniseksi
-        - Muut arvot (välittömät, osoitteet) näytetään vihreällä hex-muodossa
+        Käsittelee kolmea muotoa:
+        1. Valmiiksi nimetty rekisteri (esim. "R0") → sininen
+        2. Hakasulkuinen muistiviite (esim. "[0x0300]", "[R1]", "[FP+2]") →
+           hakasulut literaaleina, sisältö värikkäänä
+        3. Vanhan muodon heksaluku (esim. "0x0000") → _REG_FIRST/_REG_SECOND
+           -taulukoiden perusteella joko rekisterinimi (sininen) tai arvo (vihreä)
         """
         if not ops_str:
             return ""
+        _REG_NAMES_SET = set(REG_NAMES.values())  # {"R0","R1","R2","R3","FP","SP"}
         ops = [o.strip() for o in ops_str.split(",")]
         result = []
         for i, op in enumerate(ops):
             if not op:
                 continue
+
+            # 1. Valmiiksi nimetty rekisteri ("R0", "FP", jne.)
+            if op in _REG_NAMES_SET:
+                result.append(f"[blue]{op}[/]")
+                continue
+
+            # 2. Hakasulkuinen muistiviite: [addr], [reg], [FP+offset]
+            if op.startswith("[") and op.endswith("]"):
+                inner = op[1:-1].strip()
+                if "+" in inner:
+                    base_str, off_str = inner.split("+", 1)
+                    base_str = base_str.strip()
+                    off_str = off_str.strip()
+                    base_fmt = (
+                        f"[blue]{base_str}[/]"
+                        if base_str in _REG_NAMES_SET
+                        else f"[green]{base_str}[/]"
+                    )
+                    try:
+                        off_val = (
+                            int(off_str, 16)
+                            if off_str.startswith("0x")
+                            else int(off_str)
+                        )
+                        off_fmt = f"[green]{off_val}[/]"
+                    except ValueError:
+                        off_fmt = off_str
+                    result.append(f"\\[{base_fmt}+{off_fmt}\\]")
+                elif inner in _REG_NAMES_SET:
+                    result.append(f"\\[[blue]{inner}[/]\\]")
+                else:
+                    try:
+                        addr_val = (
+                            int(inner, 16) if inner.startswith("0x") else int(inner)
+                        )
+                        result.append(f"\\[[green]0x{addr_val:04X}[/]\\]")
+                    except ValueError:
+                        result.append(f"\\[{inner}\\]")
+                continue
+
+            # 3. Vanhan muodon heksaluku (ei-muistioperaatioiden operandit)
             try:
                 val = int(op, 16) if op.startswith("0x") else int(op)
             except ValueError:
@@ -1422,11 +1454,12 @@ class KCPU16TUI(App[None]):
         ic = self.machine.cpu.instruction_counter
         opcode = self.machine.memory.read(pc)
         if opcode in OPCODE_TABLE:
-            mnemonic, op_count, _ = OPCODE_TABLE[opcode]
-            ops = [
-                f"0x{self.machine.memory.read(pc + 1 + i):04X}" for i in range(op_count)
+            _, op_count, _ = OPCODE_TABLE[opcode]
+            words = [opcode] + [
+                self.machine.memory.read(pc + 1 + j) for j in range(op_count)
             ]
-            instr = f"{mnemonic} {', '.join(ops)}" if ops else mnemonic
+            raw = self.disassembler.disassemble(words, start_addr=pc)
+            instr = raw.split(":", 1)[1].strip() if ":" in raw else raw
         else:
             instr = f".word 0x{opcode:04X}"
 

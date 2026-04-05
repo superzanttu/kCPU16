@@ -1,7 +1,7 @@
 ; =============================================================================
-; test_storei_rel.asm — STORE_REL imm, offset (välitön arvo [FP + offset]:een)
-; Assembler valitsee automaattisesti STOREI_REL-opkoodin kun ensimmäinen
-; operandi ei ole rekisteri.
+; test_storei_rel.asm — STORE [FP+offset], imm (välitön arvo FP-suhteelliseen osoitteeseen)
+; Kirjoittaa vakioarvon FP-rekisterin suhteelliseen muistiosoitteeseen.
+; Assembler tuottaa STOREI_REL-opkoodin kun STORE [FP+n]:n lähde ei ole rekisteri.
 ; =============================================================================
 
         .origin 0x0200
@@ -9,16 +9,16 @@
         LOAD      FP, 0x0300      ; FP = pinokehyksen kanta
 
         ; Kirjoita välitön arvo eri siirtymiin
-        STORE_REL 99, 0            ; muisti[FP+0] = muisti[0x0300] = 99
-        STORE_REL 0xCAFE, 1        ; muisti[FP+1] = muisti[0x0301] = 0xCAFE
-        STORE_REL 0, 2             ; muisti[FP+2] = muisti[0x0302] = 0
-        STORE_REL 0xFFFF, 5        ; muisti[FP+5] = muisti[0x0305] = 0xFFFF
+        STORE [FP+0], 99  ; muisti[FP+0] = muisti[0x0300] = 99
+        STORE [FP+1], 0xCAFE  ; muisti[FP+1] = muisti[0x0301] = 0xCAFE
+        STORE [FP+2], 0  ; muisti[FP+2] = muisti[0x0302] = 0
+        STORE [FP+5], 0xFFFF  ; muisti[FP+5] = muisti[0x0305] = 0xFFFF
 
         ; Lue takaisin READ_REL:llä ja tarkista
-        READ_REL  R0, 0            ; R0 = muisti[0x0300] = 99
-        READ_REL  R1, 1            ; R1 = muisti[0x0301] = 0xCAFE
-        READ_REL  R2, 2            ; R2 = muisti[0x0302] = 0
-        READ_REL  R3, 5            ; R3 = muisti[0x0305] = 0xFFFF
+        LOAD R0, [FP+0]  ; R0 = muisti[0x0300] = 99
+        LOAD R1, [FP+1]  ; R1 = muisti[0x0301] = 0xCAFE
+        LOAD R2, [FP+2]  ; R2 = muisti[0x0302] = 0
+        LOAD R3, [FP+5]  ; R3 = muisti[0x0305] = 0xFFFF
 
         HALT
 

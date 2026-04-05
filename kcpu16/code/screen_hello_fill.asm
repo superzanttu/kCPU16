@@ -46,25 +46,25 @@
         ; Merkkiformat: 0xE0XX = valkoinen väri + ASCII
         ; -----------------------------------------------
         LOAD  R0, 0xE048      ; 'H' (ASCII 0x48)
-        STORE R0, 0x0200      ; [0x0200] = 'H'
+        STORE [0x0200], R0  ; [0x0200] = 'H'
 
         LOAD  R0, 0xE045      ; 'E' (ASCII 0x45)
-        STORE R0, 0x0201
+        STORE [0x0201], R0
 
         LOAD  R0, 0xE04C      ; 'L' (ASCII 0x4C)
-        STORE R0, 0x0202
+        STORE [0x0202], R0
 
         LOAD  R0, 0xE04C      ; 'L'
-        STORE R0, 0x0203
+        STORE [0x0203], R0
 
         LOAD  R0, 0xE04F      ; 'O' (ASCII 0x4F)
-        STORE R0, 0x0204
+        STORE [0x0204], R0
 
         LOAD  R0, 0xE021      ; '!' (ASCII 0x21)
-        STORE R0, 0x0205
+        STORE [0x0205], R0
 
         LOAD  R0, 0xE020      ; ' ' (välilyönti, ASCII 0x20)
-        STORE R0, 0x0206
+        STORE [0x0206], R0
 
         ; -----------------------------------------------
         ; Vaihe 2: Alusta kirjoitussilmukka
@@ -80,7 +80,7 @@
         ; (debug-tarkoituksiin)
         ; -----------------------------------------------
         LOAD  FP, 0xE053      ; 'S' (Start)
-        STORE FP, 0xF8A0      ; Kirjoita rivin 2 alkuun
+        STORE [0xF8A0], FP  ; Kirjoita rivin 2 alkuun
 
 ; =============================================================================
 ; TÄYTTÖSILMUKKA - Kirjoita "HELLO! " toistuvasti
@@ -89,8 +89,8 @@ fill_loop:
         ; -----------------------------------------------
         ; Lue merkki patternista ja kirjoita näytölle
         ; -----------------------------------------------
-        READ_IND FP, R2       ; FP = [R2] (pattern-merkki)
-        STORE_IND R0, FP      ; [R0] = FP (kirjoita näyttöön)
+        LOAD FP, [R2]  ; FP = [R2] (pattern-merkki)
+        STORE [R0], FP  ; [R0] = FP (kirjoita näyttöön)
 
         ; -----------------------------------------------
         ; Siirry seuraavaan näyttöpaikkaan ja pattern-merkkiin
@@ -117,7 +117,7 @@ no_wrap:
         ; Merkitse ajon lopetus kirjoittamalla 'D' (Done)
         ; -----------------------------------------------
         LOAD  FP, 0xE044      ; 'D'
-        STORE FP, 0xF8A1
+        STORE [0xF8A1], FP
 
         ; -----------------------------------------------
         ; Valmis! Näyttö on nyt täynnä "HELLO! " -tekstiä

@@ -48,7 +48,7 @@
         ; -----------------------------------------------
         LOAD  FP, 0xF880 ; FP = näyttöpointteri (rivi 2)
         LOAD  SP, 0xE045 ; SP = 'E' (valkoinen)
-        STORE_IND FP, SP ; Kirjoita 'E' näytölle
+        STORE [FP], SP  ; Kirjoita 'E' näytölle
         ADD   FP, R3     ; Siirry seuraavaan paikkaan
 
 ; =============================================================================
@@ -65,7 +65,7 @@ loop:
         ; Tulosta piste '.' edistymisen merkiksi
         ; -----------------------------------------------
         LOAD  SP, 0xE02E ; SP = '.' (valkoinen)
-        STORE_IND FP, SP ; Kirjoita '.'
+        STORE [FP], SP  ; Kirjoita '.'
         ADD   FP, R3     ; Siirry seuraavaan paikkaan
 
         ; -----------------------------------------------
@@ -89,7 +89,7 @@ done:
         ; Tulosta lopetusmerkki 'X'
         ; -----------------------------------------------
         LOAD  SP, 0xE058 ; SP = 'X' (valkoinen)
-        STORE_IND FP, SP ; Kirjoita 'X'
+        STORE [FP], SP  ; Kirjoita 'X'
 
         ; -----------------------------------------------
         ; Lopeta prosessi EXIT-käskyllä

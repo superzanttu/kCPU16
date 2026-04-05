@@ -18,7 +18,7 @@ LOAD  R3, 55
 
 ; Aseta EXIT-handler (INT 8) -> HALT
 LOAD  R2, exit_handler
-STORE R2, 0x0008
+STORE [0x0008], R2
 
 ; Kutsu EXIT
 EXIT

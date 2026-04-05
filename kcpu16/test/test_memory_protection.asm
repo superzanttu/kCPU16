@@ -11,11 +11,11 @@
 
 ; Aseta keskeytysvektori 5 (memory access fault)
 LOAD  R0, mem_handler
-STORE R0, 0x0005
+STORE [0x0005], R0
 
 ; Aseta keskeytysvektori 8 (EXIT)
 LOAD  R0, exit_handler
-STORE R0, 0x0008
+STORE [0x0008], R0
 
 ; Aseta muistisuojaus: MPR = 0x0300
 ; Alle 0x0300 on suojattua (paitsi VRAM)
@@ -24,7 +24,7 @@ SMPR  R0
 
 ; Kirjoita suojattuun alueeseen (kernel-tilassa OK)
 LOAD  R0, 0xCAFE
-STORE R0, 0x0050      ; kernel voi kirjoittaa alle MPR:n
+STORE [0x0050], R0  ; kernel voi kirjoittaa alle MPR:n
 
 ; Siirry user modeen IRET:llä
 LOAD  R0, user_code
@@ -38,7 +38,7 @@ user_code:
 LOAD  R0, 11          ; tallenna merkki R0:een (handler ei käytä R0:aa)
 
 ; Yritä lukea suojatusta osoitteesta (0x0050 < MPR=0x0300)
-READ  R2, 0x0050      ; -> INT 5 (memory access fault)
+LOAD R2, [0x0050]  ; -> INT 5 (memory access fault)
 
 ; Tänne palataan handler:ista
 LOAD  R2, 22
@@ -46,11 +46,11 @@ EXIT
 
 mem_handler:
     LOAD  R3, 0xFADE  ; merkki: handler suoritettiin
-    ; Ohita READ-käsky (3 sanaa: opcode + reg + addr)
+    ; Ohita LOAD-käsky (3 sanaa: opcode + reg + addr)
     POP   R1          ; old_SR  (handler saa käyttää R1:tä)
     POP   FP          ; old_PC  (handler saa käyttää FP:tä)
     LOAD  R2, 3
-    ADD   FP, R2      ; ohita READ (3 sanaa)
+    ADD   FP, R2      ; ohita LOAD (3 sanaa)
     PUSH  FP          ; korjattu PC takaisin
     PUSH  R1          ; SR takaisin
     IRET

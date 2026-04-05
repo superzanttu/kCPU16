@@ -15,11 +15,11 @@
 
 ; Aseta keskeytysvektori 4 (privilege violation)
 LOAD  R0, priv_handler
-STORE R0, 0x0004
+STORE [0x0004], R0
 
 ; Aseta keskeytysvektori 8 (EXIT/process exit)
 LOAD  R0, exit_handler
-STORE R0, 0x0008
+STORE [0x0008], R0
 
 ; Valmistele IRET joka siirtyy user modeen
 ; IRET: POP SR, POP PC

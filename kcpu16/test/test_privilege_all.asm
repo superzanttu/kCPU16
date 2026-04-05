@@ -10,11 +10,11 @@
 
 ; Aseta INT 4 handler (privilege violation)
 LOAD  R0, priv_handler
-STORE R0, 0x0004
+STORE [0x0004], R0
 
 ; Aseta INT 8 handler (EXIT)
 LOAD  R0, exit_handler
-STORE R0, 0x0008
+STORE [0x0008], R0
 
 ; R3 = laskuri
 LOAD  R3, 0
@@ -53,8 +53,8 @@ priv_handler:
     ; Käytetään suoraa pinon lukua
     LOAD  R0, 5
     ADD   R0, SP        ; R0 = SP + 5
-    READ_IND R1, R0     ; R1 = old_PC
-    READ_IND R2, R1     ; R2 = opcode
+    LOAD R1, [R0]  ; R1 = old_PC
+    LOAD R2, [R1]  ; R2 = opcode
 
     ; Käskyn koko OPS-kentästä (bitit 7:6): size = 1 + OPS
     LOAD  R0, 6
@@ -67,9 +67,9 @@ priv_handler:
     ; Lisää käskyn koko old_PC:hen
     LOAD  R1, 5
     ADD   R1, SP        ; R1 = SP + 5 = &old_PC
-    READ_IND R2, R1     ; R2 = old_PC
+    LOAD R2, [R1]  ; R2 = old_PC
     ADD   R2, R0        ; R2 = old_PC + size
-    STORE_IND R1, R2    ; päivitä old_PC pinossa
+    STORE [R1], R2  ; päivitä old_PC pinossa
 
     POP   R2
     POP   R1

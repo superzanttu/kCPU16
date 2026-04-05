@@ -12,11 +12,11 @@
 START:
     LOAD R0, 0xF800       ; VRAM start address
     LOAD R1, 0x9148       ; 'H' with red/white colors
-    STORE_IND R1, R0      ; Write R1 to address in R0
+    STORE [R1], R0  ; Write R1 to address in R0
 
     ; Write 'i' at next position
     LOAD R0, 0xF801
     LOAD R1, 0x9169       ; 'i' (0x69) with red/white
-    STORE_IND R1, R0
+    STORE [R1], R0
 
     HALT

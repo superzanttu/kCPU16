@@ -12,7 +12,7 @@
 
 ; Aseta keskeytysvektori 0 (INT_DIV_ZERO)
 LOAD  R0, div_handler
-STORE R0, 0x0000      ; vektori 0
+STORE [0x0000], R0  ; vektori 0
 
 ; Yritä jakaa nollalla
 LOAD  R0, 100

@@ -99,6 +99,20 @@ REGISTER_TO_ID: dict[str, int] = {
 # Luodaan OPCODE_TABLE:sta kaantamalla avain-arvot
 MNEMONIC_TO_OPCODE: dict[str, int] = {v[0]: k for k, v in OPCODE_TABLE.items()}
 
+# Mnemoniikat jotka on korvattu [..] syntaksilla — suorat viittaukset hylätään
+_DEPRECATED_MNEMONICS: frozenset[str] = frozenset(
+    {
+        "READ",
+        "READ_IND",
+        "READ_REL",
+        "STORE_IND",
+        "STORE_REL",
+        "STOREI",
+        "STOREI_IND",
+        "STOREI_REL",
+    }
+)
+
 
 class Assembler:
     """
@@ -399,19 +413,18 @@ class Assembler:
 
             # Muuten tama on kasky - laske sen koko
             # "ADD R0, R1" -> ["ADD", "R0", "R1"]
-            mnemonic = line.replace(",", " ").split()[0].upper()
-
-            # Automaattinen STOREI-variantti: sama koko (3 sanaa), löytyy MNEMONIC_TO_OPCODE:sta
             parts = line.replace(",", " ").split()
-            if mnemonic == "STORE" and len(parts) >= 2:
-                if parts[1].upper() not in REGISTER_TO_ID:
-                    mnemonic = "STOREI"
-            elif mnemonic == "STORE_IND" and len(parts) >= 3:
-                if parts[2].upper() not in REGISTER_TO_ID:
-                    mnemonic = "STOREI_IND"
-            elif mnemonic == "STORE_REL" and len(parts) >= 2:
-                if parts[1].upper() not in REGISTER_TO_ID:
-                    mnemonic = "STOREI_REL"
+            mnemonic = parts[0].upper()
+
+            if mnemonic in _DEPRECATED_MNEMONICS:
+                raise ValueError(
+                    f"Vanhentunut mnemoniikka '{mnemonic}' — käytä [..] syntaksia: "
+                    f"LOAD reg, [osoite]  tai  STORE [osoite], reg/arvo"
+                )
+            if mnemonic == "STORE" and len(parts) >= 2 and not parts[1].startswith("["):
+                raise ValueError(
+                    f"STORE vaatii [..] osoitussyntaksin: STORE [osoite], reg/arvo"
+                )
 
             # Hae opcode ja operandien maara
             opcode = MNEMONIC_TO_OPCODE.get(mnemonic)
@@ -489,19 +502,78 @@ class Assembler:
             parts = line.replace(",", " ").split()
             mnemonic = parts[0].upper()
 
-            # Automaattinen välittömän arvon STORE-variantti:
-            #   STORE src, addr    → STOREI imm, addr    (jos src ei ole rekisteri)
-            #   STORE_IND rD, src  → STOREI_IND rD, imm  (jos src ei ole rekisteri)
-            #   STORE_REL src, off → STOREI_REL imm, off (jos src ei ole rekisteri)
-            if mnemonic == "STORE" and len(parts) >= 2:
-                if parts[1].upper() not in REGISTER_TO_ID:
-                    mnemonic = "STOREI"
-            elif mnemonic == "STORE_IND" and len(parts) >= 3:
-                if parts[2].upper() not in REGISTER_TO_ID:
-                    mnemonic = "STOREI_IND"
-            elif mnemonic == "STORE_REL" and len(parts) >= 2:
-                if parts[1].upper() not in REGISTER_TO_ID:
-                    mnemonic = "STOREI_REL"
+            # ---------------------------------------------------------------
+            # [..] syntaksi: LOAD reg, [expr]  ja  STORE [expr], src
+            # ---------------------------------------------------------------
+
+            # LOAD reg, [expr]  → READ / READ_IND / READ_REL
+            if mnemonic == "LOAD" and len(parts) >= 3 and parts[2].startswith("["):
+                reg_dst = self._parse_operand(parts[1], labels)
+                mode = self._parse_bracket_expr(parts[2], labels)
+                if mode[0] == "abs":
+                    current_words += [MNEMONIC_TO_OPCODE["READ"], reg_dst, mode[1]]
+                elif mode[0] == "ind":
+                    current_words += [MNEMONIC_TO_OPCODE["READ_IND"], reg_dst, mode[1]]
+                elif mode[0] == "rel":
+                    current_words += [MNEMONIC_TO_OPCODE["READ_REL"], reg_dst, mode[2]]
+                continue
+
+            # STORE [expr], src  → STORE / STOREI / STORE_IND / STOREI_IND /
+            #                       STORE_REL / STOREI_REL
+            if mnemonic == "STORE" and len(parts) >= 3 and parts[1].startswith("["):
+                mode = self._parse_bracket_expr(parts[1], labels)
+                src_token = parts[2]
+                src_is_reg = src_token.upper() in REGISTER_TO_ID
+                if mode[0] == "abs":
+                    addr = mode[1]
+                    if src_is_reg:
+                        current_words += [
+                            MNEMONIC_TO_OPCODE["STORE"],
+                            REGISTER_TO_ID[src_token.upper()],
+                            addr,
+                        ]
+                    else:
+                        imm = self._parse_operand(src_token, labels)
+                        current_words += [MNEMONIC_TO_OPCODE["STOREI"], imm, addr]
+                elif mode[0] == "ind":
+                    reg_addr = mode[1]
+                    if src_is_reg:
+                        current_words += [
+                            MNEMONIC_TO_OPCODE["STORE_IND"],
+                            reg_addr,
+                            REGISTER_TO_ID[src_token.upper()],
+                        ]
+                    else:
+                        imm = self._parse_operand(src_token, labels)
+                        current_words += [
+                            MNEMONIC_TO_OPCODE["STOREI_IND"],
+                            reg_addr,
+                            imm,
+                        ]
+                elif mode[0] == "rel":
+                    _base_reg, offset = mode[1], mode[2]
+                    if src_is_reg:
+                        current_words += [
+                            MNEMONIC_TO_OPCODE["STORE_REL"],
+                            REGISTER_TO_ID[src_token.upper()],
+                            offset,
+                        ]
+                    else:
+                        imm = self._parse_operand(src_token, labels)
+                        current_words += [MNEMONIC_TO_OPCODE["STOREI_REL"], imm, offset]
+                continue
+
+            # ---------------------------------------------------------------
+
+            if mnemonic in _DEPRECATED_MNEMONICS:
+                raise ValueError(
+                    f"Vanhentunut mnemoniikka '{mnemonic}' — käytä [..] syntaksia: "
+                    f"LOAD reg, [osoite]  tai  STORE [osoite], reg/arvo"
+                )
+            if mnemonic == "STORE" and len(parts) >= 2 and not parts[1].startswith("["):
+                raise ValueError(
+                    f"STORE vaatii [..] osoitussyntaksin: STORE [osoite], reg/arvo"
+                )
 
             # Hae opcode
             opcode = MNEMONIC_TO_OPCODE.get(mnemonic)
@@ -520,6 +592,39 @@ class Assembler:
             segments.append((current_start, [w & WORD_MASK for w in current_words]))
 
         return segments
+
+    def _parse_bracket_expr(self, token: str, labels: dict[str, int]) -> tuple:
+        """Parsi hakasulkuinen [expr] osoitusmuoto.
+
+        Tunnistetaan kolme muotoa:
+            [reg]         → ('ind', reg_id)          -- epäsuora rekisteriviittaus
+            [reg+offset]  → ('rel', reg_id, offset)  -- suhteellinen osoitus
+            [addr]        → ('abs', addr)             -- absoluuttinen osoite
+
+        Args:
+            token:  Koko hakasulkuinen token, esim. "[R0]", "[FP+2]", "[0x0300]"
+            labels: Tunnetut labelit ja arkkitehtuurivakiot
+
+        Returns:
+            Tuple: ('ind', reg_id), ('rel', reg_id, offset) tai ('abs', addr)
+        """
+        inner = token[1:-1].strip()
+
+        # [reg+offset] muoto
+        if "+" in inner:
+            base_str, off_str = inner.split("+", 1)
+            base_upper = base_str.strip().upper()
+            if base_upper in REGISTER_TO_ID:
+                reg_id = REGISTER_TO_ID[base_upper]
+                offset = self._parse_operand(off_str.strip(), labels)
+                return ("rel", reg_id, offset)
+
+        # [reg] muoto
+        if inner.upper() in REGISTER_TO_ID:
+            return ("ind", REGISTER_TO_ID[inner.upper()])
+
+        # [addr] muoto — absoluuttinen osoite tai label
+        return ("abs", self._parse_operand(inner, labels))
 
     def _parse_operand(self, token: str, labels: dict[str, int]) -> int:
         """

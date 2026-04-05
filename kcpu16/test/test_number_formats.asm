@@ -23,8 +23,8 @@ LOAD  R2, 0b11001100
 LOAD  R3, 0o62        ; 0o62 == 50 (desimaali)
 
 ; Muistioperaatiot eri formaateilla
-STORE R0, 0x0300      ; mem[0x0300] = 100 (hex-osoite)
-READ  R1, 0x0300      ; R1 = mem[0x0300] = 100
+STORE [0x0300], R0  ; mem[0x0300] = 100 (hex-osoite)
+LOAD R1, [0x0300]  ; R1 = mem[0x0300] = 100
 
 ; Nolla eri formaateissa
 LOAD  R0, 0
@@ -42,4 +42,4 @@ HALT
 .expect_reg   R1, 65535
 .expect_reg   R2, 0xFFFF       ; kaikki samat
 .expect_reg   R3, 0            ; viimeisin LOAD R3, 0b0
-.expect_mem   0x0300, 100      ; STORE R0, 0x0300 (R0 oli 100)
+.expect_mem   0x0300, 100      ; STORE [0x0300], R0 (R0 oli 100)
