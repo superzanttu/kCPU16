@@ -712,6 +712,10 @@ class CPU:
             self.memory.write(addr, 1)
             self.regs.set_zn_flags(old_value)
 
+        elif ins.mnemonic == "NOP":
+            # NOP - Ei tee mitaan; kayttaa yhden syklin
+            pass
+
         else:
             # Tuntematon kasky
             raise InvalidOpcodeError(ins.mnemonic)

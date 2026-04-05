@@ -69,12 +69,19 @@ class DecodedInstruction:
 #   opcode: (kaskyn_nimi, operandien_lukumaara, vaatiiko_kernel_tilan)
 #
 # Operandimaarat:
-#   0 = ei operandeja (esim. RET, HALT)
+#   0 = ei operandeja (esim. RET, HALT, NOP)
 #   1 = yksi operandi (esim. PUSH reg, JUMP addr)
 #   2 = kaksi operandia (esim. LOAD reg, imm  tai  ADD regD, regS)
+#
+# NOP-opcode: 0x00FF (ei 0x0000, koska nollamuisti suorittaisi NOP-ladian
+#             hiljaa; 0x00FF on selkeasti tarkoituksellinen arvo)
 # =============================================================================
 
 OPCODE_TABLE: dict[int, tuple[str, int, bool]] = {
+    # -------------------------------------------------------------------------
+    # EI-MITAAN (No Operation)
+    # -------------------------------------------------------------------------
+    0x00FF: ("NOP", 0, False),  # NOP - Ei tee mitaan; kayttaa yhden syklin
     # -------------------------------------------------------------------------
     # TIEDONSIIRTOKASKYT (Data Transfer)
     # -------------------------------------------------------------------------
