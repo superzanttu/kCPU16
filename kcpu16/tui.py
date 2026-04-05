@@ -47,8 +47,12 @@ Layout:
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from pathlib import Path
+
+# Poistaa Rich-markup-tagit (esim. [bold], [/red], [dim]) pelkään tekstiksi
+_RICH_MARKUP_RE = re.compile(r"\[/?[^\[\]]+?\]")
 
 from textual.app import App, ComposeResult
 from textual.binding import Binding
@@ -464,6 +468,11 @@ class KCPU16TUI(App[None]):
         Binding("ctrl+b", "assemble_code", "Asm ^B", priority=True),
         Binding("f9", "clear_screen", "Clr F9", priority=True),
         Binding("f1", "show_help", "Help F1", priority=True),
+        # Ei priority: TextArea-widget käsitelee ctrl+c/x/v itse kun editori on aktiivinen;
+        # app-tason toiminnot aktivoituvat vain kun jokin muu widget on aktiivisena
+        Binding("ctrl+c", "copy", "", show=False),
+        Binding("ctrl+x", "cut", "", show=False),
+        Binding("ctrl+v", "paste", "", show=False),
     ]
 
     def __init__(self) -> None:
@@ -498,6 +507,7 @@ class KCPU16TUI(App[None]):
         self.addr_to_line: dict[int, int] = {}
         self.is_assembled: bool = False
         self._last_screen_render: str = ""
+        self._output_buffer: list[str] = []  # Pelkään tekstin puskuri kopiointia varten
 
     # ------------------------------------------------------------------
     # Layout
@@ -828,6 +838,8 @@ class KCPU16TUI(App[None]):
         self._log("  F7/F10  Step 1 instr    F5      Run (stops at BP)")
         self._log("  Ctrl+R  Reset machine   F9      Clear VRAM")
         self._log("  Ctrl+Q  Quit            F1      This help")
+        self._log("  Ctrl+C  Copy (editor selection / output log)")
+        self._log("  Ctrl+X  Cut  (editor)   Ctrl+V  Paste (editor)")
         self._log("")
         self._log("[bold cyan]File & Assembly:[/bold cyan]")
         self._log("  load <filename>              Load .asm from code/ directory")
@@ -886,6 +898,40 @@ class KCPU16TUI(App[None]):
         self._log("  Binary:   0b101010")
         self._log("  Octal:    0o52")
         self._log("---")
+
+    # ------------------------------------------------------------------
+    # Leikepöytätoiminnot
+    # ------------------------------------------------------------------
+
+    def action_copy(self) -> None:
+        """Kopioi leikepöydälle: valittu teksti editorissa tai koko output-puskuri."""
+        focused = self.focused
+        if focused is None:
+            return
+        if isinstance(focused, TextArea):
+            focused.action_copy()
+        elif getattr(focused, "id", None) == "output-view":
+            self._do_copy_output()
+
+    def action_cut(self) -> None:
+        """Leikkaa valittu teksti editorissa leikepöydälle."""
+        focused = self.focused
+        if isinstance(focused, TextArea):
+            focused.action_cut()
+
+    def action_paste(self) -> None:
+        """Liitä leikepöydältä editoriin."""
+        focused = self.focused
+        if isinstance(focused, TextArea):
+            focused.action_paste()
+
+    def _do_copy_output(self) -> None:
+        """Kopioi output-puskurin sisältö järjestelmän leikepöydälle."""
+        if not self._output_buffer:
+            return
+        text = "\n".join(self._output_buffer)
+        self.copy_to_clipboard(text)
+        self._log("[dim]Output copied to clipboard.[/dim]")
 
     # ------------------------------------------------------------------
     # Perusoperaatiot
@@ -1795,6 +1841,7 @@ class KCPU16TUI(App[None]):
         """
         try:
             self.query_one("#output-view", RichLog).write(message)
+            self._output_buffer.append(_RICH_MARKUP_RE.sub("", message))
         except Exception:
             pass
 
