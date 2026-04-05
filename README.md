@@ -18,52 +18,37 @@ interaktiivisen Textual-pohjaisen käyttöliittymän.
 - **Virtuaalinen tekstinäyttö** — 80 × 24 merkkiä, 8 edustusväriä (FG) + 8 taustaväriä (BG), bold/blink
 - **Näppäimistölaite** — KGET-käsky lukee näppäinpuskurin
 - **Tallennuslaite** — lohkopohjainen levylaite (DREAD/DWRITE, boot-lataus sektorilta 0)
-- **TUI-debuggeri** — Textual-pohjainen, ammattitason käyttöliittymä (ks. alla)
+- **TUI-debuggeri** — Textual-pohjainen, ammattitason käyttöliittymä
 - **CLI** — komentorivi (`python main.py`)
 
 ## Projektihakemisto
 
 ```
 kCPU16/
-├── main.py                   # Entry point
+├── main.py
 ├── kcpu16/
-│   ├── __init__.py
-│   ├── cli.py                # Komentoriviliittymä
-│   ├── tui.py                # Textual TUI -debuggeri (~1100 riviä)
-│   ├── machine.py            # KCPU16Machine — kokonaiskoneen wrapper
-│   ├── cpu.py                # CPU-ydin (Fetch-Decode-Execute)
-│   ├── memory.py             # Sana-osoitettu muisti + MPR-suojaus
-│   ├── registers.py          # Rekisteritiedosto
-│   ├── instruction.py        # Käskytaulukko (OPCODE_TABLE)
-│   ├── assembler.py          # 3-passinen assembler
-│   ├── disassembler.py       # Disassembler
-│   ├── debugger.py           # DebugState — breakpointit ja rekisteriseuranta
-│   ├── editor.py             # Yksinkertainen assembly-editori (CLI/REPL)
-│   ├── specs.py              # Arkkitehtuuriraportti (tekstimuotoinen)
-│   ├── constants.py          # Arkkitehtuurivakiot
-│   ├── exceptions.py         # Emulaattoripoikkeukset
+│   ├── cpu.py, memory.py, registers.py, machine.py
+│   ├── assembler.py, disassembler.py
+│   ├── tui.py, cli.py, debugger.py, editor.py, specs.py
+│   ├── constants.py, exceptions.py, instruction.py, testrunner.py
 │   ├── devices/
-│   │   ├── screen.py         # Virtuaalinen tekstinäyttö (VRAM)
-│   │   ├── keyboard.py       # Näppäimistöpuskuri
-│   │   └── storage.py        # Lohkopohjainen tallennuslaite
-│   └── code/                 # Esimerkkiohjelmat (.asm)
-│       ├── hello_regs.asm
-│       ├── fibonacci.asm
-│       ├── factorial.asm
-│       ├── countdown.asm
-│       ├── stack_demo.asm
-│       ├── screen_hello_fill.asm
-│       ├── test_screen_colors.asm
-│       ├── test_macros.asm
-│       └── exit_demo.asm
+│   │   ├── screen.py, keyboard.py, storage.py
+│   ├── code/         # Esimerkkiohjelmat (.asm)
+│   └── test/         # Automaattiset testit (.asm)
 └── docs/
     ├── architecture.md
-    ├── screenlayout.md
-    ├── PROJECT_STRUCTURE.md
-    └── IMPLEMENTATION_SUMMARY.md
+    ├── assembler.md
+    ├── tui.md
+    └── PROJECT_STRUCTURE.md
 ```
 
 ## Käynnistys
+
+### Riippuvuudet
+
+```bash
+pip install textual
+```
 
 ### TUI-käyttöliittymä (suositeltu)
 
@@ -89,143 +74,14 @@ python main.py --dsk levykuva.dsk
 python main.py --check ohjelma.asm
 ```
 
-### Riippuvuudet
+## Dokumentaatio
 
-```bash
-pip install textual
-```
-
-## TUI-debuggeri
-
-TUI on inspiroitu MARS/RARS-, GDB TUI-, Turbo Debugger- ja emu8086-ohjelmistoista.
-
-### Layout
-
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│ Toolbar                                                                 │
-├──────────────┬──────────────────────┬──────────────────────────────────┤
-│ Screen       │ Disassembly          │ Editor                           │
-│ (80×24 VRAM) │ [Disassembly|        │                                  │
-│              │  Memory|Stack]       │                                  │
-├──────────────┴──────────────────────┤                                  │
-│ Output                              │                                  │
-│                                     │                                  │
-├─────────────────────────────────────┼──────────────────┬───────────────┤
-│ Input                               │ Flags            │ Registers     │
-└─────────────────────────────────────┴──────────────────┴───────────────┘
-```
-
-### Näppäinsidonnaisuudet
-
-| Näppäin  | Toiminto                             |
-| -------- | ------------------------------------ |
-| F1       | Ohje                                 |
-| F2       | Vaihda breakpoint nykyisellä rivillä |
-| F5       | Run (pysähtyy breakpointiin)         |
-| F7 / F10 | Step (1 käsky kerrallaan)            |
-| F9       | Tyhjennä VRAM                        |
-| Ctrl+B   | Assembloi koodi                      |
-| Ctrl+O   | Avaa tiedosto                        |
-| Ctrl+S   | Tallenna tiedosto                    |
-| Ctrl+R   | Reset kone                           |
-| Ctrl+Q   | Lopeta                               |
-
-### Komentotulkki
-
-TUI:n komentoriviltä (`>`) voidaan antaa komentoja kuten:
-
-| Komento                       | Kuvaus                                       |
-| ----------------------------- | -------------------------------------------- |
-| `step` / `s`                  | Suorita yksi käsky                           |
-| `run` / `r`                   | Aja ohjelmaa (pysähtyy breakpointiin/HALT)   |
-| `stop`                        | Keskeytä ajaminen                            |
-| `reset`                       | Nollaa kone                                  |
-| `restart`                     | Kääntää koodin uudelleen ja nollaa koneen    |
-| `asm`                         | Käännä editorin koodi (= Ctrl+B)             |
-| `check`                       | Tarkista syntaksi ilman lataamista           |
-| `bp <addr>`                   | Lisää/poista breakpoint osoitteessa          |
-| `mem <addr>`                  | Näytä muisti osoitteesta                     |
-| `mset <addr> <val>`           | Kirjoita arvo muistiosoitteeseen             |
-| `mfill <addr> <count> <val>`  | Täytä muistialue vakioarvolla                |
-| `disk <block>`                | Näytä tallennuslaitteen blokki               |
-| `dset <block> <offset> <val>` | Kirjoita arvo blokkiin                       |
-| `dfill <block> <val>`         | Täytä koko blokki vakioarvolla               |
-| `mem2disk <addr> <block>`     | Kopioi muistista yhden blokin verran levylle |
-| `disk2mem <block> <addr>`     | Kopioi levyblokki muistiin                   |
-| `load <tiedosto>`             | Lataa .asm-tiedosto editoriin                |
-| `save <tiedosto>`             | Tallenna editorin sisältö tiedostoon         |
-| `cls`                         | Tyhjennä VRAM-näyttö                         |
-| `spec`                        | Näytä arkkitehtuurispesifikaatio             |
-| `help`                        | Näytä komentojen ohjeet                      |
-
-## Käskykanta (ISA)
-
-Täydellinen käskyluettelo opcode-arvoineen, operandeineen ja lippuvaikutuksineen löytyy arkkitehtuurispesifikaatiosta: [docs/architecture.md](docs/architecture.md#7-käskykanta).
-
-## Muistikartta
-
-```
-0x0000 – 0x0008   Keskeytysvektorit (9 kpl, INT 0–8)
-0x0009 – 0x00FF   OS:lle varattu
-0x0100 – 0x01FF   Bootloader-latausalue (256 sanaa)
-0x0200 – 0xF7FF   Vapaa RAM (ohjelmat ja data)
-0xF800 – 0xFF7F   Video RAM, VRAM (80×24 = 1920 sanaa)
-0xFF80 – 0xFFFF   Kernel Stack (128 sanaa)
-```
-
-## VRAM-sanan rakenne
-
-Jokainen VRAM-sana on 16-bittinen:
-
-```
-Bitit  0–7:   ASCII-merkki (0–127)
-Bitit  8–10:  Edustaväri, FG (3 bittiä = 8 väriä)
-Bitit 11–13:  Taustaväri, BG (3 bittiä = 8 väriä)
-Bitti  14:    Lihavointi (1 = päällä)
-Bitti  15:    Vilkkuminen (1 = päällä)
-```
-
-Värikoodit: 0=Musta, 1=Punainen, 2=Vihreä, 3=Keltainen, 4=Sininen, 5=Magenta, 6=Syaani, 7=Valkoinen.
-
-## Keskeytykset
-
-| Numero | Vektori | Kuvaus                            |
-| ------ | ------- | --------------------------------- |
-| INT 0  | 0x0000  | Jako nollalla (DIV, jakaja = 0)   |
-| INT 1  | 0x0001  | Tuntematon käsky (Invalid Opcode) |
-| INT 2  | 0x0002  | Pinon ylivuoto                    |
-| INT 3  | 0x0003  | Debug / Breakpoint                |
-| INT 4  | 0x0004  | Privilege Violation               |
-| INT 5  | 0x0005  | Memory Access Fault               |
-| INT 6  | 0x0006  | Näppäimistökeskeytys              |
-| INT 7  | 0x0007  | Ajastinkeskeytys (TMR)            |
-| INT 8  | 0x0008  | Prosessin hallittu lopetus (EXIT) |
-
-## Assembly-syntaksi
-
-```asm
-; Kommentit alkavat puolipisteellä
-.origin 0x0200        ; Ohjelman aloitusosoite
-
-.macro INIT_REGS      ; Makron määrittely
-    LOAD R0, 0
-    LOAD R1, 0
-.endmacro
-
-START:                ; Label (päättyy kaksoispisteeseen)
-    INIT_REGS         ; Makron käyttö
-    LOAD  R0, 42           ; Lataa vakio (desimaalina)
-    LOAD  R1, 0xFF         ; Lataa vakio (heksana)
-    LOAD  R2, 0b1010       ; Lataa vakio (binäärinä)
-    LOAD  R3, VRAM_START   ; Arkkitehtuurivakio (= 0xF800)
-    ADD   R0, R1           ; Rekisterioperaatio
-    STORE R0, 0x0200       ; Tallenna muistiin
-    JUMP  START            ; Hyppy labeliin
-    HALT
-```
-
-Rekisterit: `R0`, `R1`, `R2`, `R3`, `FP`, `SP` (kirjainkoosta riippumaton).
+| Tiedosto                                               | Sisältö                                                                     |
+| ------------------------------------------------------ | --------------------------------------------------------------------------- |
+| [docs/architecture.md](docs/architecture.md)           | CPU-arkkitehtuurispesifikaatio: rekisterit, muistikartta, ISA, keskeytykset |
+| [docs/assembler.md](docs/assembler.md)                 | Assembly-kielen syntaksi, direktiivit, arkkitehtuurivakiot, esimerkit       |
+| [docs/tui.md](docs/tui.md)                             | TUI-debuggerin asettelu, näppäinsidonnaisuudet ja komennot                  |
+| [docs/PROJECT_STRUCTURE.md](docs/PROJECT_STRUCTURE.md) | Projektin hakemistorakenne ja moduulien kuvaukset                           |
 
 ## Esimerkkiohjelmat
 
