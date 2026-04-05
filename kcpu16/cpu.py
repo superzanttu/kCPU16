@@ -286,8 +286,12 @@ class CPU:
         if self.regs.in_kernel_mode:
             return
 
-        # Tarkista suora muistiviittaus (READ/STORE osoite operandissa)
+        # Tarkista suora muistiviittaus (READ/STORE/STOREI osoite operandissa)
         if ins.mnemonic in {"READ", "STORE"} and len(ins.operands) >= 2:
+            addr = ins.operands[1]  # toinen operandi on osoite
+            self.memory.check_user_access(addr, self.regs.mpr)
+
+        elif ins.mnemonic == "STOREI" and len(ins.operands) >= 2:
             addr = ins.operands[1]  # toinen operandi on osoite
             self.memory.check_user_access(addr, self.regs.mpr)
 
@@ -296,8 +300,12 @@ class CPU:
             addr = self._get_reg(ins.operands[1])  # regS sisaltaa osoitteen
             self.memory.check_user_access(addr, self.regs.mpr)
 
-        # Tarkista epasuora kirjoitusviittaus (STORE_IND: osoite rekisterissa)
+        # Tarkista epasuora kirjoitusviittaus (STORE_IND/STOREI_IND: osoite rekisterissa)
         elif ins.mnemonic == "STORE_IND" and len(ins.operands) >= 2:
+            addr = self._get_reg(ins.operands[0])  # regD sisaltaa kohdeosoitteen
+            self.memory.check_user_access(addr, self.regs.mpr)
+
+        elif ins.mnemonic == "STOREI_IND" and len(ins.operands) >= 2:
             addr = self._get_reg(ins.operands[0])  # regD sisaltaa kohdeosoitteen
             self.memory.check_user_access(addr, self.regs.mpr)
 
@@ -306,8 +314,12 @@ class CPU:
             addr = (self.regs.fp + ins.operands[1]) & WORD_MASK
             self.memory.check_user_access(addr, self.regs.mpr)
 
-        # Tarkista FP-suhteellinen kirjoitusviittaus (STORE_REL: [FP + imm])
+        # Tarkista FP-suhteellinen kirjoitusviittaus (STORE_REL/STOREI_REL: [FP + imm])
         elif ins.mnemonic == "STORE_REL" and len(ins.operands) >= 2:
+            addr = (self.regs.fp + ins.operands[1]) & WORD_MASK
+            self.memory.check_user_access(addr, self.regs.mpr)
+
+        elif ins.mnemonic == "STOREI_REL" and len(ins.operands) >= 2:
             addr = (self.regs.fp + ins.operands[1]) & WORD_MASK
             self.memory.check_user_access(addr, self.regs.mpr)
 
@@ -379,6 +391,25 @@ class CPU:
             reg_idx, offset = ins.operands
             addr = (self.regs.fp + offset) & WORD_MASK
             self.memory.write(addr, self._get_reg(reg_idx))
+
+        elif ins.mnemonic == "STOREI":
+            # STOREI imm, addr - Kirjoita välitön arvo muistiosoitteeseen
+            # [addr] = imm
+            imm, addr = ins.operands
+            self.memory.write(addr, imm & WORD_MASK)
+
+        elif ins.mnemonic == "STOREI_IND":
+            # STOREI_IND regD, imm - Kirjoita välitön arvo regD:n osoittamaan paikkaan
+            # [regD] = imm
+            reg_addr, imm = ins.operands
+            self.memory.write(self._get_reg(reg_addr), imm & WORD_MASK)
+
+        elif ins.mnemonic == "STOREI_REL":
+            # STOREI_REL imm, offset - Kirjoita välitön arvo [FP + offset]:een
+            # [FP + offset] = imm
+            imm, offset = ins.operands
+            addr = (self.regs.fp + offset) & WORD_MASK
+            self.memory.write(addr, imm & WORD_MASK)
 
         # ======================================================================
         # ARITMEETTISET KASKYT

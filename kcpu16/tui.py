@@ -109,6 +109,7 @@ _REG_FIRST = {
     "STORE",
     "READ_IND",
     "STORE_IND",
+    "STOREI_IND",
     "READ_REL",
     "STORE_REL",
     "ADD",

@@ -186,6 +186,21 @@ OPCODE_TABLE: dict[int, tuple[str, int, bool]] = {
         2,
         False,
     ),  # STORE_REL reg, imm  Kirjoita rekisteri [FP + imm]
+    _op(0, 1, 8, 2): (
+        "STOREI",
+        2,
+        False,
+    ),  # STOREI imm, addr    Kirjoita välitön arvo muistiosoitteeseen
+    _op(0, 1, 9, 2): (
+        "STOREI_IND",
+        2,
+        False,
+    ),  # STOREI_IND regD, imm  Kirjoita välitön arvo [regD]:hen
+    _op(0, 1, 10, 2): (
+        "STOREI_REL",
+        2,
+        False,
+    ),  # STOREI_REL imm, offset  Kirjoita välitön arvo [FP + offset]
     # -------------------------------------------------------------------------
     # GRP 2: ARITMEETTISET KASKYT (Arithmetic)
     #   Opcoodet: 0x2080-0x2580  (P=0, GRP=2, OPS=2)

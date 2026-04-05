@@ -401,6 +401,18 @@ class Assembler:
             # "ADD R0, R1" -> ["ADD", "R0", "R1"]
             mnemonic = line.replace(",", " ").split()[0].upper()
 
+            # Automaattinen STOREI-variantti: sama koko (3 sanaa), löytyy MNEMONIC_TO_OPCODE:sta
+            parts = line.replace(",", " ").split()
+            if mnemonic == "STORE" and len(parts) >= 2:
+                if parts[1].upper() not in REGISTER_TO_ID:
+                    mnemonic = "STOREI"
+            elif mnemonic == "STORE_IND" and len(parts) >= 3:
+                if parts[2].upper() not in REGISTER_TO_ID:
+                    mnemonic = "STOREI_IND"
+            elif mnemonic == "STORE_REL" and len(parts) >= 2:
+                if parts[1].upper() not in REGISTER_TO_ID:
+                    mnemonic = "STOREI_REL"
+
             # Hae opcode ja operandien maara
             opcode = MNEMONIC_TO_OPCODE.get(mnemonic)
             if opcode is None:
@@ -476,6 +488,20 @@ class Assembler:
             # Parsi kasky: "ADD R0, R1" -> ["ADD", "R0", "R1"]
             parts = line.replace(",", " ").split()
             mnemonic = parts[0].upper()
+
+            # Automaattinen välittömän arvon STORE-variantti:
+            #   STORE src, addr    → STOREI imm, addr    (jos src ei ole rekisteri)
+            #   STORE_IND rD, src  → STOREI_IND rD, imm  (jos src ei ole rekisteri)
+            #   STORE_REL src, off → STOREI_REL imm, off (jos src ei ole rekisteri)
+            if mnemonic == "STORE" and len(parts) >= 2:
+                if parts[1].upper() not in REGISTER_TO_ID:
+                    mnemonic = "STOREI"
+            elif mnemonic == "STORE_IND" and len(parts) >= 3:
+                if parts[2].upper() not in REGISTER_TO_ID:
+                    mnemonic = "STOREI_IND"
+            elif mnemonic == "STORE_REL" and len(parts) >= 2:
+                if parts[1].upper() not in REGISTER_TO_ID:
+                    mnemonic = "STOREI_REL"
 
             # Hae opcode
             opcode = MNEMONIC_TO_OPCODE.get(mnemonic)
