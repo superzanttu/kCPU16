@@ -271,9 +271,9 @@ def run_test(path: Path) -> int:
         print(f"VIRHE assembloinnissa: {exc}", file=sys.stderr)
         return 1
 
-    # --- Suorita koneessa ---
+    # --- Suorita koneessa (ilman boot-prosessia) ---
     machine = KCPU16Machine()
-    machine.cold_reset()
+    machine.reset_for_test()
     machine.load_segments(segments)
     try:
         machine.run()
@@ -330,3 +330,82 @@ def run_test(path: Path) -> int:
     print("═" * WIDTH)
 
     return 0 if passed == total else 1
+
+
+# =============================================================================
+# KAIKKIEN TESTIEN SUORITUS
+# =============================================================================
+
+
+def run_test_all(test_dir: Path) -> int:
+    """
+    Suorita kaikki .asm-testitiedostot hakemistosta ja tulosta yhteenveto.
+
+    Args:
+        test_dir: Hakemisto josta .asm-tiedostot haetaan.
+
+    Returns:
+        0 jos kaikki testit menivät läpi, 1 muuten.
+    """
+    WIDTH = 57
+
+    asm_files = sorted(test_dir.glob("*.asm"))
+    if not asm_files:
+        print(f"VIRHE: Ei .asm-tiedostoja hakemistossa: {test_dir}", file=sys.stderr)
+        return 1
+
+    # Suorita jokainen testi ja kerää tulokset
+    summary: list[tuple[str, int, int]] = []  # (nimi, passed, total)
+    errors: list[str] = []  # virheelliset tiedostonimet
+
+    for path in asm_files:
+        print()  # tyhjä rivi testien väliin
+        exit_code = run_test(path)
+        # Lue passed/total uudelleen jotta saadaan numerot yhteenvetoon
+        try:
+            source = path.read_text(encoding="utf-8")
+            expectations = parse_expectations(source)
+            total = len(expectations)
+        except Exception:
+            total = 0
+        passed = total if exit_code == 0 else 0
+        summary.append((path.name, passed, total))
+        if exit_code != 0:
+            errors.append(path.name)
+
+    # Yhteenveto
+    tests_total = len(summary)
+    tests_passed = sum(1 for _, p, t in summary if p == t)
+    checks_passed = sum(p for _, p, _ in summary)
+    checks_total = sum(t for _, _, t in summary)
+
+    print()
+    header = " YHTEENVETO "
+    print(
+        "═" * ((WIDTH - len(header)) // 2)
+        + header
+        + "═" * ((WIDTH - len(header) + 1) // 2)
+    )
+
+    col_w = max(len(n) for n, _, _ in summary)
+    for name, passed, total in summary:
+        if total == 0:
+            status = "SKIP"
+            detail = "(ei odotuksia)"
+        elif passed == total:
+            status = "PASS"
+            detail = f"{passed}/{total}"
+        else:
+            status = "FAIL"
+            detail = f"{passed}/{total}"
+        print(f"  {status}  {name:<{col_w}}  {detail}")
+
+    print("─" * WIDTH)
+    all_ok = tests_passed == tests_total
+    verdict = "PASS ✓" if all_ok else "FAIL ✗"
+    print(f"Testit:     {tests_passed}/{tests_total} läpi")
+    print(f"Tarkistukset: {checks_passed}/{checks_total} läpi")
+    print(f"Tulos: {verdict}")
+    print("═" * WIDTH)
+
+    return 0 if all_ok else 1

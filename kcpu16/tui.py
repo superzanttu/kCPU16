@@ -47,8 +47,12 @@ Layout:
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from pathlib import Path
+
+# Poistaa Rich-markup-tagit (esim. [bold], [/red], [dim]) pelkään tekstiksi
+_RICH_MARKUP_RE = re.compile(r"\[/?[^\[\]]+?\]")
 
 from textual.app import App, ComposeResult
 from textual.binding import Binding
@@ -81,6 +85,7 @@ from .disassembler import Disassembler
 from .instruction import OPCODE_TABLE
 from .machine import KCPU16Machine
 from .specs import format_arch_spec_report
+from . import __version__
 
 
 # ---------------------------------------------------------------------------
@@ -100,12 +105,6 @@ REG_NAMES = {0: "R0", 1: "R1", 2: "R2", 3: "R3", 4: "FP", 5: "SP"}
 _REG_FIRST = {
     "LOAD",
     "CPY",
-    "READ",
-    "STORE",
-    "READ_IND",
-    "STORE_IND",
-    "READ_REL",
-    "STORE_REL",
     "ADD",
     "ADC",
     "SUB",
@@ -142,8 +141,6 @@ _REG_SECOND = {
     "XOR",
     "SHL",
     "SHR",
-    "READ_IND",
-    "STORE_IND",
     "SWSP",
     "DREAD",
     "DWRITE",
@@ -428,14 +425,11 @@ class KCPU16TUI(App[None]):
 
     /* ---- Bottom bar: Flags+CPU | Registers ---- */
     #bottom-bar {
-        dock: bottom;
         height: auto;
         max-height: 14;
-        layout: grid;
-        grid-size: 3;
-        grid-columns: 142 28 1fr;
     }
     #flags-pane {
+        width: 30;
         border: solid $warning-darken-1;
         border-title-color: $accent;
         padding: 0 1;
@@ -458,11 +452,16 @@ class KCPU16TUI(App[None]):
         Binding("f7", "step_once", "Step F7", priority=True),
         Binding("f10", "step_once", "Step", priority=True),
         Binding("ctrl+r", "reset_machine", "Reset", priority=True),
-        Binding("ctrl+o", "open_file", "Open", priority=True),
+        Binding("ctrl+o", "open_file", "Load", priority=True),
         Binding("ctrl+s", "save_file", "Save", priority=True),
         Binding("ctrl+b", "assemble_code", "Asm ^B", priority=True),
         Binding("f9", "clear_screen", "Clr F9", priority=True),
         Binding("f1", "show_help", "Help F1", priority=True),
+        # Ei priority: TextArea-widget käsitelee ctrl+c/x/v itse kun editori on aktiivinen;
+        # app-tason toiminnot aktivoituvat vain kun jokin muu widget on aktiivisena
+        Binding("ctrl+c", "copy", "", show=False),
+        Binding("ctrl+x", "cut", "", show=False),
+        Binding("ctrl+v", "paste", "", show=False),
     ]
 
     def __init__(self) -> None:
@@ -488,12 +487,16 @@ class KCPU16TUI(App[None]):
         self.disassembler = Disassembler()
         self.dbg = DebugState()
         self.current_file: Path | None = None
+        self.current_disk_file: Path | None = None
         self.code_dir: Path = Path(__file__).resolve().parent / "code"
         self.code_dir.mkdir(exist_ok=True)
+        self.storage_dir: Path = Path(__file__).resolve().parent / "storage"
+        self.storage_dir.mkdir(exist_ok=True)
         self.mem_view_addr: int = BOOT_RAM_START
         self.addr_to_line: dict[int, int] = {}
         self.is_assembled: bool = False
         self._last_screen_render: str = ""
+        self._output_buffer: list[str] = []  # Pelkään tekstin puskuri kopiointia varten
 
     # ------------------------------------------------------------------
     # Layout
@@ -520,7 +523,7 @@ class KCPU16TUI(App[None]):
         """
         # Toolbar
         with Horizontal(id="toolbar"):
-            yield Button("Open", id="btn-open", variant="default")
+            yield Button("Load", id="btn-open", variant="default")
             yield Button("Save", id="btn-save", variant="default")
             yield Button("New", id="btn-new", variant="default")
             yield Static(" ", classes="sep")
@@ -564,18 +567,15 @@ class KCPU16TUI(App[None]):
                         id="cmd-input",
                     )
 
-            # Right column: Editor (full height)
+            # Right column: Editor + bottom info
             with Vertical(id="editor-pane"):
                 yield TextArea("", language=None, show_line_numbers=True, id="editor")
-
-        # Bottom bar: Flags+CPU | Registers
-        with Horizontal(id="bottom-bar"):
-            yield Static("", id="bottom-spacer")
-            with Vertical(id="flags-pane"):
-                yield Static(id="flags-content")
-                yield Static(id="cpu-content")
-            with Vertical(id="regs-pane"):
-                yield Static(id="regs-content")
+                with Horizontal(id="bottom-bar"):
+                    with Vertical(id="flags-pane"):
+                        yield Static(id="flags-content")
+                        yield Static(id="cpu-content")
+                    with Vertical(id="regs-pane"):
+                        yield Static(id="regs-content")
 
     # ------------------------------------------------------------------
     # Alustus
@@ -613,7 +613,7 @@ class KCPU16TUI(App[None]):
             ";   HALT\n"
         )
 
-        self._log("[bold]kCPU16 Debugger[/bold] ready.")
+        self._log(f"[bold]kCPU16 Debugger[/bold] v{__version__} ready.")
         self._log(
             "[dim]F7/F10=Step  F5=Run  F2=Breakpoint  "
             "Ctrl+B=Assemble  Ctrl+O=Open[/dim]"
@@ -764,10 +764,10 @@ class KCPU16TUI(App[None]):
         """
         cmd_input = self.query_one("#cmd-input", Input)
         path_str = cmd_input.value.strip()
-        if not path_str or path_str.startswith("open "):
+        if not path_str or path_str.startswith("load "):
             cmd_input.focus()
-            cmd_input.value = "open "
-            self._log("Type filename after 'open' and press Enter.")
+            cmd_input.value = "load "
+            self._log("Type filename after 'load' and press Enter.")
             return
         path = Path(path_str)
         if not path.is_absolute():
@@ -777,8 +777,9 @@ class KCPU16TUI(App[None]):
     def action_save_file(self) -> None:
         """Tallenna editorin sisältö tiedostoon (Ctrl+S).
 
-        Jos tiedosto on jo avattu (current_file), tallennetaan suoraan.
-        Muuten ohjataan käyttäjä kirjoittamaan polku komentosyötteeseen.
+        Jos tiedosto on jo avattu tai aiemmin tallennettu (current_file),
+        tallennetaan suoraan. Muuten ohjataan käyttäjä kirjoittamaan
+        polku komentosyötteeseen.
         """
         if self.current_file:
             self._do_save(self.current_file)
@@ -786,7 +787,9 @@ class KCPU16TUI(App[None]):
             cmd_input = self.query_one("#cmd-input", Input)
             cmd_input.focus()
             cmd_input.value = "save "
-            self._log("Type filename after 'save' and press Enter.")
+            self._log(
+                "[yellow]Ei tallennettua tiedostoa. Kirjoita nimi komennon jälkeen.[/yellow]"
+            )
 
     def action_assemble_code(self) -> None:
         """Assembloi editorin koodi ja lataa se muistiin (Ctrl+B).
@@ -821,12 +824,19 @@ class KCPU16TUI(App[None]):
         self._log("  F7/F10  Step 1 instr    F5      Run (stops at BP)")
         self._log("  Ctrl+R  Reset machine   F9      Clear VRAM")
         self._log("  Ctrl+Q  Quit            F1      This help")
+        self._log("  Ctrl+C  Copy (editor selection / output log)")
+        self._log("  Ctrl+X  Cut  (editor)   Ctrl+V  Paste (editor)")
         self._log("")
         self._log("[bold cyan]File & Assembly:[/bold cyan]")
-        self._log("  open <filename>              Load .asm from code/ directory")
-        self._log("  save [filename]              Save editor to code/ directory")
+        self._log("  load <filename>              Load .asm from code/ directory")
+        self._log(
+            "  save [filename]              Save editor to code/ directory (adds .asm if no suffix)"
+        )
         self._log("  asm                          Assemble, reset and load into memory")
         self._log("  check                        Syntax check only (no load)")
+        self._log(
+            "  fmt                          Format code (indent, UPPERCASE, align comments)"
+        )
         self._log("[bold cyan]CPU Control:[/bold cyan]")
         self._log("  step [n]                     Step n instructions (default 1)")
         self._log("  run  [n]                     Run to BP/halt (max n cycles)")
@@ -843,9 +853,15 @@ class KCPU16TUI(App[None]):
         self._log("[bold cyan]Disk (Storage):[/bold cyan]")
         self._log("  disk <block>                 Show block as hex dump")
         self._log("  disk load <path>             Load .dsk file into storage")
-        self._log("  disk save <path>             Save storage to .dsk file")
+        self._log(
+            "  disk save [path]             Save storage to .dsk (omit path to reuse last)"
+        )
         self._log("  dset <block> <offset> <value>  Write value at block + offset")
         self._log("  dfill <block> <value>        Fill entire block with value")
+        self._log(
+            "  mem2disk <addr> <block>      Copy one block of words from mem to disk"
+        )
+        self._log("  disk2mem <block> <addr>      Copy disk block to memory")
         self._log("[bold cyan]Reset:[/bold cyan]")
         self._log("  reset                        Memory + CPU (storage intact)")
         self._log("  reset deep                   Memory + CPU + storage")
@@ -873,6 +889,40 @@ class KCPU16TUI(App[None]):
         self._log("---")
 
     # ------------------------------------------------------------------
+    # Leikepöytätoiminnot
+    # ------------------------------------------------------------------
+
+    def action_copy(self) -> None:
+        """Kopioi leikepöydälle: valittu teksti editorissa tai koko output-puskuri."""
+        focused = self.focused
+        if focused is None:
+            return
+        if isinstance(focused, TextArea):
+            focused.action_copy()
+        elif getattr(focused, "id", None) == "output-view":
+            self._do_copy_output()
+
+    def action_cut(self) -> None:
+        """Leikkaa valittu teksti editorissa leikepöydälle."""
+        focused = self.focused
+        if isinstance(focused, TextArea):
+            focused.action_cut()
+
+    def action_paste(self) -> None:
+        """Liitä leikepöydältä editoriin."""
+        focused = self.focused
+        if isinstance(focused, TextArea):
+            focused.action_paste()
+
+    def _do_copy_output(self) -> None:
+        """Kopioi output-puskurin sisältö järjestelmän leikepöydälle."""
+        if not self._output_buffer:
+            return
+        text = "\n".join(self._output_buffer)
+        self.copy_to_clipboard(text)
+        self._log("[dim]Output copied to clipboard.[/dim]")
+
+    # ------------------------------------------------------------------
     # Perusoperaatiot
     # ------------------------------------------------------------------
 
@@ -886,7 +936,20 @@ class KCPU16TUI(App[None]):
         self.current_file = None
         self.is_assembled = False
         self.addr_to_line = {}
+        self._update_editor_title()
         self._log("New document.")
+
+    def _update_editor_title(self) -> None:
+        """Päivitä Editor-paneelin alaotsikko näyttämään nykyinen tiedostonimi."""
+        pane = self.query_one("#editor-pane")
+        pane.border_subtitle = self.current_file.name if self.current_file else ""
+
+    def _update_disk_title(self) -> None:
+        """Päivitä Disassembly-paneelin alaotsikko näyttämään nykyinen levytiedosto."""
+        tabs = self.query_one("#disasm-tabs")
+        tabs.border_subtitle = (
+            self.current_disk_file.name if self.current_disk_file else ""
+        )
 
     def _do_open(self, path: Path) -> None:
         """Avaa tiedosto ja lataa sen sisältö editoriin.
@@ -900,6 +963,7 @@ class KCPU16TUI(App[None]):
             self.query_one("#editor", TextArea).text = content
             self.current_file = path
             self.is_assembled = False
+            self._update_editor_title()
             self._log(f"Opened: [bold]{path.name}[/bold] ({len(content)} chars)")
         except Exception as e:
             self._log(f"[red]Error: {e}[/red]")
@@ -915,6 +979,7 @@ class KCPU16TUI(App[None]):
             content = self.query_one("#editor", TextArea).text
             path.write_text(content, encoding="utf-8")
             self.current_file = path
+            self._update_editor_title()
             self._log(f"Saved: [bold]{path.name}[/bold]")
         except Exception as e:
             self._log(f"[red]Error: {e}[/red]")
@@ -952,6 +1017,20 @@ class KCPU16TUI(App[None]):
                 f"[green]Assembled: {total_words} words in {len(segments)} "
                 f"segment(s) at 0x{self.machine.regs.pc:04X}. F7=Step, F5=Run.[/green]"
             )
+            # .diskblock-direktiivi: kirjoita konekieli levyblokkiin
+            blk = self.assembler.disk_block
+            if blk is not None:
+                blk_size = self.machine.storage.block_size_words
+                code: list[int] = []
+                for _, words in segments:
+                    code.extend(words)
+                # Täytä loppublokki nollilla
+                code = (code + [0] * blk_size)[:blk_size]
+                self.machine.storage.write_block(blk, code)
+                self._log(
+                    f"[cyan].diskblock: {total_words} sanaa tallennettu "
+                    f"levyblokkiin {blk}.[/cyan]"
+                )
             self._update_exec_line()
             self._refresh_all()
         except Exception as e:
@@ -1118,21 +1197,62 @@ class KCPU16TUI(App[None]):
     def _fmt_operands(self, mnemonic: str, ops_str: str) -> str:
         """Muunna operandit luettavaan muotoon (rekisterinimet, värit).
 
-        Disassembler palauttaa operandit numeerisina (esim. "0, 42").
-        Tämä metodi muuntaa ne ihmisluettaviksi käyttäen REG_NAMES-lookuppia:
-        - _REG_FIRST kertoo, odottaako 1. operandi rekisteri-indeksiä
-        - _REG_SECOND kertoo, odottaako 2. operandi rekisteri-indeksiä
-        - Jos kyseessä on rekisteri, haetaan nimi REG_NAMES-dictistä (0→R0, jne.)
-          ja värjätään siniseksi
-        - Muut arvot (välittömät, osoitteet) näytetään vihreällä hex-muodossa
+        Käsittelee kolmea muotoa:
+        1. Valmiiksi nimetty rekisteri (esim. "R0") → sininen
+        2. Hakasulkuinen muistiviite (esim. "[0x0300]", "[R1]", "[FP+2]") →
+           hakasulut literaaleina, sisältö värikkäänä
+        3. Vanhan muodon heksaluku (esim. "0x0000") → _REG_FIRST/_REG_SECOND
+           -taulukoiden perusteella joko rekisterinimi (sininen) tai arvo (vihreä)
         """
         if not ops_str:
             return ""
+        _REG_NAMES_SET = set(REG_NAMES.values())  # {"R0","R1","R2","R3","FP","SP"}
         ops = [o.strip() for o in ops_str.split(",")]
         result = []
         for i, op in enumerate(ops):
             if not op:
                 continue
+
+            # 1. Valmiiksi nimetty rekisteri ("R0", "FP", jne.)
+            if op in _REG_NAMES_SET:
+                result.append(f"[blue]{op}[/]")
+                continue
+
+            # 2. Hakasulkuinen muistiviite: [addr], [reg], [FP+offset]
+            if op.startswith("[") and op.endswith("]"):
+                inner = op[1:-1].strip()
+                if "+" in inner:
+                    base_str, off_str = inner.split("+", 1)
+                    base_str = base_str.strip()
+                    off_str = off_str.strip()
+                    base_fmt = (
+                        f"[blue]{base_str}[/]"
+                        if base_str in _REG_NAMES_SET
+                        else f"[green]{base_str}[/]"
+                    )
+                    try:
+                        off_val = (
+                            int(off_str, 16)
+                            if off_str.startswith("0x")
+                            else int(off_str)
+                        )
+                        off_fmt = f"[green]{off_val}[/]"
+                    except ValueError:
+                        off_fmt = off_str
+                    result.append(f"\\[{base_fmt}+{off_fmt}\\]")
+                elif inner in _REG_NAMES_SET:
+                    result.append(f"\\[[blue]{inner}[/]\\]")
+                else:
+                    try:
+                        addr_val = (
+                            int(inner, 16) if inner.startswith("0x") else int(inner)
+                        )
+                        result.append(f"\\[[green]0x{addr_val:04X}[/]\\]")
+                    except ValueError:
+                        result.append(f"\\[{inner}\\]")
+                continue
+
+            # 3. Vanhan muodon heksaluku (ei-muistioperaatioiden operandit)
             try:
                 val = int(op, 16) if op.startswith("0x") else int(op)
             except ValueError:
@@ -1334,11 +1454,12 @@ class KCPU16TUI(App[None]):
         ic = self.machine.cpu.instruction_counter
         opcode = self.machine.memory.read(pc)
         if opcode in OPCODE_TABLE:
-            mnemonic, op_count, _ = OPCODE_TABLE[opcode]
-            ops = [
-                f"0x{self.machine.memory.read(pc + 1 + i):04X}" for i in range(op_count)
+            _, op_count, _ = OPCODE_TABLE[opcode]
+            words = [opcode] + [
+                self.machine.memory.read(pc + 1 + j) for j in range(op_count)
             ]
-            instr = f"{mnemonic} {', '.join(ops)}" if ops else mnemonic
+            raw = self.disassembler.disassemble(words, start_addr=pc)
+            instr = raw.split(":", 1)[1].strip() if ":" in raw else raw
         else:
             instr = f".word 0x{opcode:04X}"
 
@@ -1363,10 +1484,11 @@ class KCPU16TUI(App[None]):
 
         Komennot:
             --- Tiedostot & assembly ---
-            open <path>                  -- Avaa .asm tiedosto editoriin
+            load <path>                  -- Avaa .asm tiedosto editoriin
             save [path]                  -- Tallenna editori tiedostoon
             asm                          -- Käännä, reset, lataa muistiin
             check                        -- Tarkista syntaksi
+            fmt                          -- Muotoile koodi (sisentää, isot kirjaimet, kommentit)
             --- CPU-ohjaus ---
             step [n]                     -- Steppaa n käskyä (oletus 1)
             run [n]                      -- Aja breakpointiin/halttiin
@@ -1381,9 +1503,11 @@ class KCPU16TUI(App[None]):
             mfill <addr> <count> <value> -- Täytä muistialue
             --- Tallennustila ---
             disk <block>                 -- Näytä blokki
-            disk load|save <path>        -- Lataa/tallenna .dsk
+            disk load|save <path>        -- Lataa/tallenna .dsk (save: polku valinnainen)
             dset <block> <offset> <val>  -- Muokkaa tavu blokissa
             dfill <block> <value>        -- Täytä blokki
+            mem2disk <addr> <block>      -- Kopioi muistista blokkiin
+            disk2mem <block> <addr>      -- Kopioi blokki muistiin
             --- Reset ---
             reset                        -- Muisti + CPU (storage säilyy)
             reset deep                   -- Muisti + CPU + storage
@@ -1399,10 +1523,12 @@ class KCPU16TUI(App[None]):
 
         try:
             # --- Tiedostot & assembly ---
-            if op == "open":
+            if op == "load":
                 if not args:
-                    return CommandResult(False, "Usage: open <filename>")
+                    return CommandResult(False, "Usage: load <filename>")
                 path = Path(" ".join(args))
+                if not path.suffix:
+                    path = path.with_suffix(".asm")
                 if not path.is_absolute():
                     path = self.code_dir / path
                 self._do_open(path)
@@ -1413,8 +1539,13 @@ class KCPU16TUI(App[None]):
                     if self.current_file:
                         self._do_save(self.current_file)
                         return CommandResult(True, "")
-                    return CommandResult(False, "Usage: save <filename>")
+                    return CommandResult(
+                        False,
+                        "[yellow]Ei tallennettua tiedostoa. Käytä: save <nimi>[/yellow]",
+                    )
                 path = Path(" ".join(args))
+                if not path.suffix:
+                    path = path.with_suffix(".asm")
                 if not path.is_absolute():
                     path = self.code_dir / path
                 self._do_save(path)
@@ -1426,6 +1557,15 @@ class KCPU16TUI(App[None]):
 
             if op == "check":
                 return self._do_syntax_check()
+
+            if op == "fmt":
+                editor = self.query_one("#editor", TextArea)
+                source = editor.text
+                if not source.strip():
+                    return CommandResult(False, "[yellow]Editor is empty.[/yellow]")
+                formatted = self._format_asm_source(source)
+                editor.load_text(formatted)
+                return CommandResult(True, "[green]Code formatted.[/green]")
 
             # --- CPU-ohjaus ---
             if op == "step":
@@ -1476,6 +1616,12 @@ class KCPU16TUI(App[None]):
             if op == "dfill":
                 return self._handle_dfill_command(args)
 
+            if op == "mem2disk":
+                return self._handle_mem2disk_command(args)
+
+            if op == "disk2mem":
+                return self._handle_disk2mem_command(args)
+
             # --- Reset ---
             if op == "reset":
                 return self._handle_reset_command(args)
@@ -1491,6 +1637,9 @@ class KCPU16TUI(App[None]):
 
             if op == "spec":
                 return CommandResult(True, format_arch_spec_report())
+
+            if op == "version":
+                return CommandResult(True, f"kCPU16 v{__version__}")
 
             return CommandResult(False, f"Unknown: {op}. Type 'help'.")
         except Exception as exc:
@@ -1523,6 +1672,142 @@ class KCPU16TUI(App[None]):
     # ------------------------------------------------------------------
     # Uudet komentokäsittelijät
     # ------------------------------------------------------------------
+
+    def _format_asm_source(self, source: str) -> str:
+        """Muotoile assembly-lähdekoodi hyvien käytäntöjen mukaisesti.
+
+        Säännöt:
+            - Poistetaan rivien lopusta turhat välilyönnit
+            - Peräkkäiset tyhjät rivit tiivistetään yhdeksi
+            - Johtavat ja lopussa olevat tyhjät rivit poistetaan
+            - Kommentti-rivit (alkavat ;): säilytetään sellaisenaan
+            - Labelit: ei sisennystä, UPPERCASE, muoto LABEL:
+            - Direktiivit (.at, .db, .dstr, .const, .macro, .endmacro,
+              .diskblock, .org): 8 välilyönnin sisennys
+            - Käskyt: 8 välilyönnin sisennys, mnemoniikka UPPERCASE,
+              padattu 10 merkkiin, operandeissa välilyönti pilkun jälkeen
+            - Inline-kommentit: tasattu sarakkeeseen 40
+        """
+        INDENT = "        "  # 8 spaces
+        MNE_WIDTH = 10  # mnemonic column width (padded)
+        CMT_COL = 40  # target column for inline comments
+
+        def _split_comment(line: str) -> tuple[str, str]:
+            """Erota koodi ja inline-kommentti toisistaan (string-literaalit huomioiden)."""
+            in_sq = False
+            in_dq = False
+            for i, ch in enumerate(line):
+                if ch == "'" and not in_dq:
+                    in_sq = not in_sq
+                elif ch == '"' and not in_sq:
+                    in_dq = not in_dq
+                elif ch == ";" and not in_sq and not in_dq:
+                    return line[:i], line[i:]
+            return line, ""
+
+        def _fmt_comment(comment: str) -> str:
+            """Normalisoi kommenttiteksti: '  ; teksti' → '; teksti'."""
+            text = comment.lstrip().lstrip(";").strip()
+            return f"; {text}" if text else ""
+
+        raw_lines = source.splitlines()
+        out: list[str] = []
+        blank_run = 0
+
+        for raw in raw_lines:
+            line = raw.rstrip()
+            stripped = line.strip()
+
+            # Tyhjä rivi
+            if not stripped:
+                blank_run += 1
+                if blank_run <= 1:
+                    out.append("")
+                continue
+            blank_run = 0
+
+            # Pelkkä kommentti
+            if stripped.startswith(";"):
+                out.append(line)
+                continue
+
+            code_raw, cmt_raw = _split_comment(stripped)
+            code = code_raw.strip()
+            cmt = _fmt_comment(cmt_raw) if cmt_raw else ""
+
+            if not code:
+                # Pelkkä kommentti splitin jälkeen (ei pitäisi tapahtua, mutta varmuuden vuoksi)
+                out.append(line)
+                continue
+
+            # Label (muoto SANA: ilman välilyöntejä ennen kaksoispistettä)
+            # Tuetaan myös LABEL: KÄSKY -rivit: label erotetaan omaksi riviksi
+            if ":" in code:
+                colon_idx = code.index(":")
+                potential_label = code[:colon_idx].strip()
+                if " " not in potential_label and potential_label:
+                    label_str = potential_label.upper() + ":"
+                    if cmt:
+                        out.append(f"{label_str}  {cmt}")
+                    else:
+                        out.append(label_str)
+                    # Jos labelin jälkeen on käsky samalla rivillä, lisää se seuraavaksi
+                    rest = code[colon_idx + 1 :].strip()
+                    if rest:
+                        code = rest
+                        cmt = ""
+                        # Käsitellään alla olevalla logiikalla — aseta stripped ja jatka
+                        # (tehdään fall-through kääntelemällä muuttujia)
+                        stripped = rest
+                        code_raw2, cmt_raw2 = _split_comment(rest)
+                        code = code_raw2.strip()
+                        cmt = _fmt_comment(cmt_raw2) if cmt_raw2 else ""
+                    else:
+                        continue
+
+            # Direktiivi (alkaa pisteellä)
+            if code.startswith("."):
+                parts = code.split(None, 1)
+                directive = parts[0].lower()
+                rest = parts[1] if len(parts) > 1 else ""
+                formatted = directive
+                if rest:
+                    formatted += f" {rest}"
+                if cmt:
+                    pad = max(1, CMT_COL - len(formatted))
+                    formatted += " " * pad + cmt
+                out.append(formatted)
+                continue
+
+            # Käsky
+            # Erota mnemoniikka ja operandit
+            parts = code.split(None, 1)
+            mnemonic = parts[0].upper()
+            ops = ""
+            if len(parts) > 1:
+                # Normalisoi operandien pilkut: välilyönti pilkun jälkeen
+                raw_ops = parts[1]
+                # Pilko operandit pilkuilla, trimmaa jokainen ja liitä uudelleen
+                op_list = [p.strip() for p in raw_ops.split(",")]
+                ops = ", ".join(op_list)
+
+            if ops:
+                formatted = f"{INDENT}{mnemonic:<{MNE_WIDTH}}{ops}"
+            else:
+                formatted = f"{INDENT}{mnemonic}"
+
+            if cmt:
+                pad = max(1, CMT_COL - len(formatted))
+                formatted += " " * pad + cmt
+            out.append(formatted)
+
+        # Poista johtavat ja loppuiset tyhjät rivit
+        while out and not out[0].strip():
+            out.pop(0)
+        while out and not out[-1].strip():
+            out.pop()
+
+        return "\n".join(out)
 
     def _do_syntax_check(self) -> CommandResult:
         """Tarkista editorin assembly-koodin syntaksi ilman latausta muistiin."""
@@ -1593,21 +1878,42 @@ class KCPU16TUI(App[None]):
         """Tallennustilan komennot: disk <block> | disk load|save <path>."""
         if not args:
             return CommandResult(
-                False, "Usage: disk <block> | disk load <file> | disk save <file>"
+                False, "Usage: disk <block> | disk load <file> | disk save [file]"
             )
         sub = args[0].lower()
         if sub == "load":
             if len(args) < 2:
-                return CommandResult(False, "Usage: disk load <filename.dsk>")
+                return CommandResult(False, "Usage: disk load <filename>")
             path = Path(" ".join(args[1:]))
+            if path.suffix.lower() != ".dsk":
+                path = path.with_suffix(".dsk")
+            if not path.is_absolute():
+                path = self.storage_dir / path
             self.machine.storage.load_from_file(path)
-            return CommandResult(True, f"[green]Disk loaded from {path}[/green]")
+            self.current_disk_file = path
+            self._update_disk_title()
+            return CommandResult(True, f"[green]Disk loaded from {path.name}[/green]")
         if sub == "save":
             if len(args) < 2:
-                return CommandResult(False, "Usage: disk save <filename.dsk>")
+                if self.current_disk_file:
+                    self.machine.storage.save_to_file(self.current_disk_file)
+                    return CommandResult(
+                        True,
+                        f"[green]Disk saved to {self.current_disk_file.name}[/green]",
+                    )
+                return CommandResult(
+                    False,
+                    "[yellow]Ei tallennettua levytiedostoa. Käytä: disk save <nimi>[/yellow]",
+                )
             path = Path(" ".join(args[1:]))
+            if path.suffix.lower() != ".dsk":
+                path = path.with_suffix(".dsk")
+            if not path.is_absolute():
+                path = self.storage_dir / path
             self.machine.storage.save_to_file(path)
-            return CommandResult(True, f"[green]Disk saved to {path}[/green]")
+            self.current_disk_file = path
+            self._update_disk_title()
+            return CommandResult(True, f"[green]Disk saved to {path.name}[/green]")
         block_idx = int(args[0], 0)
         data = self.machine.storage.read_block(block_idx)
         base = block_idx * self.machine.storage.block_size_words
@@ -1640,6 +1946,36 @@ class KCPU16TUI(App[None]):
         return CommandResult(
             True,
             f"[green]Block {block_idx} filled with 0x{value:04X}[/green]",
+        )
+
+    def _handle_mem2disk_command(self, args: list[str]) -> CommandResult:
+        """Kopioi muistista yhden blokin verran sanoja levylle: mem2disk <addr> <block>."""
+        if len(args) < 2:
+            return CommandResult(False, "Usage: mem2disk <addr> <block>")
+        addr = int(args[0], 0) & WORD_MASK
+        block_idx = int(args[1], 0)
+        bsw = self.machine.storage.block_size_words
+        data = [self.machine.memory.read(addr + i) for i in range(bsw)]
+        self.machine.storage.write_block(block_idx, data)
+        return CommandResult(
+            True,
+            f"[green]Mem 0x{addr:04X}–0x{(addr + bsw - 1) & WORD_MASK:04X} "
+            f"→ disk block {block_idx}.[/green]",
+        )
+
+    def _handle_disk2mem_command(self, args: list[str]) -> CommandResult:
+        """Kopioi levyblokki muistiin: disk2mem <block> <addr>."""
+        if len(args) < 2:
+            return CommandResult(False, "Usage: disk2mem <block> <addr>")
+        block_idx = int(args[0], 0)
+        addr = int(args[1], 0) & WORD_MASK
+        bsw = self.machine.storage.block_size_words
+        data = self.machine.storage.read_block(block_idx)
+        for i, word in enumerate(data):
+            self.machine.memory.write(addr + i, word)
+        return CommandResult(
+            True,
+            f"[green]Disk block {block_idx} → mem 0x{addr:04X}–0x{(addr + bsw - 1) & WORD_MASK:04X}.[/green]",
         )
 
     def _handle_reset_command(self, args: list[str]) -> CommandResult:
@@ -1682,6 +2018,7 @@ class KCPU16TUI(App[None]):
         """
         try:
             self.query_one("#output-view", RichLog).write(message)
+            self._output_buffer.append(_RICH_MARKUP_RE.sub("", message))
         except Exception:
             pass
 

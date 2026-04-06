@@ -1,8 +1,7 @@
-# kCPU16 Projektin Rakenne — v1.0
+# kCPU16 Projektin Rakenne
 
 Tämä dokumentti kuvaa projektin tiedosto- ja hakemistorakenteen sekä jokaisen
-komponentin tarkoituksen. Päivitetty vastaamaan v1.0-versiota (debuggeri-TUI,
-breakpoint-tuki, rekisterimuutosten seuranta, VRAM-värit).
+komponentin tarkoituksen.
 
 ## Yleiskuva
 
@@ -10,11 +9,11 @@ kCPU16 on 16-bittinen virtuaalinen prosessori (emulaattori), joka perustuu
 von Neumann -arkkitehtuuriin. Projekti sisältää:
 
 - **CPU-emulaattorin** — rekisterit, muisti, käskyjen suoritus (Fetch-Decode-Execute)
-- **Assemblerin** — kolmipassinen (makrotuki, .origin-direktiivi)
+- **Assemblerin** — kolmipassinen (makrotuki, .origin-direktiivi, .diskblock-direktiivi)
 - **Disassemblerin** — konekielestä luettavaan muotoon
-- **Virtuaaliset laitteet** — näyttö (80×25, FG/BG-värit), näppäimistö, tallennuslaite
+- **Virtuaaliset laitteet** — näyttö (80×24, FG/BG-värit, bold/blink), näppäimistö, tallennuslaite
 - **Debuggeri-TUI** — ammattimainen Textual-pohjainen käyttöliittymä (MARS/GDB TUI -inspiroitu)
-- **CLI / REPL** — komentorivi ja interaktiivinen komentotulkki
+- **CLI** — komentorivi
 
 ---
 
@@ -24,9 +23,11 @@ von Neumann -arkkitehtuuriin. Projekti sisältää:
 kCPU16/
 ├── main.py                      # Ohjelman aloituspiste → kcpu16.cli:main()
 ├── README.md                    # Projektin yleiskuvaus ja käyttöohjeet
-├── kCPU16-architecture.md       # Yksityiskohtainen arkkitehtuuridokumentaatio
-├── PROJECT_STRUCTURE.md         # Tämä tiedosto — projektin rakenteen kuvaus
-├── IMPLEMENTATION_SUMMARY.md    # Toteutushistoria ja päivitysloki
+├── docs/
+│   ├── architecture.md          # CPU-arkkitehtuurispesifikaatio
+│   ├── assembler.md             # Assembly-kielen syntaksi ja direktiivit
+│   ├── tui.md                   # TUI-debuggerin käyttöohje
+│   └── PROJECT_STRUCTURE.md     # Tämä tiedosto
 │
 ├── kcpu16/                      # Päämoduuli — kaikki logiikka
 │   ├── __init__.py              # Paketin alustus, vie KCPU16Machine-luokan
@@ -42,26 +43,29 @@ kCPU16/
 │   ├── debugger.py              # DebugState: breakpointit + rekisterimuutosten seuranta
 │   ├── editor.py                # Assembly-editori syntaksivärityksellä (CLI/REPL)
 │   ├── tui.py                   # Ammattimainen Textual TUI -debuggeri
-│   ├── cli.py                   # Komentoriviliittymä (run, disasm, repl, tui jne.)
+│   ├── cli.py                   # Komentoriviliittymä (run, disasm, tui jne.)
 │   ├── specs.py                 # Arkkitehtuuriraportin muotoilu CLI:lle
+│   ├── testrunner.py            # Automaattinen testien suoritus (.expect_*-direktiivit)
 │   │
 │   ├── devices/                 # Virtuaalilaitteet
 │   │   ├── __init__.py          # Vie laiteluokat (Screen, Keyboard, Storage)
-│   │   ├── screen.py            # Tekstinäyttö (80×25, FG/BG-värit, Rich-renderöinti)
+│   │   ├── screen.py            # Tekstinäyttö (80×24, FG/BG-värit, Rich-renderöinti)
 │   │   ├── keyboard.py          # Näppäimistöpuskuri (FIFO-jono)
 │   │   └── storage.py           # Blokkipohjainen tallennuslaite (256×256 sanaa)
 │   │
-│   └── examples/                # Valmiit esimerkkiohjelmat
-│       ├── __init__.py          # Esimerkkien rekisteri ja latausfunktiot
-│       ├── hello_regs.asm       # Peruslaskutoimitukset: (10+5)*3-3 = 42
-│       ├── countdown.asm        # Laskuri alaspäin silmukalla
-│       ├── fibonacci.asm        # Fibonacci-lukujen laskenta
-│       ├── factorial.asm        # Kertoman laskenta aliohjelmalla
-│       ├── stack_demo.asm       # Pino-operaatioiden demonstraatio
-│       ├── exit_demo.asm        # EXIT-käskyn demonstraatio
-│       └── screen_hello_fill.asm # Näyttöön kirjoittamisen esimerkki
-│
-└── .venv/                       # Python-virtuaaliympäristö (ei editoitava)
+│   ├── code/                    # Esimerkkiohjelmat (.asm)
+│   │   ├── hello_regs.asm
+│   │   ├── fibonacci.asm
+│   │   ├── factorial.asm
+│   │   ├── countdown.asm
+│   │   ├── stack_demo.asm
+│   │   ├── screen_hello_fill.asm
+│   │   ├── test_screen_colors.asm
+│   │   ├── test_macros.asm
+│   │   └── exit_demo.asm
+│   │
+│   └── test/                    # Automaattiset yksikkötestit (.asm)
+│       └── test_*.asm           # 65+ testitiedostoa käskykannalle
 ```
 
 ---
@@ -70,13 +74,19 @@ kCPU16/
 
 ### Juurihakemisto
 
-| Tiedosto | Tarkoitus |
-|----------|-----------|
-| `main.py` | Ohjelman Entry Point. Kutsuu `kcpu16.cli:main()`. |
-| `README.md` | Projektin yleinen README: asennus, käynnistys, käyttö. |
-| `kCPU16-architecture.md` | Yksityiskohtainen arkkitehtuuri: rekisterit, käskykirjasto, muistikartta, keskeytykset. |
-| `PROJECT_STRUCTURE.md` | Tämä dokumentti — projektin rakenne. |
-| `IMPLEMENTATION_SUMMARY.md` | Toteutushistoria ja päivitysloki. |
+| Tiedosto    | Tarkoitus                                                              |
+| ----------- | ---------------------------------------------------------------------- |
+| `main.py`   | Ohjelman Entry Point. Kutsuu `kcpu16.cli:main()`.                      |
+| `README.md` | Projektin yleinen README: asennus, käynnistys, linkit dokumentaatioon. |
+
+### docs/ — Dokumentaatio
+
+| Tiedosto               | Tarkoitus                                                                    |
+| ---------------------- | ---------------------------------------------------------------------------- |
+| `architecture.md`      | CPU-arkkitehtuurispesifikaatio: rekisterit, muistikartta, ISA, keskeytykset. |
+| `assembler.md`         | Assembly-kielen syntaksi, direktiivit, arkkitehtuurivakiot, esimerkit.       |
+| `tui.md`               | TUI-debuggerin käyttöohje: asettelu, näppäinsidonnaisuudet, komennot.        |
+| `PROJECT_STRUCTURE.md` | Tämä dokumentti — projektin rakenne.                                         |
 
 ---
 
@@ -90,7 +100,7 @@ kCPU16/
 Määrittää kaikki numeriset vakiot:
 - **Muistivakiot**: `WORD_MASK` (0xFFFF), `MEMORY_WORDS` (65536)
 - **Keskeytysvektorit**: `INT_DIV_ZERO` (0), `INT_INVALID_OPCODE` (1), `INT_STACK_OVERFLOW` (2), `INT_BREAKPOINT` (3), `INT_PRIVILEGE_VIOLATION` (4), `INT_MEMORY_ACCESS_FAULT` (5), `INT_KEYBOARD` (6), `INT_TIMER` (7), `INT_PROCESS_EXIT` (8)
-- **Muistialueet**: `VRAM_START` (0xF800), `VRAM_END` (0xFFCF, 80×25), `KERNEL_STACK_START` (0xFFD0), `BOOT_RAM_START` (0x0100)
+- **Muistialueet**: `VRAM_START` (0xF800), `VRAM_END` (0xFF7F, 80×24), `KERNEL_STACK_START` (0xFF80), `BOOT_RAM_START` (0x0100)
 - **Tilaliput**: `SR_FLAG_Z` (0), `SR_FLAG_N` (1), `SR_FLAG_C` (2), `SR_FLAG_V` (3), `SR_FLAG_I` (4), `SR_FLAG_P` (5)
 - **Suoritustilat**: `MODE_KERNEL` (1), `MODE_USER` (0)
 - **Värijärjestelmä**: `VRAM_FG_MASK`, `VRAM_BG_MASK`, `COLOR_BLACK`…`COLOR_WHITE`, attribuutit (BOLD, ITALIC, BLINK, UNDERLINE, STRIKETHROUGH)
@@ -147,9 +157,10 @@ Lisäksi: keskeytysten käsittely (`_trigger_interrupt()`), pinooperaatiot (`_pu
 - **Pass 0**: `_pass0_expand_macros_and_origin()` — makrojen ekspansointi, `.origin`/`.org` direktiivin käsittely
 - **Pass 1**: `_pass1_collect_labels()` — labelien keräys ja osoitteiden laskenta
 - **Pass 2**: `_pass2_emit()` — lopullinen konekieli (opcodet + operandit)
-- `_parse_operand()` — rekisterit (R0-SP), labelit, numeroliteraalit (#42, 0xFF, $F800)
+- `_parse_operand()` — rekisterit (R0-SP), labelit, numeroliteraalit (42, 0xFF, 0b1010, 0o52)
 - `REGISTER_TO_ID` — rekisterinimet → indeksit
 - `MNEMONIC_TO_OPCODE` — käänteinen hakutaulukko
+- `ARCH_SYMBOLS` — arkkitehtuurivakiot injektoidaan automaattisesti label-nimiksi
 
 #### `disassembler.py` — Disassembler
 `Disassembler`-luokka:
@@ -214,18 +225,18 @@ Kaksi luokkaa:
 
 **Näppäinsidonnaisuudet:**
 
-| Näppäin | Toiminto |
-|---------|----------|
-| F1 | Help |
-| F2 | Toggle breakpoint |
-| F5 | Run (max 10000 sykliä, pysähtyy BP:hen) |
-| F7 / F10 | Step (1 käsky) |
-| F9 | Tyhjennä VRAM |
-| Ctrl+B | Assemble editorin koodi |
-| Ctrl+O | Avaa tiedosto |
-| Ctrl+S | Tallenna tiedosto |
-| Ctrl+R | Reset kone |
-| Ctrl+Q | Lopeta |
+| Näppäin  | Toiminto                                |
+| -------- | --------------------------------------- |
+| F1       | Help                                    |
+| F2       | Toggle breakpoint                       |
+| F5       | Run (max 10000 sykliä, pysähtyy BP:hen) |
+| F7 / F10 | Step (1 käsky)                          |
+| F9       | Tyhjennä VRAM                           |
+| Ctrl+B   | Assemble editorin koodi                 |
+| Ctrl+O   | Avaa tiedosto                           |
+| Ctrl+S   | Tallenna tiedosto                       |
+| Ctrl+R   | Reset kone                              |
+| Ctrl+Q   | Lopeta                                  |
 
 #### `cli.py` — Komentoriviliittymä
 Toteuttaa CLI-komennot argparse:lla:
@@ -250,8 +261,8 @@ Vie laiteluokat: `KeyboardDevice`, `ScreenDevice`, `BlockStorageDevice`
 
 #### `screen.py` — Tekstinäyttö
 `ScreenDevice`-dataluokka:
-- 80 saraketta × 25 riviä = 2000 sanaa VRAM:ssa (0xF800–0xFFCF)
-- VRAM-sanan rakenne: bitit 0–7 = ASCII-merkki, bitit 8–12 = attribuutit (bold/italic/blink/underline/strikethrough), bitit 12–14 = FG-väri (0–7), bitti 15 = BG-väri (0–1)
+- 80 saraketta × 24 riviä = 1920 sanaa VRAM:ssa (0xF800–0xFF7F)
+- VRAM-sanan rakenne: bitit 0–7 = ASCII-merkki, bitit 8–10 = FG-väri (0–7), bitit 11–13 = BG-väri (0–7), bitti 14 = lihavointi, bitti 15 = vilkkuminen
 - `render_text(memory)` — pelkkä teksti ilman värejä
 - `render_with_rich_colors(memory)` — Rich-muotoiltu teksti väreillä ja attribuuteilla (TUI:n käyttöön)
 - `extract_char_with_attrs(word)` — erota merkki, FG, BG ja attribuutit VRAM-sanasta
@@ -272,24 +283,24 @@ Vie laiteluokat: `KeyboardDevice`, `ScreenDevice`, `BlockStorageDevice`
 
 ---
 
-### kcpu16/examples/ — Esimerkkiohjelmat
+### kcpu16/code/ — Esimerkkiohjelmat
 
-#### `__init__.py`
-- `EXAMPLES` — rekisteri: nimi → {description, file}
-- `get_source(name)` — lataa esimerkin lähdekoodi .asm-tiedostosta
-- `list_examples()` — palauta listan (nimi, kuvaus) -pareja
+| Tiedosto                 | Kuvaus                                     |
+| ------------------------ | ------------------------------------------ |
+| `hello_regs.asm`         | Peruslaskutoimitukset: (10+5)×3−3 = 42     |
+| `countdown.asm`          | Laskuri 10→0 silmukalla (SUB + JNZ)        |
+| `fibonacci.asm`          | Fibonacci-lukujen laskenta iteratiivisesti |
+| `factorial.asm`          | Kertoman laskenta aliohjelmalla (CALL/RET) |
+| `stack_demo.asm`         | PUSH/POP/LIFO-demonstraatio                |
+| `exit_demo.asm`          | EXIT-käskyn käyttö                         |
+| `screen_hello_fill.asm`  | VRAM-kirjoitus, tekstiä näytölle           |
+| `test_screen_colors.asm` | FG/BG-värien testaus                       |
+| `test_macros.asm`        | Makrojen käyttöesimerkki                   |
 
-#### Assembly-esimerkit
+### kcpu16/test/ — Automaattiset testit
 
-| Tiedosto | Kuvaus | Tulos |
-|----------|--------|-------|
-| `hello_regs.asm` | Peruslaskutoimitukset: (10+5)×3−3 | R0 = 42 |
-| `countdown.asm` | Laskuri 10→0 silmukalla (SUB + JNZ) | R0 = 0 |
-| `fibonacci.asm` | Fibonacci F(9) iteratiivisesti | R1 = 34 |
-| `factorial.asm` | 5! aliohjelmalla (CALL/RET) | R0 = 120 |
-| `stack_demo.asm` | PUSH/POP/LIFO-demonstraatio | R0=3, R1=2, R2=1 |
-| `exit_demo.asm` | EXIT-käskyn käyttö | process_exit_requested |
-| `screen_hello_fill.asm` | VRAM-kirjoitus "HELLO! " | näytöllä näkyy teksti |
+Sisältää 65+ .asm-testitiedostoa, joista jokainen testaa yhtä käskyä tai tilannetta
+`.expect_reg`, `.expect_flag` ja `.expect_mem` -direktiivien avulla.
 
 ---
 
@@ -320,7 +331,7 @@ Vie laiteluokat: `KeyboardDevice`, `ScreenDevice`, `BlockStorageDevice`
     │                                                       │
     │  ┌────────────┐  ┌────────────┐  ┌────────────────┐  │
     │  │   Screen   │  │  Keyboard  │  │    Storage     │  │
-    │  │ 80×25 VRAM │  │ FIFO-jono  │  │ 256×256 blokki│  │
+    │  │ 80×24 VRAM │  │ FIFO-jono  │  │ 256×256 blokki│  │
     │  │ FG/BG värit│  │            │  │ Boot sektori 0 │  │
     │  └────────────┘  └────────────┘  └────────────────┘  │
     └───────────────────────────────────────────────────────┘
@@ -375,8 +386,8 @@ Osoite          Koko       Käyttö
 0x0009 - 0x00FF  247 sanaa   Varattu käyttöjärjestelmälle
 0x0100 - 0x01FF  256 sanaa   Bootloaderin latausalue (ohjelma ladataan tähän)
 0x0200 - 0xF7FF  ~61K sanaa  Vapaa RAM (käyttäjän ohjelmat ja data)
-0xF800 - 0xFFCF 2000 sanaa   Video RAM (80×25 merkkiä, FG/BG-värit)
-0xFFD0 - 0xFFFF   48 sanaa   Kernel Stack
+0xF800 - 0xFF7F 1920 sanaa   Video RAM (80×24 merkkiä, FG/BG-värit, bold/blink)
+0xFF80 - 0xFFFF  128 sanaa   Kernel Stack
 ```
 
 ---
@@ -384,14 +395,11 @@ Osoite          Koko       Käyttö
 ## Värijärjestelmä (VRAM-sanan rakenne)
 
 ```
-Bitti 15       : BG-väri (0=musta, 1=valkoinen)
-Bitit 12-14    : FG-väri (0-7: musta, punainen, vihreä, keltainen, sininen, magenta, syaani, valkoinen)
-Bitti 12       : Yliviivaus
-Bitti 11       : Alleviivaus
-Bitti 10       : Vilkku
-Bitti 9        : Kursiivi
-Bitti 8        : Lihavointi
-Bitit 0-7      : ASCII-merkki (0-127)
+Bitti 15       : Vilkkuminen (1 = päällä)
+Bitti 14       : Lihavointi (1 = päällä)
+Bitit 11-13    : Taustaväri BG (0–7: musta..valkoinen)
+Bitit  8-10    : Edustaväri FG (0–7: musta..valkoinen)
+Bitit  0-7     : ASCII-merkki (0–127)
 ```
 
 ---
@@ -425,11 +433,11 @@ python main.py spec
 
 ## Riippuvuudet
 
-| Paketti | Versio | Käyttö |
-|---------|--------|--------|
-| Python | ≥ 3.10 | Kielivaatimus (match/case, type unions) |
-| textual | 8.2.1 | TUI-framework (tui.py) |
-| rich | (textual-riippuvuus) | Värimuotoilu logissa ja disassemblyssä |
+| Paketti | Versio               | Käyttö                                  |
+| ------- | -------------------- | --------------------------------------- |
+| Python  | ≥ 3.10               | Kielivaatimus (match/case, type unions) |
+| textual | 8.2.1                | TUI-framework (tui.py)                  |
+| rich    | (textual-riippuvuus) | Värimuotoilu logissa ja disassemblyssä  |
 
 ---
 
@@ -441,13 +449,11 @@ tui.py ─┬─ machine.py ─── cpu.py ─┬─ memory.py ── constant
         ├─ assembler.py           ├─ instruction.py
         ├─ disassembler.py        └─ exceptions.py
         ├─ debugger.py
-        ├─ examples/__init__.py
         └─ specs.py
 
 cli.py ─┬─ machine.py
         ├─ assembler.py
         ├─ disassembler.py
-        ├─ examples/__init__.py
         ├─ specs.py
         └─ tui.py (lazy import)
 ```

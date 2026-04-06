@@ -104,6 +104,23 @@ class KCPU16Machine:
         self.memory.reset()
         self.cpu.reset()
 
+    def reset_for_test(self) -> None:
+        """
+        Alusta kone testiajon varten.
+
+        Nollaa muistin ja rekisterit ilman boot-prosessia:
+        - EI lue tallennuslaitteelta mitaan
+        - EI kutsu boot_from_storage()
+        - Muisti nollataan (kaikki sanat = 0)
+        - CPU nollataan (rekisterit, liput, tilat)
+        - Kernel Mode paalle, keskeytykset pois
+
+        Kayta tata testrunnerissa cold_reset():in sijaan jotta
+        boot-logiikka ei vahingossa kaynnisty.
+        """
+        self.memory.reset()
+        self.cpu.reset()
+
     def boot_from_storage(self) -> None:
         """
         Kaynnnista kone lataamalla bootloader tallennuslaitteelta.

@@ -40,15 +40,15 @@
         ; Tulosta aloitusarvo "10 " (kaksinumeroinen erikoistapaus)
         ; -----------------------------------------------
         LOAD  R3, 0xE031  ; R3 = '1' (valkoinen)
-        STORE_IND R2, R3  ; [R2] = '1'
+        STORE [R2], R3  ; [R2] = '1'
         ADD   R2, R1      ; R2++ (seuraava näyttöpaikka)
 
         LOAD  R3, 0xE030  ; R3 = '0'
-        STORE_IND R2, R3  ; [R2] = '0'
+        STORE [R2], R3  ; [R2] = '0'
         ADD   R2, R1      ; R2++
 
         LOAD  R3, 0xE020  ; R3 = ' ' (välilyönti)
-        STORE_IND R2, R3  ; [R2] = ' '
+        STORE [R2], R3  ; [R2] = ' '
         ADD   R2, R1      ; R2++
 
 ; =============================================================================
@@ -69,14 +69,14 @@ loop:
         CPY   R3, R0      ; R3 = R0 (laskurin kopio)
         LOAD  FP, 0xE030  ; FP = valkoinen '0' -pohja
         ADD   R3, FP      ; R3 = 0xE030 + numero = merkki
-        STORE_IND R2, R3  ; [R2] = merkki
+        STORE [R2], R3  ; [R2] = merkki
         ADD   R2, R1      ; R2++ (seuraava näyttöpaikka)
 
         ; -----------------------------------------------
         ; Tulosta välilyönti erottimeksi
         ; -----------------------------------------------
         LOAD  R3, 0xE020  ; R3 = ' ' (valkoinen välilyönti)
-        STORE_IND R2, R3  ; [R2] = ' '
+        STORE [R2], R3  ; [R2] = ' '
         ADD   R2, R1      ; R2++
 
         ; -----------------------------------------------

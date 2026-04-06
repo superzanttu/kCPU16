@@ -28,7 +28,7 @@
         ; 0xE048 = valkoinen 'H' (ASCII 0x48 = 72)
         ; -----------------------------------------------
         LOAD  R3, 0xE048      ; R3 = 'H' (valkoisena)
-        STORE R3, 0xF800      ; Kirjoita näytön vasempaan yläkulmaan
+        STORE [0xF800], R3  ; Kirjoita näytön vasempaan yläkulmaan
 
         ; -----------------------------------------------
         ; Vaihe 1: Yhteenlasku 10 + 5 = 15
@@ -39,7 +39,7 @@
 
         ; Kirjoita '+' merkki näytölle
         LOAD  R3, 0xE02B      ; R3 = '+' (ASCII 0x2B = 43)
-        STORE R3, 0xF801      ; Näyttöpaikka 2
+        STORE [0xF801], R3  ; Näyttöpaikka 2
 
         ; -----------------------------------------------
         ; Vaihe 2: Kertolasku 15 * 3 = 45
@@ -56,13 +56,13 @@
         ; Kirjoita tulos "=42" näytölle
         ; -----------------------------------------------
         LOAD  R3, 0xE03D      ; R3 = '=' (ASCII 0x3D = 61)
-        STORE R3, 0xF802      ; Näyttöpaikka 3
+        STORE [0xF802], R3  ; Näyttöpaikka 3
 
         LOAD  R3, 0xE034      ; R3 = '4' (ASCII 0x34 = 52)
-        STORE R3, 0xF803      ; Näyttöpaikka 4
+        STORE [0xF803], R3  ; Näyttöpaikka 4
 
         LOAD  R3, 0xE032      ; R3 = '2' (ASCII 0x32 = 50)
-        STORE R3, 0xF804      ; Näyttöpaikka 5
+        STORE [0xF804], R3  ; Näyttöpaikka 5
 
         ; -----------------------------------------------
         ; Pysäytä prosessori

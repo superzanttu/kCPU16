@@ -31,6 +31,40 @@ from .constants import WORD_MASK
 # Kaytamme samaa formaattia kuin OPCODE_TABLE
 REVERSE_TABLE = {opcode: meta for opcode, meta in OPCODE_TABLE.items()}
 
+# Rekisteri-indeksi -> nimi muistikaskyjen formatointia varten
+_REG_NAMES: dict[int, str] = {0: "R0", 1: "R1", 2: "R2", 3: "R3", 4: "FP", 5: "SP"}
+
+
+def _format_memory_instr(mnemonic: str, op_vals: list[int]) -> str | None:
+    """Muotoile muistioperaatiot uudella [..] syntaksilla.
+
+    Palauttaa muotoillun merkkijonon jos mnemoniikka on muistioperaatio,
+    muuten None (jolloin kaytetaan vanhaa heksaformaattia).
+    """
+
+    def r(idx: int) -> str:
+        return _REG_NAMES.get(idx, f"?{idx}")
+
+    if mnemonic == "READ" and len(op_vals) >= 2:
+        return f"LOAD {r(op_vals[0])}, [0x{op_vals[1]:04X}]"
+    if mnemonic == "READ_IND" and len(op_vals) >= 2:
+        return f"LOAD {r(op_vals[0])}, [{r(op_vals[1])}]"
+    if mnemonic == "READ_REL" and len(op_vals) >= 2:
+        return f"LOAD {r(op_vals[0])}, [FP+{op_vals[1]}]"
+    if mnemonic == "STORE" and len(op_vals) >= 2:
+        return f"STORE [0x{op_vals[1]:04X}], {r(op_vals[0])}"
+    if mnemonic == "STOREI" and len(op_vals) >= 2:
+        return f"STORE [0x{op_vals[1]:04X}], {op_vals[0]}"
+    if mnemonic == "STORE_IND" and len(op_vals) >= 2:
+        return f"STORE [{r(op_vals[0])}], {r(op_vals[1])}"
+    if mnemonic == "STOREI_IND" and len(op_vals) >= 2:
+        return f"STORE [{r(op_vals[0])}], {op_vals[1]}"
+    if mnemonic == "STORE_REL" and len(op_vals) >= 2:
+        return f"STORE [FP+{op_vals[1]}], {r(op_vals[0])}"
+    if mnemonic == "STOREI_REL" and len(op_vals) >= 2:
+        return f"STORE [FP+{op_vals[1]}], {op_vals[0]}"
+    return None
+
 
 class Disassembler:
     """
@@ -41,7 +75,7 @@ class Disassembler:
 
     Example:
         >>> dis = Disassembler()
-        >>> words = [0x0001, 0x0000, 0x002A, 0x0044]
+        >>> words = [0x1080, 0x0000, 0x002A, 0xF000]
         >>> print(dis.disassemble(words))
         0000: LOAD 0x0000, 0x002A
         0003: HALT
@@ -87,20 +121,23 @@ class Disassembler:
             mnemonic, operand_count, _ = meta
 
             # Kerae operandit seuraavista sanoista
-            operands = []
+            op_vals = []
             for j in range(operand_count):
                 # Tarkista ettei lueta yli listan
                 if i + 1 + j >= len(words):
                     break
-                # Muotoile operandi heksana
-                operands.append(f"0x{(words[i + 1 + j] & WORD_MASK):04X}")
+                op_vals.append(words[i + 1 + j] & WORD_MASK)
 
-            # Rakenna tulostusrivi
-            line = f"{pc:04X}: {mnemonic}"
-            if operands:
-                # Lisaa operandit pilkulla erotettuna
-                line += " " + ", ".join(operands)
-            lines.append(line)
+            # Rakenna tulostusrivi — muistioperaatiot uudella [..] syntaksilla
+            mem_fmt = _format_memory_instr(mnemonic, op_vals)
+            if mem_fmt is not None:
+                lines.append(f"{pc:04X}: {mem_fmt}")
+            else:
+                operands = [f"0x{v:04X}" for v in op_vals]
+                line = f"{pc:04X}: {mnemonic}"
+                if operands:
+                    line += " " + ", ".join(operands)
+                lines.append(line)
 
             # Siirry seuraavan kaskyn kohdalle
             # Kaskyn koko = 1 (opcode) + operandien maara

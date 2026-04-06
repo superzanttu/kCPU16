@@ -28,5 +28,7 @@ PAKETIN SISALTO:
 
 from .machine import KCPU16Machine
 
+__version__ = "1.1.1"
+
 # __all__ maarittaa mita "from kcpu16 import *" tuo
-__all__ = ["KCPU16Machine"]
+__all__ = ["KCPU16Machine", "__version__"]

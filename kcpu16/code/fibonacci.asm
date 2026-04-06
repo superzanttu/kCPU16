@@ -50,19 +50,19 @@
         ; Tulosta F(0) ja F(1): "0 1 "
         ; -----------------------------------------------
         LOAD  SP, 0xE030  ; '0'
-        STORE_IND FP, SP  ; Tulosta '0'
+        STORE [FP], SP  ; Tulosta '0'
         ADD   FP, R3      ; Seuraava paikka
 
         LOAD  SP, 0xE020  ; ' ' (välilyönti)
-        STORE_IND FP, SP
+        STORE [FP], SP
         ADD   FP, R3
 
         LOAD  SP, 0xE031  ; '1'
-        STORE_IND FP, SP
+        STORE [FP], SP
         ADD   FP, R3
 
         LOAD  SP, 0xE020  ; ' '
-        STORE_IND FP, SP
+        STORE [FP], SP
         ADD   FP, R3
 
 ; =============================================================================
@@ -78,9 +78,9 @@ fib_loop:
         ; Käytetään muistia väliaikaiseen tallennukseen
         ; koska meillä ei ole tarpeeksi rekistereitä
         ; -----------------------------------------------
-        STORE R1, 0x0210  ; Tallenna b muistiin (väliaikainen)
+        STORE [0x0210], R1  ; Tallenna b muistiin (väliaikainen)
         ADD   R1, R0      ; b = a + b (uusi Fibonacci-luku)
-        READ  R0, 0x0210  ; a = vanha b
+        LOAD R0, [0x0210]  ; a = vanha b
 
         ; -----------------------------------------------
         ; Tulosta nykyinen Fibonacci-luku (R1)
@@ -106,12 +106,12 @@ fib_loop:
         ; Yksinumeroinen (1, 2, 3, 5, 8)
         ; Muunna numero merkiksi: '0' + numero
         ; -----------------------------------------------
-        STORE R0, 0x0211  ; Tallenna a (koska tarvitsemme R0:aa)
+        STORE [0x0211], R0  ; Tallenna a (koska tarvitsemme R0:aa)
         CPY   SP, R1      ; SP = Fibonacci-luku
         LOAD  R0, 0xE030  ; R0 = valkoinen '0' -pohja
         ADD   SP, R0      ; SP = '0' + luku = merkki
-        READ  R0, 0x0211  ; Palauta a
-        STORE_IND FP, SP  ; Tulosta merkki
+        LOAD R0, [0x0211]  ; Palauta a
+        STORE [FP], SP  ; Tulosta merkki
         ADD   FP, R3
         JUMP  print_space
 
@@ -120,28 +120,28 @@ fib_loop:
 ; -----------------------------------------------
 print_13:
         LOAD  SP, 0xE031  ; '1'
-        STORE_IND FP, SP
+        STORE [FP], SP
         ADD   FP, R3
         LOAD  SP, 0xE033  ; '3'
-        STORE_IND FP, SP
+        STORE [FP], SP
         ADD   FP, R3
         JUMP  print_space
 
 print_21:
         LOAD  SP, 0xE032  ; '2'
-        STORE_IND FP, SP
+        STORE [FP], SP
         ADD   FP, R3
         LOAD  SP, 0xE031  ; '1'
-        STORE_IND FP, SP
+        STORE [FP], SP
         ADD   FP, R3
         JUMP  print_space
 
 print_34:
         LOAD  SP, 0xE033  ; '3'
-        STORE_IND FP, SP
+        STORE [FP], SP
         ADD   FP, R3
         LOAD  SP, 0xE034  ; '4'
-        STORE_IND FP, SP
+        STORE [FP], SP
         ADD   FP, R3
 
 ; -----------------------------------------------
@@ -149,7 +149,7 @@ print_34:
 ; -----------------------------------------------
 print_space:
         LOAD  SP, 0xE020  ; ' '
-        STORE_IND FP, SP
+        STORE [FP], SP
         ADD   FP, R3
 
         ; Vähennä kierroslaskuria ja jatka jos > 0

@@ -4,28 +4,55 @@ Kaskyjen metatiedot ja opcode-taulukko.
 Tama tiedosto maarittaa kCPU16-prosessorin kaskykirjaston (Instruction Set).
 Se sisaltaa:
 1. DecodedInstruction - puretun kaskyn tietorakenne
-2. OPCODE_TABLE - opcode-arvojen ja kaskymetatietojen kuvaus
+2. Opcode-bittikenttatavakiot ja _op()-koodausapufunktio
+3. OPCODE_TABLE - opcode-arvojen ja kaskymetatietojen kuvaus
 
-OPCODE-KOODAUS:
----------------
-Kaskyt koostuvat 1-3 sanasta:
-- Sana 1: Opcode (maarittelee kaskyn tyypin)
-- Sana 2-3: Operandit (rekisteri-indekseja, muistiosoitteita tai vakioita)
+OPCODE-BITTIKENTTAT (16 bittiä):
+---------------------------------
+ Bitti 15    14:12    11:8    7:6    5:0
+        P     GRP      ID     OPS    ---
 
-Esimerkki: LOAD R0, 42
-- Sana 1: 0x0001 (LOAD-opcode)
-- Sana 2: 0x0000 (R0:n indeksi)
-- Sana 3: 0x002A (arvo 42)
+  P   (Bit 15):    Oikeusbitti
+                    0 = User-moodi (kaikki ohjelmat)
+                    1 = Kernel-moodi vaaditaan (etuoikeutettu kasky)
 
-KASKYJEN LUOKITTELU:
---------------------
-1. TIEDONSIIRTO: LOAD, CPY, READ, STORE, READ_IND, STORE_IND
-2. ARITMETIIKKA: ADD, SUB, MUL, DIV, CMP
-3. LOGIIKKA: AND, OR, XOR, NOT, SHL, SHR
-4. PINO: PUSH, POP
-5. HYPPYKASKYT: JUMP, JZ, JNZ, JLT, JGT, JLE, JGE, CALL, RET
-6. KESKEYTYKSET: INT, IRET
-7. JARJESTELMA: STI, CLI, HALT, EXIT, DREAD, DWRITE, SMPR, STMR
+  GRP (Bit 14:12): Kaskyryhmä (3 bittiä, arvot 1-7)
+                    0 = Varatttu — kaikki opcoodet 0x0000-0x0FFF ovat
+                        virheellisia (nollamuisti ei ajaudu vahingossa)
+                    1 = Tiedonsiirto    (Data Transfer)
+                    2 = Aritmetiikka    (Arithmetic)
+                    3 = Logiikka        (Logic & Bitwise)
+                    4 = Pino            (Stack)
+                    5 = Ohjausrakenne   (Control Flow)
+                    6 = Keskeytykset    (Interrupts)
+                    7 = Jarjestelma/IO  (System)
+
+  ID  (Bit 11:8):  Kaskyindeksi ryhmassa (4 bittiä, arvot 0-15)
+
+  OPS (Bit 7:6):   Operandien maara (2 bittiä)
+                    00 = 0 operandia  (esim. HALT, RET, NOP)
+                    01 = 1 operandi   (esim. PUSH reg, JUMP addr)
+                    10 = 2 operandia  (esim. LOAD reg, imm)
+
+  --- (Bit 5:0):   Varattu, pitaa olla 0
+
+KOODAUSKAAVA:
+  opcode = (P << 15) | (GRP << 12) | (ID << 8) | (OPS << 6)
+
+ESIMERKKI: LOAD R0, 42  ->  P=0, GRP=1, ID=0, OPS=2
+  0b 0_001_0000_10_000000 = 0x1080
+
+OPCOODEALUEET RYHMITTAIN:
+  0x0000-0x0FFF  Virheellinen (GRP=0, nollamuisti)
+  0x1000-0x1FFF  Tiedonsiirto    GRP=1  P=0
+  0x2000-0x2FFF  Aritmetiikka    GRP=2  P=0
+  0x3000-0x3FFF  Logiikka        GRP=3  P=0
+  0x4000-0x4FFF  Pino            GRP=4  P=0
+  0x5000-0x5FFF  Ohjausrakenne   GRP=5  P=0
+  0x6000-0x6FFF  Keskeytykset    GRP=6  P=0  (User)
+  0x7000-0x7FFF  Jarjestelma     GRP=7  P=0  (User)
+  0xE000-0xEFFF  Keskeytykset    GRP=6  P=1  (Kernel)
+  0xF000-0xFFFF  Jarjestelma     GRP=7  P=1  (Kernel)
 """
 
 from dataclasses import dataclass, field
@@ -62,118 +89,223 @@ class DecodedInstruction:
 
 
 # =============================================================================
+# =============================================================================
+# OPCODE-BITTIKENTTATAVAKIOT
+# =============================================================================
+
+# Bittipositiot (shift-arvot)
+OPCODE_PRIV_SHIFT: int = 15  # Bit 15: Oikeusbitti
+OPCODE_GRP_SHIFT: int = 12  # Bit 14:12: Ryhmakoodi
+OPCODE_ID_SHIFT: int = 8  # Bit 11:8:  Kaskyindeksi ryhmassa
+OPCODE_NOPS_SHIFT: int = 6  # Bit 7:6:   Operandien maara
+
+# Bittipeitteet (mask-arvot)
+OPCODE_GRP_MASK: int = 0x7  # 3 bittiä, GRP 0-7
+OPCODE_ID_MASK: int = 0xF  # 4 bittiä, ID 0-15
+OPCODE_NOPS_MASK: int = 0x3  # 2 bittiä, OPS 0-3
+
+# Ryhmakoodit (GRP-kentan arvot, bitit 14:12)
+OPCODE_GRP_TRANSFER: int = 1  # Tiedonsiirtokaskyt
+OPCODE_GRP_ARITH: int = 2  # Aritmeettiset kaskyt
+OPCODE_GRP_LOGIC: int = 3  # Logiikka- ja bittikaskyt
+OPCODE_GRP_STACK: int = 4  # Pinokaskyt
+OPCODE_GRP_FLOW: int = 5  # Ohjausrakennekaskyt
+OPCODE_GRP_INTERRUPT: int = 6  # Keskeytykset
+OPCODE_GRP_SYSTEM: int = 7  # Jarjestelma- ja IO-kaskyt
+
+
+def _op(p: int, grp: int, id_: int, nops: int) -> int:
+    """Laske opcode-arvo bittikentista.
+
+    Koodauskaava: (P << 15) | (GRP << 12) | (ID << 8) | (OPS << 6)
+
+    Args:
+        p:    Oikeusbitti: 0=User, 1=Kernel
+        grp:  Ryhmakoodi: 1-7
+        id_:  Kaskyindeksi ryhmassa: 0-15
+        nops: Operandien maara: 0-2
+
+    Returns:
+        16-bittinen opcode-arvo
+    """
+    return (
+        (p << OPCODE_PRIV_SHIFT)
+        | (grp << OPCODE_GRP_SHIFT)
+        | (id_ << OPCODE_ID_SHIFT)
+        | (nops << OPCODE_NOPS_SHIFT)
+    )
+
+
+# =============================================================================
 # OPCODE-TAULUKKO
+# =============================================================================
 # Kuvaa jokaisen tuetun kaskyn: opcode -> (mnemonic, operandien_maara, privileged)
 #
-# Formaatti:
-#   opcode: (kaskyn_nimi, operandien_lukumaara, vaatiiko_kernel_tilan)
-#
-# Operandimaarat:
-#   0 = ei operandeja (esim. RET, HALT)
-#   1 = yksi operandi (esim. PUSH reg, JUMP addr)
-#   2 = kaksi operandia (esim. LOAD reg, imm  tai  ADD regD, regS)
+# Opcode-arvot on laskettu _op()-funktiolla strukturoidusta bittikentasta.
+# Jokaisesta opcode-arvosta voidaan suoraan lukea:
+#   - Oikeusbitti:    (opcode >> OPCODE_PRIV_SHIFT) & 1
+#   - Ryhma:          (opcode >> OPCODE_GRP_SHIFT)  & OPCODE_GRP_MASK
+#   - Kaskyindeksi:   (opcode >> OPCODE_ID_SHIFT)   & OPCODE_ID_MASK
+#   - Operandien lkm: (opcode >> OPCODE_NOPS_SHIFT) & OPCODE_NOPS_MASK
 # =============================================================================
 
 OPCODE_TABLE: dict[int, tuple[str, int, bool]] = {
     # -------------------------------------------------------------------------
-    # TIEDONSIIRTOKASKYT (Data Transfer)
+    # GRP 1: TIEDONSIIRTOKASKYT (Data Transfer)
+    #   Opcoodet: 0x1080-0x1780  (P=0, GRP=1, OPS=2)
     # -------------------------------------------------------------------------
-    0x0001: ("LOAD", 2, False),  # LOAD reg, imm  - Lataa vakio rekisteriin
-    0x0002: ("CPY", 2, False),  # CPY regD, regS - Kopioi rekisterista toiseen
-    0x0003: ("READ", 2, False),  # READ reg, addr - Lue muistiosoite rekisteriin
-    0x0004: ("STORE", 2, False),  # STORE reg, addr - Tallenna rekisteri muistiin
-    0x0005: (
-        "READ_IND",
+    _op(0, 1, 0, 2): ("LOAD", 2, False),  # LOAD reg, imm       Lataa vakio rekisteriin
+    _op(0, 1, 1, 2): (
+        "CPY",
         2,
         False,
-    ),  # READ_IND regD, regS - Lue epäsuorasti [regS] -> regD
-    0x0006: ("STORE_IND", 2, False),  # STORE_IND regD, regS - Kirjoita [regD] <- regS
-    0x0007: ("READ_REL", 2, False),  # READ_REL reg, imm - Lue [FP + imm] rekisteriin
-    0x0008: (
+    ),  # CPY  regD, regS     Kopioi rekisterista toiseen
+    _op(0, 1, 2, 2): (
+        "READ",
+        2,
+        False,
+    ),  # READ reg, addr      Lue muistiosoite rekisteriin
+    _op(0, 1, 3, 2): (
+        "STORE",
+        2,
+        False,
+    ),  # STORE reg, addr     Tallenna rekisteri muistiin
+    _op(0, 1, 4, 2): ("READ_IND", 2, False),  # READ_IND  regD, regS  Lue [regS] -> regD
+    _op(0, 1, 5, 2): (
+        "STORE_IND",
+        2,
+        False,
+    ),  # STORE_IND regD, regS  Kirjoita [regD] <- regS
+    _op(0, 1, 6, 2): (
+        "READ_REL",
+        2,
+        False,
+    ),  # READ_REL  reg, imm  Lue [FP + imm] rekisteriin
+    _op(0, 1, 7, 2): (
         "STORE_REL",
         2,
         False,
-    ),  # STORE_REL reg, imm - Kirjoita rekisteri [FP + imm]
+    ),  # STORE_REL reg, imm  Kirjoita rekisteri [FP + imm]
+    _op(0, 1, 8, 2): (
+        "STOREI",
+        2,
+        False,
+    ),  # STOREI imm, addr    Kirjoita välitön arvo muistiosoitteeseen
+    _op(0, 1, 9, 2): (
+        "STOREI_IND",
+        2,
+        False,
+    ),  # STOREI_IND regD, imm  Kirjoita välitön arvo [regD]:hen
+    _op(0, 1, 10, 2): (
+        "STOREI_REL",
+        2,
+        False,
+    ),  # STOREI_REL imm, offset  Kirjoita välitön arvo [FP + offset]
     # -------------------------------------------------------------------------
-    # ARITMEETTISET KASKYT (Arithmetic & Logic)
+    # GRP 2: ARITMEETTISET KASKYT (Arithmetic)
+    #   Opcoodet: 0x2080-0x2580  (P=0, GRP=2, OPS=2)
     # -------------------------------------------------------------------------
-    0x0010: ("ADD", 2, False),  # ADD regD, regS - regD = regD + regS
-    0x0011: ("SUB", 2, False),  # SUB regD, regS - regD = regD - regS
-    0x0012: ("MUL", 2, False),  # MUL regD, regS - regD = regD * regS
-    0x0013: (
+    _op(0, 2, 0, 2): ("ADD", 2, False),  # ADD regD, regS   regD = regD + regS
+    _op(0, 2, 1, 2): ("SUB", 2, False),  # SUB regD, regS   regD = regD - regS
+    _op(0, 2, 2, 2): ("MUL", 2, False),  # MUL regD, regS   regD = regD * regS
+    _op(0, 2, 3, 2): (
         "DIV",
         2,
         False,
-    ),  # DIV regD, regS - regD = regD / regS (INT 0 jos jakaja=0)
-    0x0014: (
-        "CMP",
-        2,
-        False,
-    ),  # CMP regA, regB - Vertaa (laskee regA-regB, asettaa liput)
+    ),  # DIV regD, regS   regD = regD / regS  (INT 0 jos jakaja=0)
+    _op(0, 2, 4, 2): ("CMP", 2, False),  # CMP regA, regB   Vertaa, asettaa liput
+    _op(0, 2, 5, 2): ("ADC", 2, False),  # ADC regD, regS   regD = regD + regS + C
     # -------------------------------------------------------------------------
-    # LOGIIKKAKASKYT (Bitwise Logic & Shift)
+    # GRP 3: LOGIIKKA JA BITTIKASKYT (Logic & Bitwise)
+    #   Opcoodet: 0x3080-0x3580  (P=0, GRP=3)  NOT: OPS=1, muut: OPS=2
     # -------------------------------------------------------------------------
-    0x0015: ("AND", 2, False),  # AND regD, regS - Bittitason JA: regD = regD & regS
-    0x0016: ("OR", 2, False),  # OR  regD, regS - Bittitason TAI: regD = regD | regS
-    0x0017: ("XOR", 2, False),  # XOR regD, regS - Bittitason XOR: regD = regD ^ regS
-    0x0018: ("NOT", 1, False),  # NOT reg        - Bittitason NOT: reg = ~reg
-    0x0019: (
-        "SHL",
-        2,
-        False,
-    ),  # SHL regD, regS - Bittisiirto vasemmalle: regD = regD << regS
-    0x001A: (
-        "SHR",
-        2,
-        False,
-    ),  # SHR regD, regS - Bittisiirto oikealle:   regD = regD >> regS
-    0x001B: (
-        "ADC",
-        2,
-        False,
-    ),  # ADC regD, regS - Yhteenlasku carryn kanssa: regD = regD + regS + C
+    _op(0, 3, 0, 2): ("AND", 2, False),  # AND regD, regS   regD = regD & regS
+    _op(0, 3, 1, 2): ("OR", 2, False),  # OR  regD, regS   regD = regD | regS
+    _op(0, 3, 2, 2): ("XOR", 2, False),  # XOR regD, regS   regD = regD ^ regS
+    _op(0, 3, 3, 1): ("NOT", 1, False),  # NOT reg          reg = ~reg
+    _op(0, 3, 4, 2): ("SHL", 2, False),  # SHL regD, regS   regD = regD << regS
+    _op(0, 3, 5, 2): ("SHR", 2, False),  # SHR regD, regS   regD = regD >> regS
     # -------------------------------------------------------------------------
-    # PINOKASKYT (Stack Operations)
+    # GRP 4: PINOKASKYT (Stack)
+    #   Opcoodet: 0x4040-0x4280  (P=0, GRP=4)  PUSH/POP: OPS=1, SWSP: OPS=2
     # -------------------------------------------------------------------------
-    0x0020: ("PUSH", 1, False),  # PUSH reg - Tallenna rekisteri pinoon
-    0x0021: ("POP", 1, False),  # POP reg - Hae pinosta rekisteriin
-    0x0022: ("SWSP", 2, False),  # SWSP regD, regS - regD = SP; SP = regS
+    _op(0, 4, 0, 1): ("PUSH", 1, False),  # PUSH reg          Tallenna pinoon
+    _op(0, 4, 1, 1): ("POP", 1, False),  # POP  reg          Hae pinosta
+    _op(0, 4, 2, 2): ("SWSP", 2, False),  # SWSP regD, regS   regD = SP; SP = regS
     # -------------------------------------------------------------------------
-    # HYPPYKASKYT (Control Flow)
+    # GRP 5: OHJAUSRAKENNEKASKYT (Control Flow)
+    #   Opcoodet: 0x5040-0x5840  (P=0, GRP=5)  RET: OPS=0, muut: OPS=1
     # -------------------------------------------------------------------------
-    0x0030: ("JUMP", 1, False),  # JUMP addr - Ehdoton hyppy
-    0x0031: ("CALL", 1, False),  # CALL addr - Aliohjelmakutsu (PUSH PC, JUMP addr)
-    0x0032: ("RET", 0, False),  # RET - Paluu aliohjelmasta (POP PC)
-    0x0033: ("JZ", 1, False),  # JZ addr - Hyppa jos Z=1 (tulos oli nolla)
-    0x0034: ("JNZ", 1, False),  # JNZ addr - Hyppa jos Z=0 (tulos ei ollut nolla)
-    0x0035: ("JLT", 1, False),  # JLT addr - Hyppa jos N!=V (pienempi kuin)
-    0x0036: ("JGT", 1, False),  # JGT addr - Hyppa jos Z=0 ja N=V (suurempi kuin)
-    0x0037: (
-        "JLE",
+    _op(0, 5, 0, 1): ("JUMP", 1, False),  # JUMP addr   Ehdoton hyppy
+    _op(0, 5, 1, 1): (
+        "CALL",
         1,
         False,
-    ),  # JLE addr - Hyppa jos Z=1 tai N!=V (pienempi tai yhtasuuri)
-    0x0038: ("JGE", 1, False),  # JGE addr - Hyppa jos N=V (suurempi tai yhtasuuri)
+    ),  # CALL addr   Aliohjelmakutsu (PUSH PC, JUMP addr)
+    _op(0, 5, 2, 0): ("RET", 0, False),  # RET         Paluu aliohjelmasta (POP PC)
+    _op(0, 5, 3, 1): ("JZ", 1, False),  # JZ   addr   Hyppa jos Z=1
+    _op(0, 5, 4, 1): ("JNZ", 1, False),  # JNZ  addr   Hyppa jos Z=0
+    _op(0, 5, 5, 1): ("JLT", 1, False),  # JLT  addr   Hyppa jos N!=V
+    _op(0, 5, 6, 1): ("JGT", 1, False),  # JGT  addr   Hyppa jos Z=0 ja N=V
+    _op(0, 5, 7, 1): ("JLE", 1, False),  # JLE  addr   Hyppa jos Z=1 tai N!=V
+    _op(0, 5, 8, 1): ("JGE", 1, False),  # JGE  addr   Hyppa jos N=V
     # -------------------------------------------------------------------------
-    # KESKEYTYSKASKYT (Interrupt Handling)
+    # GRP 6: KESKEYTYKSET (Interrupts)
+    #   User-kaskyt:   INT  0x6040  (P=0, GRP=6)
+    #   Kernel-kaskyt: IRET/STI/CLI 0xE100-0xE300  (P=1, GRP=6)
     # -------------------------------------------------------------------------
-    0x0040: ("INT", 1, False),  # INT imm - Ohjelmallinen keskeytys (syscall)
-    0x0041: ("IRET", 0, True),  # IRET - Paluu keskeytyksesta (POP SR, POP PC) [KERNEL]
-    0x0042: ("STI", 0, True),  # STI - Salli keskeytykset (I=1) [KERNEL]
-    0x0043: ("CLI", 0, True),  # CLI - Esta keskeytykset (I=0) [KERNEL]
-    0x0044: ("HALT", 0, True),  # HALT - Pysayta prosessori [KERNEL]
+    _op(0, 6, 0, 1): ("INT", 1, False),  # INT  imm    Ohjelmallinen keskeytys  [USER]
+    _op(1, 6, 1, 0): ("IRET", 0, True),  # IRET        Paluu keskeytyksesta     [KERNEL]
+    _op(1, 6, 2, 0): ("STI", 0, True),  # STI         Salli keskeytykset       [KERNEL]
+    _op(1, 6, 3, 0): ("CLI", 0, True),  # CLI         Esta keskeytykset        [KERNEL]
     # -------------------------------------------------------------------------
-    # JARJESTELMAKASKYT (System Operations)
+    # GRP 7: JARJESTELMA JA IO (System)
+    #   User-kaskyt:   EXIT/KGET/TSL/NOP  0x7500-0x7F00  (P=0, GRP=7)
+    #   Kernel-kaskyt: HALT/DREAD/...     0xF000-0xF440  (P=1, GRP=7)
     # -------------------------------------------------------------------------
-    0x0045: ("DREAD", 2, True),  # DREAD regD, regS - Lue tallennuslaitteelta [KERNEL]
-    0x0046: (
+    _op(1, 7, 0, 0): (
+        "HALT",
+        0,
+        True,
+    ),  # HALT             Pysayta CPU               [KERNEL]
+    _op(1, 7, 1, 2): (
+        "DREAD",
+        2,
+        True,
+    ),  # DREAD  regD, regS  Lue tallennuslaitteelta  [KERNEL]
+    _op(1, 7, 2, 2): (
         "DWRITE",
         2,
         True,
-    ),  # DWRITE regS, regD - Kirjoita tallennuslaitteelle [KERNEL]
-    0x0047: ("SMPR", 1, True),  # SMPR reg - Aseta MPR (muistisuojaraja) [KERNEL]
-    0x0048: ("STMR", 1, True),  # STMR reg - Aseta TMR (ajastinvali) [KERNEL]
-    0x0049: ("EXIT", 0, False),  # EXIT - Prosessin hallittu lopetus (INT 8)
-    0x004A: ("KGET", 1, False),  # KGET reg - Lue nappaimistopuskuri rekisteriin
-    0x004B: ("TSL", 2, False),  # TSL reg, addr - Test and Set Lock, atominen
+    ),  # DWRITE regS, regD  Kirj. tallennuslaitteelle[KERNEL]
+    _op(1, 7, 3, 1): (
+        "SMPR",
+        1,
+        True,
+    ),  # SMPR   reg         Aseta MPR                [KERNEL]
+    _op(1, 7, 4, 1): (
+        "STMR",
+        1,
+        True,
+    ),  # STMR   reg         Aseta TMR                [KERNEL]
+    _op(0, 7, 5, 0): (
+        "EXIT",
+        0,
+        False,
+    ),  # EXIT               Hallittu lopetus         [USER]
+    _op(0, 7, 6, 1): (
+        "KGET",
+        1,
+        False,
+    ),  # KGET   reg         Lue nappaimisto          [USER]
+    _op(0, 7, 7, 2): (
+        "TSL",
+        2,
+        False,
+    ),  # TSL    reg, addr   Test and Set Lock        [USER]
+    _op(0, 7, 15, 0): (
+        "NOP",
+        0,
+        False,
+    ),  # NOP                Ei tee mitaan            [USER]
 }

@@ -60,6 +60,16 @@ def build_parser() -> argparse.ArgumentParser:
         help="Suorita testiohjelma ja vertaa tulosta .expect_*-direktiiveihin",
     )
 
+    parser.add_argument(
+        "--test-all",
+        type=Path,
+        nargs="?",
+        const=Path(__file__).parent / "test",
+        default=None,
+        metavar="DIR",
+        help="Suorita kaikki .asm-testit hakemistosta (oletus: kcpu16/test/)",
+    )
+
     return parser
 
 
@@ -97,6 +107,17 @@ def _run_test(path: Path) -> int:
     return run_test(path)
 
 
+def _run_test_all(test_dir: Path) -> int:
+    """Suorita kaikki .asm-testit hakemistosta ja tulosta yhteenveto.
+
+    Returns:
+        0 jos kaikki testit menivat lapi, 1 muuten.
+    """
+    from .testrunner import run_test_all
+
+    return run_test_all(test_dir)
+
+
 def main(argv: list[str] | None = None) -> int:
     """CLI:n paafunktio.
 
@@ -118,6 +139,10 @@ def main(argv: list[str] | None = None) -> int:
     # --test: suorita testiohjelma ja poistu
     if args.test is not None:
         return _run_test(args.test)
+
+    # --test-all: suorita kaikki testit hakemistosta ja poistu
+    if args.test_all is not None:
+        return _run_test_all(args.test_all)
 
     # Kaynnista TUI
     try:

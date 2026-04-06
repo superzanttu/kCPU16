@@ -31,6 +31,8 @@ Tallennuslaitteen rakenne:
     0x0100 - 0xFFFF: Vapaa tallennustila
 """
 
+import json
+import zlib
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -221,47 +223,116 @@ class BlockStorageDevice:
     # =========================================================================
 
     def save_to_file(self, path: Path) -> None:
-        """Tallenna tallennuslaitteen sisalto .dsk-tiedostoon.
+        """Tallenna tallennuslaitteen sisalto .dsk-tiedostoon JSON-muodossa.
 
-        Tiedosto on binaarinen: jokainen 16-bittinen sana kirjoitetaan
-        kahtena tavuna (big-endian).
+        Pakkaus: pelkasta samasta arvosta koostuvat blokit tallennetaan
+        kompaktisti fill-arvona. Kaikki nollaa sisaltavat blokit jätetaan
+        kokonaan pois tiedostosta (implisiittisesti nolla latauksessa).
 
         Args:
             path: Kohdetiedoston polku (.dsk-paate lisataan tarvittaessa)
         """
         if path.suffix.lower() != ".dsk":
             path = path.with_suffix(".dsk")
-        with open(path, "wb") as f:
-            for block in self.blocks:
-                for word in block:
-                    f.write((word & WORD_MASK).to_bytes(2, "big"))
+        device_crc = 0
+        blocks_data: list[dict] = []
+        for i, block in enumerate(self.blocks):
+            words = [w & WORD_MASK for w in block]
+            raw = b"".join(w.to_bytes(2, "big") for w in words)
+            block_crc = zlib.crc32(raw) & 0xFFFFFFFF
+            device_crc = zlib.crc32(raw, device_crc) & 0xFFFFFFFF
+            first = words[0]
+            if all(w == first for w in words):
+                if first == 0:
+                    # Pelkka nolla: jata kokonaan pois
+                    continue
+                # Yhtenäinen ei-nolla arvo: kompakti fill-muoto
+                blocks_data.append(
+                    {
+                        "index": i,
+                        "checksum": f"0x{block_crc:08X}",
+                        "fill": first,
+                    }
+                )
+            else:
+                blocks_data.append(
+                    {
+                        "index": i,
+                        "checksum": f"0x{block_crc:08X}",
+                        "data": words,
+                    }
+                )
+        doc = {
+            "format": "kCPU16-disk",
+            "version": 1,
+            "block_size_words": self.block_size_words,
+            "block_count": self.block_count,
+            "device_checksum": f"0x{device_crc:08X}",
+            "blocks": blocks_data,
+        }
+        path.write_text(json.dumps(doc, indent=2), encoding="utf-8")
 
     def load_from_file(self, path: Path) -> None:
         """Lataa tallennuslaitteen sisalto .dsk-tiedostosta.
 
-        Tiedoston koon on vastattava laitteen kapasiteettia
-        (total_words * 2 tavua).
+        Tarkistaa jokaisen blokin ja koko laitteen CRC32-tarkistussumman.
+        Puuttuvat blokit tulkitaan nollatäytteisiksi.
 
         Args:
             path: Lahdetiedoston polku
 
         Raises:
             FileNotFoundError: Jos tiedostoa ei loydy
-            ValueError: Jos tiedoston koko ei vastaa laitteen kapasiteettia
+            ValueError: Jos formaatti on vaara tai tarkistussumma ei tasmaa
         """
         if path.suffix.lower() != ".dsk":
             path = path.with_suffix(".dsk")
-        data = path.read_bytes()
-        expected = self.total_words * 2
-        if len(data) != expected:
+        doc = json.loads(path.read_text(encoding="utf-8"))
+        if doc.get("format") != "kCPU16-disk":
+            raise ValueError("Tuntematon tiedostoformaatti")
+        if doc.get("block_count", 0) != self.block_count:
             raise ValueError(
-                f"Tiedoston koko {len(data)} tavua, odotettu {expected} tavua"
+                f"Blokkien maara {doc.get('block_count')}, odotettu {self.block_count}"
             )
-        idx = 0
-        for block in self.blocks:
-            for i in range(len(block)):
-                block[i] = int.from_bytes(data[idx : idx + 2], "big")
-                idx += 2
+        if doc.get("block_size_words", 0) != self.block_size_words:
+            raise ValueError(
+                f"Blokin koko {doc.get('block_size_words')}, odotettu {self.block_size_words}"
+            )
+        # Rakenna hakemisto tallennetuista blokeista
+        stored: dict[int, dict] = {entry["index"]: entry for entry in doc["blocks"]}
+        zero_raw = b"\x00\x00" * self.block_size_words
+        device_crc = 0
+        for i in range(self.block_count):
+            if i not in stored:
+                # Puuttuva blokki = implisiittinen nollatäyte
+                device_crc = zlib.crc32(zero_raw, device_crc) & 0xFFFFFFFF
+                self.blocks[i] = [0] * self.block_size_words
+                continue
+            entry = stored[i]
+            if "fill" in entry:
+                words = [entry["fill"] & WORD_MASK] * self.block_size_words
+            else:
+                words = entry["data"]
+                if len(words) != self.block_size_words:
+                    raise ValueError(
+                        f"Blokki {i}: {len(words)} sanaa, odotettu {self.block_size_words}"
+                    )
+            raw = b"".join((w & WORD_MASK).to_bytes(2, "big") for w in words)
+            block_crc = zlib.crc32(raw) & 0xFFFFFFFF
+            expected_block = int(entry["checksum"], 16)
+            if block_crc != expected_block:
+                raise ValueError(
+                    f"Blokki {i} tarkistussummavirhe: "
+                    f"laskettu 0x{block_crc:08X}, odotettu 0x{expected_block:08X}"
+                )
+            device_crc = zlib.crc32(raw, device_crc) & 0xFFFFFFFF
+            self.blocks[i] = [w & WORD_MASK for w in words]
+        expected_dev = int(doc["device_checksum"], 16)
+        if device_crc != expected_dev:
+            raise ValueError(
+                f"Levyn tarkistussummavirhe: "
+                f"laskettu 0x{device_crc:08X}, odotettu 0x{expected_dev:08X}"
+            )
 
     def reset(self) -> None:
         """Nollaa tallennuslaitteen sisalto (kaikki sanat = 0)."""

@@ -175,3 +175,78 @@ SR_FLAG_C = 2  # Carry: 1 = tapahtui etumerkiton ylivuoto (yhteenlasku ylitti 0x
 SR_FLAG_V = 3  # Overflow: 1 = tapahtui etumerkillinen ylivuoto
 SR_FLAG_I = 4  # Interrupt Enable: 1 = laitteistokeskeytykset sallittu
 SR_FLAG_P = 5  # Privilege: 1 = Kernel Mode, 0 = User Mode
+
+# =============================================================================
+# ASSEMBLER-VAKIOT (ARCH_SYMBOLS)
+# Nämä symbolit injektoidaan assemblerin labelitaulukkoon automaattisesti,
+# joten assembly-koodissa voi viitata niihin suoraan nimellä ilman #-etuliitettä.
+#
+# Kaikki arvot ovat viittauksia yllä määriteltyihin vakioihin —
+# yksikään arvo ei ole kovakoodattu tänne erikseen.
+# =============================================================================
+
+ARCH_SYMBOLS: dict[str, int] = {
+    # ---- Muistivakiot ------------------------------------------------
+    "MEMORY_WORDS": MEMORY_WORDS,  # Muistiavaruuden koko sanoina (65536)
+    "WORD_MASK": WORD_MASK,  # 16-bittinen maski (0xFFFF)
+    "WORD_SIGN_BIT": WORD_SIGN_BIT,  # Etumerkkilipun bitti (0x8000)
+    "WORD_BITS": WORD_BITS,  # Sanan bittimäärä (16)
+    # ---- Boot-alue ---------------------------------------------------
+    "BOOT_RAM_START": BOOT_RAM_START,  # Bootloaderin aloitusosoite (0x0100)
+    "BOOT_RAM_END": BOOT_RAM_END,  # Bootloaderin loppuosoite  (0x01FF)
+    # ---- Video RAM (VRAM) --------------------------------------------
+    "VRAM_START": VRAM_START,  # Näyttömuistin alkuosoite  (0xF800)
+    "VRAM_END": VRAM_END,  # Näyttömuistin loppuosoite (0xFF7F)
+    "VRAM_WORDS": VRAM_WORDS,  # Näyttömuistin koko sanoina (1920)
+    # ---- Näytön mitat ------------------------------------------------
+    "SCREEN_COLS": SCREEN_COLS,  # Sarakkeiden lukumäärä (80)
+    "SCREEN_ROWS": SCREEN_ROWS,  # Rivien lukumäärä (24)
+    # ---- VRAM-sanan bittikentät --------------------------------------
+    "VRAM_CHAR_MASK": VRAM_CHAR_MASK,  # Merkkikenttä bittimaski (0x00FF)
+    "VRAM_CHAR_SHIFT": VRAM_CHAR_SHIFT,  # Merkkikentän shift (0)
+    "VRAM_FG_MASK": VRAM_FG_MASK,  # Edusta-värikenttä maski (0x0700)
+    "VRAM_FG_SHIFT": VRAM_FG_SHIFT,  # Edusta-värikentän shift (8)
+    "VRAM_BG_MASK": VRAM_BG_MASK,  # Tausta-värikenttä maski (0x3800)
+    "VRAM_BG_SHIFT": VRAM_BG_SHIFT,  # Tausta-värikentän shift (11)
+    "VRAM_ATTR_BOLD": VRAM_ATTR_BOLD,  # Lihavointi-attribuutti (0x4000)
+    "VRAM_ATTR_BLINK": VRAM_ATTR_BLINK,  # Vilkkumis-attribuutti (0x8000)
+    # ---- Värikoodit --------------------------------------------------
+    "COLOR_BLACK": COLOR_BLACK,  # Musta  (0)
+    "COLOR_RED": COLOR_RED,  # Punainen (1)
+    "COLOR_GREEN": COLOR_GREEN,  # Vihreä   (2)
+    "COLOR_YELLOW": COLOR_YELLOW,  # Keltainen (3)
+    "COLOR_BLUE": COLOR_BLUE,  # Sininen   (4)
+    "COLOR_MAGENTA": COLOR_MAGENTA,  # Magenta   (5)
+    "COLOR_CYAN": COLOR_CYAN,  # Syaani    (6)
+    "COLOR_WHITE": COLOR_WHITE,  # Valkoinen (7)
+    # ---- Kernel-pino -------------------------------------------------
+    "KERNEL_STACK_START": KERNEL_STACK_START,  # Kernelin pinon alku (0xFF80)
+    "KERNEL_STACK_END": KERNEL_STACK_END,  # Kernelin pinon loppu (0xFFFF)
+    # ---- Keskeytysvektorit -------------------------------------------
+    "INT_VECTOR_BASE": INT_VECTOR_BASE,  # Vektorialueen alku (0x0000)
+    "INT_VECTOR_COUNT": INT_VECTOR_COUNT,  # Tuettujen vektorien määrä (9)
+    "INT_DIV_ZERO": INT_DIV_ZERO,  # Jako nollalla (0)
+    "INT_INVALID_OPCODE": INT_INVALID_OPCODE,  # Tuntematon opcode (1)
+    "INT_STACK_OVERFLOW": INT_STACK_OVERFLOW,  # Pinon ylivuoto (2)
+    "INT_BREAKPOINT": INT_BREAKPOINT,  # Debug-breakpoint (3)
+    "INT_PRIVILEGE": INT_PRIVILEGE_VIOLATION,  # Oikeusrikkomus (4)
+    "INT_MEM_FAULT": INT_MEMORY_ACCESS_FAULT,  # Muistisuojausrikkomus (5)
+    "INT_KEYBOARD": INT_KEYBOARD,  # Näppäimistökeskeytys (6)
+    "INT_TIMER": INT_TIMER,  # Ajastinkeskeytys (7)
+    "INT_PROCESS_EXIT": INT_PROCESS_EXIT,  # Prosessin lopetus (8)
+    # ---- Tallennuslaite ----------------------------------------------
+    "STORAGE_BLOCK_SIZE": STORAGE_BLOCK_SIZE,  # Blokin koko sanoina (256)
+    "STORAGE_BLOCK_COUNT": STORAGE_BLOCK_COUNT,  # Blokkien lukumäärä (256)
+    # ---- Tilarekisterin (SR) bitti-indeksit --------------------------
+    "SR_FLAG_Z": SR_FLAG_Z,  # Zero-lippu, bitti-indeksi (0)
+    "SR_FLAG_N": SR_FLAG_N,  # Negative-lippu (1)
+    "SR_FLAG_C": SR_FLAG_C,  # Carry-lippu (2)
+    "SR_FLAG_V": SR_FLAG_V,  # Overflow-lippu (3)
+    "SR_FLAG_I": SR_FLAG_I,  # Interrupt Enable -lippu (4)
+    "SR_FLAG_P": SR_FLAG_P,  # Privilege-lippu (5)
+    # ---- Suoritustilat -----------------------------------------------
+    "MODE_KERNEL": MODE_KERNEL,  # Kernel-tila (1)
+    "MODE_USER": MODE_USER,  # User-tila (0)
+    # ---- Oletusarvot järjestelmärekistereille -------------------------
+    "DEFAULT_MPR": DEFAULT_MPR,  # MPR:n oletusarvo (== BOOT_RAM_START)
+}
