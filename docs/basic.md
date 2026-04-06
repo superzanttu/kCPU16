@@ -149,7 +149,7 @@ Ohjelma tallennetaan laitteen lohkoihin 1–16 (osoitteet 0x0100–0x10FF, yhtee
 
 ```
 Lohko 1 (0x0100–0x01FF):  Ohjelman metatiedot
-  +0x0000  tunniste (vakioarvo 0xBA51C = "BASIC")
+  +0x0000  tunniste (vakioarvo 0xBA5C = "BASC", mahtuu 16-bittiseen sanaan)
   +0x0001  ohjelmapuskurin sanamäärä
   +0x0002  reserved
 
@@ -165,7 +165,7 @@ Lohkot 2–16 (0x0200–0x10FF):  Ohjelmapuskurin data
 
 ### 6.4 LOAD-operaation kulku
 
-1. Lue lohko 1, tarkista tunniste (0xBA51C).
+1. Lue lohko 1, tarkista tunniste (0xBA5C).
 2. Jos tunniste on väärä: näytä "NO PROGRAM" ja keskeytä.
 3. Kopioi tallennuslaite-lohkot 2–16 ohjelmapuskuriin (0x0800–0x0FFF) DREAD-käskyllä.
 4. Päivitä rivinumeroindeksi (0x1200–).
