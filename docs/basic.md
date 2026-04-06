@@ -60,7 +60,7 @@ Tulkki tukee seuraavaa minimaalista komentojoukkoa:
 - **Operaattorit:** `+`, `-`, `*`, `/` (kokonaislukujako), `=`, `<`, `>`, `<>`, `<=`, `>=`
 - **Merkkijonoliteraalit:** Vain `PRINT`-lauseessa (`"teksti"`)
 
-> **Huomio:** Liukulukuja ei tueta. kCPU16:ssa ei ole liukulukukäskyjä, ja ohjelmistototeutus veisi huomattavasti muistia ja suoritusaikaa.
+> **Huomio:** Liukulukumuuttujia ei tueta BASIC-syntaksissa. kCPU16:ssa on kuitenkin float16-käskyt (FADD, FSUB, FMUL, FDIV, ITOF, FTOI), joita voidaan hyödyntää assembly-tasolla.
 
 ---
 
@@ -234,12 +234,11 @@ Lohkot 2–16 (0x0200–0x10FF):  Ohjelmapuskurin data
 
 | Rajoitus | Vaikutus BASIC-tulkkiin |
 |---|---|
-| Vain kokonaislukuaritmetiikka (16-bittinen) | Ei liukulukumuuttujia. Kaikki laskenta on kokonaislukuaritmetiikkaa välillä −32 768 … 32 767. |
+| Vain kokonaislukuaritmetiikka BASIC-tasolla (16-bittinen) | Ei liukulukumuuttujia BASIC-syntaksissa. Kaikki BASIC-laskenta on kokonaislukuaritmetiikkaa välillä −32 768 … 32 767. Liukulukulaskenta mahdollista assembly-tasolla (FADD, FSUB, FMUL, FDIV, ITOF, FTOI). |
 | Vain 4 yleiskäyttöistä rekisteriä (R0–R3) | Lausekkeiden evaluointi vaatii paljon väliaikaistallennuksia muistiin; rekursiiviset lausekkeet monimutkaisempia toteuttaa. |
 | Pino sijaitsee vain 128 sanan alueella (0xFF80–0xFFFF) | Tulkin oma ajonaikainen pino (GOSUB/FOR) toteutetaan RAM-alueella 0x1000–0x11FF, ei laitteistopinolla. |
 | `DREAD`/`DWRITE` vaativat Kernel-tilan | Tulkki täytyy ajaa Kernel-tilassa tai tallennusoperaatiot pitää toteuttaa syscall-mekanismilla. |
 | Ei merkkijonoaritmetiikkaa | `PRINT` tukee merkkijonoliteraaleja, mutta merkkijonomuuttujia tai -operaatioita ei toteuteta. |
-| Ei modulo-käskyä | Jakojäännös lasketaan: `mod = a - (a / b) * b` (kolme operaatiota). |
 | Ei dynaamista muistinhallintaa | Muistin rakenne on kiinteä; ohjelman enimmäiskoko rajoitettu puskurin kokoon (~512 riviä). |
 
 ---

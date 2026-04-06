@@ -298,9 +298,16 @@ Käskyn koko sanoina on `1 + OPS` (opcode-sana + operandisanat).
 | 0x2080 | ADD   | regD, regS | U    | ZNCV  | `regD ← regD + regS`                                        |
 | 0x2180 | SUB   | regD, regS | U    | ZNCV  | `regD ← regD − regS`                                        |
 | 0x2280 | MUL   | regD, regS | U    | ZNCV  | `regD ← regD × regS`                                        |
-| 0x2380 | DIV   | regD, regS | U    | ZNCV  | `regD ← regD / regS` (kokonaislukujako, Int 0 jos regS = 0) |
+| 0x2380 | DIV   | regD, regS | U    | ZN——  | `regD ← regD / regS` (kokonaislukujako, Int 0 jos regS = 0) |
 | 0x2480 | CMP   | regA, regB | U    | ZNCV  | Laskee `regA − regB`, asettaa liput, tulosta ei tallenneta  |
 | 0x2580 | ADC   | regD, regS | U    | ZNCV  | `regD ← regD + regS + C`                                    |
+| 0x2680 | MOD   | regD, regS | U    | ZN——  | `regD ← regD % regS` (jakojäännös, Int 0 jos regS = 0)      |
+| 0x2780 | FADD  | regD, regS | U    | ZN——  | `regD ← float16(regD) + float16(regS)`                      |
+| 0x2880 | FSUB  | regD, regS | U    | ZN——  | `regD ← float16(regD) − float16(regS)`                      |
+| 0x2980 | FMUL  | regD, regS | U    | ZN——  | `regD ← float16(regD) × float16(regS)`                      |
+| 0x2A80 | FDIV  | regD, regS | U    | ZN——  | `regD ← float16(regD) / float16(regS)` (Int 0 jos regS = 0.0) |
+| 0x2B80 | ITOF  | regD, regS | U    | —     | `regD ← float16(int(regS))` (kokonaisluku → float16)        |
+| 0x2C80 | FTOI  | regD, regS | U    | —     | `regD ← int(float16(regS))` (float16 → kokonaisluku, katkaisu) |
 
 **ADD** laskee kahden rekisterin summan ja tallentaa tuloksen kohderekisteriin. Päivittää kaikki aritmetiikkaliput: Z (tulos nolla), N (ylin bitti 1), C (etumerkitön ylivuoto) ja V (etumerkillinen ylivuoto). Käytetään yleiseen kokonaislukuaritmetiikkaan ja osoitelaskentaan.
 
@@ -310,7 +317,27 @@ Käskyn koko sanoina on `1 + OPS` (opcode-sana + operandisanat).
 
 **MUL** kertoo kohderekisterin lähderekisterillä ja tallentaa tuloksen alimmat 16 bittiä kohderekisteriin. Ylivuoto (tulos > 0xFFFF) asettaa C-lipun. Käsittelee operandeja etumerkittöminä kokonaislukuina.
 
-**DIV** suorittaa kokonaislukujaon (tasajaon). Jos jakaja (regS) on nolla, käsky laukaisee keskeytyksen Int 0 (Division by Zero) eikä rekistereitä muokata. Jakojäännös ei tallennu — käytä erillistä laskentaa modulo-operaatioon.
+**DIV** suorittaa kokonaislukujaon (tasajaon). Jos jakaja (regS) on nolla, käsky laukaisee keskeytyksen Int 0 (Division by Zero) eikä rekistereitä muokata. Jakojäännökseen käytä MOD-käskyä.
+
+**MOD** laskee kohderekisterin jakojäännöksen lähderekisterillä (regD ← regD mod regS). Jos jakaja on nolla, käsky laukaisee keskeytyksen Int 0 (Division by Zero). Päivittää Z- ja N-liput; C ja V eivät muutu.
+
+**FADD**, **FSUB**, **FMUL**, **FDIV** suorittavat liukulukulaskennan IEEE 754 puolitarkalla (float16, half-precision) esitystavalla. Kummankin rekisterin sisältö tulkitaan 16-bittisenä float16-bittikuviona; tulos tallennetaan kohderekisteriin float16-bittikuviona. FDIV laukaisee Int 0, jos jakaja on ±0,0. Päivittävät Z- ja N-liput; C ja V nollataan.
+
+**ITOF** muuntaa lähderekisterin sisältämän etumerkittömän kokonaisluvun float16-bittikuvioksi ja tallentaa tuloksen kohderekisteriin (`regD ← float16(regS)`).
+
+**FTOI** muuntaa lähderekisterin sisältämän float16-bittikuvion kokonaisluvuksi (katkaisu nollaan päin) ja tallentaa tuloksen kohderekisteriin (`regD ← int(float16(regS))`).
+
+**Float16-esimerkkiarvoja:**
+
+| Arvo | float16-bittikuvio |
+|------|-------------------|
+| 0.0  | 0x0000 |
+| 1.0  | 0x3C00 |
+| 2.0  | 0x4000 |
+| 3.0  | 0x4200 |
+| 6.0  | 0x4600 |
+| 42.0 | 0x5140 |
+| −1.0 | 0xBC00 |
 
 **CMP** laskee regA − regB ja asettaa liput aivan kuten SUB, mutta erotusta ei tallenneta kumpaankaan rekisteriin. Käytetään aina ennen ehdollisia hyppykäskyjä (JZ, JLT, JGT jne.) kahden arvon vertailuun.
 
