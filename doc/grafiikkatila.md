@@ -259,7 +259,96 @@ assembly-ohjelmoinnin, joten se soveltuu lähinnä erikoiskäyttöön.
 
 ## 6. Ehdotus: 640 × 480 pikseliä Textual-toteutuksena
 
-### 6.1 Reunaehdot
+### 6.1 Historiallinen vertailu: Commodore 64 ja BBC Micro
+
+Sekä C64 että BBC Micro joutuivat ratkaisemaan saman peruskonfliktin kuin
+kCPU16: korkea pikseliresoluutio vaatii paljon muistia, mutta prosessorin
+osoiteavaruus on rajallinen. Kumpikin kone kehitti omanlaisensa strategian,
+josta kCPU16 voi ammentaa.
+
+#### 6.1.1 Commodore 64: HiRes Bitmap (320 × 200)
+
+C64:n VIC-II-kuvasirun HiRes-bittikarttamoodi tarjoaa 320 × 200 pikseliä:
+
+| Komponentti        | Koko    | Kuvaus |
+| ------------------ | ------- | ------ |
+| Bitmap-puskuri     | 8 000 t | 1 bitti/pikseli (vain väri päällä/pois per piste) |
+| Color RAM          | 1 000 t | Yksi tavu per 8×8-solu: ylempi nybble = FG-väri (0–15), alempi nybble = BG-väri |
+| **Yhteensä**       | **9 000 t** | **= 4 500 sanaa 16-bittisessä muistissa** |
+
+C64:ssa on 64 KB RAM:ia (65 536 tavua), joten 9 000 tavua vie vain **13,7 %**
+osoiteavaruudesta — loput jäävät ohjelmoijalle.
+
+**Avainidea 1 — solukohtainen väri:** Pikselit ovat mustavalkoisessa bitmapissa
+(1 bitti/pikseli), mutta jokainen 8×8-pikselin solu saa omat FG- ja BG-värit
+Color RAM:ista. Tämä on tismalleen sama filosofia kuin kCPU16:n 80×48
+puoliblokkimoodissa, jossa tekstitilan VRAM:n FG/BG-bitit (11–13 / 8–10)
+määräävät ylemmän ja alemman pikseliä.
+
+**Avainidea 2 — pankkikytkentä (CPU/VIC-II):** VIC-II näkee vain 16 KB
+kerrallaan, mutta ohjelma voi ohjata, mikä 16 KB:n lohko on VIC-II:n
+nähtävillä (neljä mahdollista lohkoa à 16 KB 64 KB:n tilassa). CPU:lla on
+silti täysi pääsy koko 64 KB:iin. Tämä on inspiraationa kCPU16:n
+GBANK-pankkikytkentämekanismille.
+
+#### 6.1.2 BBC Micro: moodiperhe 640 × 256 – 160 × 256
+
+BBC Microssa on oma lähestymistapa: **kaikki grafiikkatilat käyttävät saman
+kokoisen näyttömuistin** — aina 20 480 tavua (= 10 240 sanaa). Moodin vaihto
+ei muuta muistin kokoa vaan ainoastaan sen, kuinka monta bittiä per pikseli
+varataan:
+
+| Moodi  | Resoluutio  | Värejä | Bittiä/pikseli | Muisti        |
+| ------ | ----------- | ------ | -------------- | ------------- |
+| Mode 0 | 640 × 256   | 2      | 1              | 20 480 t      |
+| Mode 1 | 320 × 256   | 4      | 2              | 20 480 t      |
+| Mode 2 | 160 × 256   | 16     | 4              | 20 480 t      |
+| Mode 4 | 320 × 256   | 2      | 1              | 10 240 t (\*) |
+| Mode 5 | 160 × 256   | 4      | 2              | 10 240 t (\*) |
+
+(\*) Mode 4 ja 5 käyttävät vain puoliskoa näyttömuistista.
+
+**Avainidea 3 — kiinteä näyttömuisti, vaihtuva pikselitarkkuus:** Resoluutiota
+nostamalla pienennetään värisyvyyttä (ja päinvastoin), mutta muistin kokonaismäärä
+pysyy vakiona. Ohjelmoija valitsee haluamansa kompromissin `MODE`-komennolla
+ilman, että muistikartta muuttuu.
+
+**Avainidea 4 — näyttömuisti muistikartan huipussa:** BBC Micro sijoittaa
+näyttömuistin RAM:n ylimpiin osoitteisiin (tyypillisesti `$3000–$7FFF` tai
+`$4000–$8FFF` riippuen moodista). Näin se ei häiritse käyttöjärjestelmää eikä
+ohjelmakoodia alarekistereissä.
+
+#### 6.1.3 Vertailu kCPU16:n nykyiseen arkkitehtuuriin
+
+| Ominaisuus              | C64             | BBC Micro        | kCPU16 (nykyinen) |
+| ----------------------- | --------------- | ---------------- | ------------------ |
+| Suoritin                | 8-bittinen 6510 | 8-bittinen 6502  | 16-bittinen kCPU16 |
+| Osoiteavaruus           | 64 KB (tavua)   | 32 KB (tavua)    | 65 536 sanaa       |
+| Näyttömuistin koko      | 9 000 t         | 10 240–20 480 t  | 1 920 sanaa        |
+| Grafiikan resoluutio    | 320 × 200       | 640 × 256        | 80 × 48 (half-block) |
+| Pikselibittejä          | 1 + color RAM   | 1–4 bittiä/px    | 3 bittiä/px (FG/BG) |
+| Muistinhallintaratkaisu | CPU/VIC pankki  | Kiinteä blokit   | —                  |
+| Laitteistokiihdytys     | VIC-II DMA      | 6845 CRTC        | Ei (ohjelmisto)    |
+
+#### 6.1.4 Opetukset kCPU16:n 640 × 480 -ehdotukselle
+
+| Opetus | Lähde | Sovellus kCPU16:ssa |
+| ------ | ----- | ------------------- |
+| Solukohtainen väri säästää muistia | C64 Color RAM | 80×48 half-block on jo tätä; 640×480:ssa bitmap + paletti |
+| Pankkikytkentä mahdollistaa suuremman näyttömuistin | C64 VIC-II | GBANK-rekisteri (`$FF81`) valitsee aktiivisen 8 192 sanan GVRAM-pankin |
+| Kiinteä näyttömuisti, vaihtuva moodileikki | BBC `MODE`-komento | Yksi GVRAM-alue, GMODE valitsee pakkaustavan |
+| Näyttömuisti muistikartan "hiljaisessa" alueessa | BBC `$3000–$7FFF` | kCPU16 GVRAM-ikkuna `$2000–$3FFF` |
+| Korkea resoluutio = vähemmän värejä | BBC Mode 0 | 640×480 käyttää 3 bittiä/pikseli (8 väriä), ei 16M |
+
+BBC Micron moodiperhe havainnollistaa lisäksi, että **640 × 256 olisi täysin
+mahdollinen kCPU16:ssa ilman pankkikytkentää**: 3 bittiä/pikseli (5 px/sana)
+vaatisi vain `128 × 256 = 32 768 sanaa` — alle puolet osoiteavaruudesta.
+640 × 480 ylittää rajan (61 440 sanaa), minkä vuoksi GBANK-pankkikytkentä on
+välttämätön.
+
+---
+
+### 6.2 Reunaehdot
 
 Ennen kuin 640 × 480 on mahdollinen, on ratkaistava kaksi perusongelmaa:
 
@@ -273,7 +362,7 @@ terminaalinäkymä skaalaamalla.
 
 ---
 
-### 6.2 Grafiikkamuisti: GVRAM-pankkikytkentä
+### 6.3 Grafiikkamuisti: GVRAM-pankkikytkentä
 
 #### Pikseliformaatti: 3 bittiä / pikseli, 5 pikseliä / sana
 
@@ -325,7 +414,7 @@ $FF82 – $FFFF   126 sanaa     Kernel-pino
 
 ---
 
-### 6.3 Uudet käskyt ja rekisterit
+### 6.4 Uudet käskyt ja rekisterit
 
 #### Uusi järjestelmärekisteri GBANK
 
@@ -354,7 +443,7 @@ STORE R0, [$FF81]     ; GBANK = 0 (ensimmäinen pankki)
 
 ---
 
-### 6.4 GVRAM-pikselioperaatiot assembly-koodissa
+### 6.5 GVRAM-pikselioperaatiot assembly-koodissa
 
 #### Pikselin osoitteen laskenta
 
@@ -397,7 +486,7 @@ STORE R3, [R1]          ; kirjoita takaisin
 
 ---
 
-### 6.5 Textual-renderöinti: skaalaus 640 × 480 → 80 × 48
+### 6.6 Textual-renderöinti: skaalaus 640 × 480 → 80 × 48
 
 640 × 480 pikseliä ei voi näyttää suoraan terminaalissa — terminaalin
 käytännöllinen maksimikoko on noin 200 × 50 merkkiä. Ratkaisu on
@@ -451,7 +540,7 @@ Tuloksena koko 640 × 480 framebuffer esitetään 80 × 24 merkkiruudussa
 
 ---
 
-### 6.6 Tarvittavat arkkitehtuurimuutokset yhteenveto
+### 6.7 Tarvittavat arkkitehtuurimuutokset yhteenveto
 
 | Muutos                     | Tyyppi               | Kuvaus |
 | -------------------------- | -------------------- | ------ |
@@ -490,3 +579,10 @@ Unicode-puoliblokkiruuduin (`▀`) ja true-color -väreillä. Perustoteutuksena
 muistikarttatmuutoksia. Täysi **640 × 480** on toteutettavissa pankkikytkennällä
 ja muistikartatuilla GMODE/GBANK-rekistereillä ilman uusia konekielen käskyjä —
 Textual skaalaa loogisen framebufferin 80 × 24 terminaalinäyttöön automaattisesti.
+
+Historiallinen vertailu (luku 6.1) osoittaa, että ehdotetut mekanismit ovat
+vakiintuneita: C64:n VIC-II-pankkikytkentä inspiroi GBANK-rekisteriä, ja
+BBC Micron kiinteä-muisti/vaihtuva-moodi -filosofia selittää, miksi
+**640 × 256 olisi toteutettavissa ilman pankkikytkentää** (32 768 sanaa).
+640 × 480 vaatii pankkikytkennän, koska se ylittää osoiteavaruuden yksittäisenä
+alueena (61 440 > 65 536 sanaa).
