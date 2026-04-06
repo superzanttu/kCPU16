@@ -82,6 +82,7 @@ python main.py --check ohjelma.asm
 | [docs/assembler.md](docs/assembler.md)                 | Assembly-kielen syntaksi, direktiivit, arkkitehtuurivakiot, esimerkit       |
 | [docs/tui.md](docs/tui.md)                             | TUI-debuggerin asettelu, näppäinsidonnaisuudet ja komennot                  |
 | [docs/PROJECT_STRUCTURE.md](docs/PROJECT_STRUCTURE.md) | Projektin hakemistorakenne ja moduulien kuvaukset                           |
+| [doc/grafiikkatila.md](doc/grafiikkatila.md)           | Grafiikkatila: Textual-kirjaston mahdollisuudet ja suositeltu toteutus      |
 
 ## Esimerkkiohjelmat
 
