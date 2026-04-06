@@ -28,6 +28,7 @@ Operandeissa rekisterit koodataan indekseilla 0-5:
 
 from __future__ import annotations
 
+import struct
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -464,6 +465,79 @@ class CPU:
             result = self._get_reg(dst) // divisor  # Kokonaislukujakoa
             self._set_reg(dst, result)
             self.regs.set_zn_flags(result)
+
+        elif ins.mnemonic == "MOD":
+            # MOD regD, regS - Jakojäännös: regD = regD % regS
+            dst, src = ins.operands
+            divisor = self._get_reg(src)
+            if divisor == 0:
+                raise ZeroDivisionError()
+            result = self._get_reg(dst) % divisor
+            self._set_reg(dst, result)
+            self.regs.set_zn_flags(result)
+
+        elif ins.mnemonic == "FADD":
+            # FADD regD, regS - Liukuluku yhteenlasku (float16)
+            # regD = float16(regD) + float16(regS)
+            dst, src = ins.operands
+            result = self._from_float16(
+                self._to_float16(self._get_reg(dst)) + self._to_float16(self._get_reg(src))
+            )
+            self._set_reg(dst, result)
+            self.regs.set_zn_flags(result)
+            self.regs.set_carry_overflow(False, False)
+
+        elif ins.mnemonic == "FSUB":
+            # FSUB regD, regS - Liukuluku vähennyslasku (float16)
+            # regD = float16(regD) - float16(regS)
+            dst, src = ins.operands
+            result = self._from_float16(
+                self._to_float16(self._get_reg(dst)) - self._to_float16(self._get_reg(src))
+            )
+            self._set_reg(dst, result)
+            self.regs.set_zn_flags(result)
+            self.regs.set_carry_overflow(False, False)
+
+        elif ins.mnemonic == "FMUL":
+            # FMUL regD, regS - Liukuluku kertolasku (float16)
+            # regD = float16(regD) * float16(regS)
+            dst, src = ins.operands
+            result = self._from_float16(
+                self._to_float16(self._get_reg(dst)) * self._to_float16(self._get_reg(src))
+            )
+            self._set_reg(dst, result)
+            self.regs.set_zn_flags(result)
+            self.regs.set_carry_overflow(False, False)
+
+        elif ins.mnemonic == "FDIV":
+            # FDIV regD, regS - Liukuluku jakolasku (float16)
+            # regD = float16(regD) / float16(regS)  (INT 0 jos jakaja = 0.0)
+            dst, src = ins.operands
+            divisor_f = self._to_float16(self._get_reg(src))
+            if divisor_f == 0.0:
+                raise ZeroDivisionError()
+            result = self._from_float16(
+                self._to_float16(self._get_reg(dst)) / divisor_f
+            )
+            self._set_reg(dst, result)
+            self.regs.set_zn_flags(result)
+            self.regs.set_carry_overflow(False, False)
+
+        elif ins.mnemonic == "ITOF":
+            # ITOF regD, regS - Kokonaisluku -> float16 muunnos
+            # regD = float16(regS)
+            dst, src = ins.operands
+            int_val = self._get_reg(src)
+            result = self._from_float16(float(int_val))
+            self._set_reg(dst, result)
+
+        elif ins.mnemonic == "FTOI":
+            # FTOI regD, regS - float16 -> kokonaisluku muunnos (katkaisu)
+            # regD = int(float16(regS))
+            dst, src = ins.operands
+            float_val = self._to_float16(self._get_reg(src))
+            result = int(float_val) & WORD_MASK
+            self._set_reg(dst, result)
 
         # ======================================================================
         # LOGIIKKAKASKYT
@@ -920,3 +994,37 @@ class CPU:
             self.regs.sp = value
         else:
             raise InvalidOpcodeError(f"Invalid register index: {idx}")
+
+    # ==========================================================================
+    # LIUKULUKU-APUFUNKTIOT (float16 / IEEE 754 puolitarkka)
+    # ==========================================================================
+
+    @staticmethod
+    def _to_float16(word: int) -> float:
+        """
+        Muunna 16-bittinen sana Python-liukuluvuksi (float16 -> float64).
+
+        Käyttää IEEE 754 puolitarkkaa (half-precision) esitystä.
+
+        Args:
+            word: 16-bittinen rekisteriarvo
+
+        Returns:
+            Python float (64-bit) vastaa float16-arvoa
+        """
+        return struct.unpack(">e", struct.pack(">H", word & WORD_MASK))[0]
+
+    @staticmethod
+    def _from_float16(value: float) -> int:
+        """
+        Muunna Python-liukuluku 16-bittiseksi sanaksi (float64 -> float16).
+
+        Käyttää IEEE 754 puolitarkkaa (half-precision) esitystä.
+
+        Args:
+            value: Python float
+
+        Returns:
+            16-bittinen float16-sana rekisteriin tallennettavaksi
+        """
+        return struct.unpack(">H", struct.pack(">e", value))[0]

@@ -215,6 +215,13 @@ OPCODE_TABLE: dict[int, tuple[str, int, bool]] = {
     ),  # DIV regD, regS   regD = regD / regS  (INT 0 jos jakaja=0)
     _op(0, 2, 4, 2): ("CMP", 2, False),  # CMP regA, regB   Vertaa, asettaa liput
     _op(0, 2, 5, 2): ("ADC", 2, False),  # ADC regD, regS   regD = regD + regS + C
+    _op(0, 2, 6, 2): ("MOD", 2, False),  # MOD regD, regS   regD = regD % regS  (INT 0 jos jakaja=0)
+    _op(0, 2, 7, 2): ("FADD", 2, False),  # FADD regD, regS  regD = float16(regD) + float16(regS)
+    _op(0, 2, 8, 2): ("FSUB", 2, False),  # FSUB regD, regS  regD = float16(regD) - float16(regS)
+    _op(0, 2, 9, 2): ("FMUL", 2, False),  # FMUL regD, regS  regD = float16(regD) * float16(regS)
+    _op(0, 2, 10, 2): ("FDIV", 2, False),  # FDIV regD, regS  regD = float16(regD) / float16(regS)
+    _op(0, 2, 11, 2): ("ITOF", 2, False),  # ITOF regD, regS  regD = float16(int(regS))
+    _op(0, 2, 12, 2): ("FTOI", 2, False),  # FTOI regD, regS  regD = int(float16(regS))
     # -------------------------------------------------------------------------
     # GRP 3: LOGIIKKA JA BITTIKASKYT (Logic & Bitwise)
     #   Opcoodet: 0x3080-0x3580  (P=0, GRP=3)  NOT: OPS=1, muut: OPS=2
