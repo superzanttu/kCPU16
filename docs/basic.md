@@ -30,7 +30,7 @@ Tulkki tukee seuraavaa minimaalista komentojoukkoa:
 
 | Lause | Kuvaus | Esimerkki |
 |---|---|---|
-| `PRINT expr` | Tulostaa lausekkeen arvon tai merkkijonon | `PRINT "HELO"`, `PRINT X+1` |
+| `PRINT expr` | Tulostaa lausekkeen arvon tai merkkijonon | `PRINT "HELLO"`, `PRINT X+1` |
 | `INPUT var` | Lukee kokonaisluvun muuttujaan | `INPUT X` |
 | `LET var = expr` | Sijoittaa arvon muuttujaan | `LET X = 42` |
 | `IF expr THEN lnum` | Ehdollinen hyppy | `IF X > 0 THEN 100` |
@@ -57,7 +57,7 @@ Tulkki tukee seuraavaa minimaalista komentojoukkoa:
 
 - **Kokonaisluvut:** 16-bittinen merkillinen kokonaislukulaskenta (−32 768 … 32 767)
 - **Muuttujat:** Yksikirjaimiset nimet A–Z (26 muuttujaa)
-- **Operaattorit:** `+`, `-`, `*`, `/` (kokonaisluokujako), `=`, `<`, `>`, `<>`, `<=`, `>=`
+- **Operaattorit:** `+`, `-`, `*`, `/` (kokonaislukujako), `=`, `<`, `>`, `<>`, `<=`, `>=`
 - **Merkkijonoliteraalit:** Vain `PRINT`-lauseessa (`"teksti"`)
 
 > **Huomio:** Liukulukuja ei tueta. kCPU16:ssa ei ole liukulukukäskyjä, ja ohjelmistototeutus veisi huomattavasti muistia ja suoritusaikaa.
@@ -150,7 +150,7 @@ Ohjelma tallennetaan laitteen lohkoihin 1–16 (osoitteet 0x0100–0x10FF, yhtee
 ```
 Lohko 1 (0x0100–0x01FF):  Ohjelman metatiedot
   +0x0000  tunniste (vakioarvo 0xBA51C = "BASIC")
-  +0x0001  ohjelmapuskurin sanamaara
+  +0x0001  ohjelmapuskurin sanamäärä
   +0x0002  reserved
 
 Lohkot 2–16 (0x0200–0x10FF):  Ohjelmapuskurin data
@@ -226,7 +226,7 @@ Lohkot 2–16 (0x0200–0x10FF):  Ohjelmapuskurin data
 
 - `GOSUB` tallentaa nykyisen puskuriindeksin GOSUB-pinoon (0x1000–0x10FF) ja hyppää kohderiviin.
 - `RETURN` palauttaa pinosta tallennetun indeksin.
-- Pinosy­vyys enintään 64 tasoa (256 sanaa / 4 sanaa/kehys).
+- Pinosyvyys enintään 64 tasoa (256 sanaa / 4 sanaa/kehys).
 
 ---
 
