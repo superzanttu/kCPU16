@@ -3,8 +3,12 @@
 
 Tämä moduuli toteuttaa kCPU16-emulaattorin päätason käyttöliittymän.
 Se on debuggeri-tyylinen TUI (Text User Interface), joka yhdistää
-lähdekoodieditorin, reaaliaikaisen disassemblyn, rekisterinäkymän,
-muistinäkymän ja VRAM-näytön yhteen interaktiiviseen sovellukseen.
+reaaliaikaisen disassemblyn, rekisterinäkymän, muistinäkymän ja
+VRAM-näytön yhteen interaktiiviseen sovellukseen.
+
+Assembly-lähdekoodi ladataan ulkoisesta tiedostosta (load-komento tai
+komentoriviargumentti). Ohjelma kääntää ladatun tiedoston automaattisesti
+ja seuraa sitä: kun tiedosto muuttuu, se ladataan ja käännetään uudelleen.
 
 Inspiroitu MARS/RARS, GDB TUI, Turbo Debugger ja emu8086 -ohjelmistoista.
 
@@ -17,32 +21,29 @@ Tärkeimmät funktiot:
     run_tui              -- Käynnistää TUI:n (entry point).
 
 Riippuvuudet:
-    Textual >= 0.80 (testattu 0.82.1): App, TextArea, TabbedContent, RichLog
+    Textual >= 0.80 (testattu 0.82.1): App, TabbedContent, RichLog
     Rich (Textual sisältää): Rich-markup värikoodeihin
 
 Tietovirta:
-    1. Käyttäjä kirjoittaa assembly-koodin editoriin (TextArea)
-    2. Ctrl+B → _do_assemble() kutsuu Assembler.assemble() → konekielisanat
+    1. Käyttäjä avaa .asm-tiedoston (load-komento tai käynnistysparametri)
+    2. _do_open() → _do_assemble() kutsuu Assembler.assemble() → konekielisanat
     3. Machine.cold_reset() + load_program() → sanat muistiin osoitteesta 0x0100
-    4. _build_addr_to_line() → osoite→rivi -mappi kursoria varten
+    4. Tiedostoa seurataan: muuttunut tiedosto ladataan ja käännetään automaattisesti
     5. F7/Step → machine.step() → _refresh_all() päivittää kaikki paneelit
     6. Disassembler lukee muistia PC:n ympäriltä ja näyttää disassemblyn
 
 Layout:
-  ┌─ Toolbar (Open|Save|New | Assemble ^B | Step F7|Run F5|Reset ^R | BP F2)
-  ├──────────────┬─────────────────────┬─────────────────────────────┤
-  │ SCREEN       │ DISASSEMBLY/MEM/STK │ SOURCE EDITOR               │
-  │ (80x24 VRAM) │ (TabbedContent)     │ (TextArea, muokk.)          │
-  │              │ ●=breakpoint        │ rivinumerot                 │
-  │              │ ▶=nykyinen PC       │ kursori seuraa PC           │
-  ├──────────────┴─────────────────────┤                             │
-  │ LOG (lokiviestit)                  │                             │
-  ├────────────────────────────────────┤                             │
-  │ COMMANDS (komentotulosteet)        │                             │
-  ├────────────────────────────────────┴─────────────────────────────┤
-  │ > komentosyöte      │ FLAGS Z N C V I P  │ REGISTERS             │
-  │                     │ CPU state/cycles   │ (muuttuneet=punainen) │
-  └─────────────────────┴────────────────────┴───────────────────────┘
+  ┌─ Toolbar (Open | Assemble ^B | Step F7|Run F5|Reset ^R | BP F2)
+  ├──────────────┬─────────────────────────────────────────────────────┤
+  │ SCREEN       │ DISASSEMBLY/MEM/STK                                 │
+  │ (80x24 VRAM) │ (TabbedContent)                                     │
+  │              │ ●=breakpoint  ▶=nykyinen PC                         │
+  ├──────────────┴─────────────────────────────────────────────────────┤
+  │ LOG (lokiviestit + komentosyöte)                                   │
+  ├───────────────────────────────────────────────────────────────────┤
+  │ FLAGS Z N C V I P  │ REGISTERS                                     │
+  │ CPU state/cycles   │ (muuttuneet=punainen)                         │
+  └────────────────────┴───────────────────────────────────────────────┘
 """
 
 from __future__ import annotations
@@ -66,7 +67,6 @@ from textual.widgets import (
     Static,
     TabbedContent,
     TabPane,
-    TextArea,
 )
 
 from .assembler import Assembler, MNEMONIC_TO_OPCODE
@@ -418,21 +418,26 @@ class SaveConfirmDialog(ModalScreen):
 class KCPU16TUI(App[None]):
     """Päätason Textual-sovellus: kCPU16 emulaattori-debuggeri.
 
-    Tämä on koko TUI:n juuriluokka. Se luo kaikki widgetit (editori,
-    disassembly, rekisterit, jne.), hallinnoi koneen tilaa ja välittää
-    käyttäjän syötteet (näppäimet, painikkeet, komennot) oikeille toiminnoille.
+    Tämä on koko TUI:n juuriluokka. Se luo kaikki widgetit (disassembly,
+    rekisterit, jne.), hallinnoi koneen tilaa ja välittää käyttäjän syötteet
+    (näppäimet, painikkeet, komennot) oikeille toiminnoille.
+
+    Assembly-lähdekoodi ladataan ulkoisesta tiedostosta (load-komento tai
+    käynnistysparametri). Ohjelma kääntää ladatun tiedoston automaattisesti
+    ja seuraa tiedostoa: muutokset uudelleenladataan automaattisesti.
 
     Instanssimuuttujat:
-        machine       -- KCPU16Machine: CPU + muisti + laitteet.
-        assembler     -- Assembler: kääntää assembly → konekieli.
-        disassembler  -- Disassembler: konekieli → luettava assembly.
-        dbg           -- DebugState: breakpointit + rekisterimuutosten seuranta.
-                         HUOM: self.dbg (EI self.debug), koska Textual App:ssa
-                         on sisäänrakennettu debug-property.
-        current_file  -- Avatun tiedoston polku (None = ei tallennettu).
-        mem_view_addr -- Memory-näkymän aloitusosoite (oletus 0x0100).
-        addr_to_line  -- Osoite → lähdekoodirivi -mappi (_build_addr_to_line).
-        is_assembled  -- True kun koodi on assembloitu ja ladattu muistiin.
+        machine          -- KCPU16Machine: CPU + muisti + laitteet.
+        assembler        -- Assembler: kääntää assembly → konekieli.
+        disassembler     -- Disassembler: konekieli → luettava assembly.
+        dbg              -- DebugState: breakpointit + rekisterimuutosten seuranta.
+                           HUOM: self.dbg (EI self.debug), koska Textual App:ssa
+                           on sisäänrakennettu debug-property.
+        current_file     -- Ladatun tiedoston polku (None = ei ladattu).
+        mem_view_addr    -- Memory-näkymän aloitusosoite (oletus 0x0100).
+        addr_to_line     -- Osoite → lähdekoodirivi -mappi (_build_addr_to_line).
+        is_assembled     -- True kun koodi on assembloitu ja ladattu muistiin.
+        _watched_mtime   -- Viimeksi havaittu tiedoston muutosaika nanosekunteina (tiedoston tarkkailu).
 
     Widget-hierarkia:
         Toolbar (Horizontal + Buttonit) → content-area (Horizontal):
@@ -440,15 +445,13 @@ class KCPU16TUI(App[None]):
                             screen-section (Static, VRAM 80x24)
                             disasm-tabs (TabbedContent: Disassembly|Memory|Stack)
                         output-pane (RichLog, kaikki tulosteet + komentosyöte)
-            editor-pane: TextArea (koko korkeus)
-        → bottom-bar (Horizontal):
-            cmd-input-col (Input) | flags-pane (Flags+CPU) | regs-pane (Registers)
+                        bottom-bar (Horizontal):
+                            flags-pane (Flags+CPU) | regs-pane (Registers)
 
     Päivityslogiikka:
         _refresh_all() kutsutaan jokaisen muutoksen jälkeen (step, run, reset,
-        assemble). Se päivittää kaikki paneelit synkronisesti. Timer-pollausta
-        ei käytetä, paitsi Screen-välilehti päivittyy 0.5s välein (VRAM voi
-        muuttua IO-operaatioilla ilman explisiittistä refreshiä).
+        assemble). Se päivittää kaikki paneelit synkronisesti. Timereita käytetään
+        Screen-välilehden (1s) ja tiedoston muutostarkistuksen (1s) päivittämiseen.
     """
 
     TITLE = "kCPU16 Emulator"
@@ -459,14 +462,10 @@ class KCPU16TUI(App[None]):
     # Rakenne ylhäältä alas:
     #   1. #toolbar          - Yläpalkki: painikkeet (dock: top, height: 3)
     #   2. #content-area     - Pääalue (height: 1fr, horizontal):
-    #      - #left-panel     - Vasen paneeli (width: 142): Screen+Disasm | Log | Cmds
-    #        - #top-section  - Yläosa (horizontal): Screen (82) + Disasm tabs (60)
-    #        - #output-pane   - Tulosteet + komentosyöte (height: 1fr)
-    #      - #editor-pane    - Oikea sarake (width: 1fr): Editori (koko korkeus)
-    #   3. #bottom-bar       - Alarivi (dock: bottom, horizontal):
-    #      - #cmd-input-col  - Komentosyöte (width: 142, 1 rivi)
-    #      - #flags-pane     - Liput + CPU-tila (width: auto)
-    #      - #regs-pane      - Rekisterit (width: 1fr)
+    #      - #left-panel     - Koko leveys: Screen+Disasm | Log | Cmds | Bottom bar
+    #        - #top-section  - Yläosa (horizontal): Screen (82) + Disasm tabs (1fr)
+    #        - #output-pane  - Tulosteet + komentosyöte (height: 1fr)
+    #        - #bottom-bar   - Alarivi (horizontal): Flags + Registers
     CSS = """
     Screen {
         layout: vertical;
@@ -498,7 +497,7 @@ class KCPU16TUI(App[None]):
 
     /* -- Left panel: Screen+Disasm top, Log+CmdOutput bottom -- */
     #left-panel {
-        width: 142;
+        width: 1fr;
         layout: vertical;
     }
     #top-section {
@@ -545,17 +544,6 @@ class KCPU16TUI(App[None]):
         height: 1fr;
     }
 
-    /* -- Right column: Editor (full height) -- */
-    #editor-pane {
-        width: 1fr;
-        min-width: 30;
-        border: solid $primary-darken-2;
-        border-title-color: $accent;
-    }
-    #editor-pane TextArea {
-        height: 1fr;
-    }
-
     /* ---- cmd-input inside output-pane ---- */
     #cmd-input {
         dock: bottom;
@@ -581,8 +569,7 @@ class KCPU16TUI(App[None]):
     """
 
     # Näppäinsidonnaisuudet (Textual Binding).
-    # priority=True tarkoittaa, että nämä toimivat myös TextArea:n ollessa
-    # aktiivinen (muuten TextArea kaappaisi näppäimen).
+    # priority=True tarkoittaa, että nämä toimivat aina (myös syötekentän ollessa aktiivinen).
     # Sidonnaisuudet näkyvät myös Footerissa automaattisesti.
     BINDINGS = [
         Binding("ctrl+q", "quit", "Quit", priority=True),
@@ -592,15 +579,9 @@ class KCPU16TUI(App[None]):
         Binding("f10", "step_once", "Step", priority=True),
         Binding("ctrl+r", "reset_machine", "Reset", priority=True),
         Binding("ctrl+o", "open_file", "Load", priority=True),
-        Binding("ctrl+s", "save_file", "Save", priority=True),
         Binding("ctrl+b", "assemble_code", "Asm ^B", priority=True),
         Binding("f9", "clear_screen", "Clr F9", priority=True),
         Binding("f1", "show_help", "Help F1", priority=True),
-        # Ei priority: TextArea-widget käsitelee ctrl+c/x/v itse kun editori on aktiivinen;
-        # app-tason toiminnot aktivoituvat vain kun jokin muu widget on aktiivisena
-        Binding("ctrl+c", "copy", "", show=False),
-        Binding("ctrl+x", "cut", "", show=False),
-        Binding("ctrl+v", "paste", "", show=False),
     ]
 
     def __init__(self) -> None:
@@ -611,14 +592,15 @@ class KCPU16TUI(App[None]):
         luotu - ne syntyvät compose()-metodissa.
 
         Instanssimuuttujat:
-            machine       -- CPU-emulaattori (muisti, rekisterit, laitteet).
-            assembler     -- Assembly → konekieli -kääntäjä.
-            disassembler  -- Konekieli → assembly -purkaja.
-            dbg           -- Debug-tila (breakpointit, rekisterisnapshot).
-            current_file  -- Avoinna oleva tiedostopolku (None aluksi).
-            mem_view_addr -- Memory-tabin näyttöosoite (oletus 0x0100).
-            addr_to_line  -- PC-osoite → editorin rivinumero -mappi.
-            is_assembled  -- Onko koodi assembloitu muistiin.
+            machine          -- CPU-emulaattori (muisti, rekisterit, laitteet).
+            assembler        -- Assembly → konekieli -kääntäjä.
+            disassembler     -- Konekieli → assembly -purkaja.
+            dbg              -- Debug-tila (breakpointit, rekisterisnapshot).
+            current_file     -- Avoinna oleva tiedostopolku (None aluksi).
+            mem_view_addr    -- Memory-tabin näyttöosoite (oletus 0x0100).
+            addr_to_line     -- PC-osoite → lähdekoodirivi -mappi.
+            is_assembled     -- Onko koodi assembloitu muistiin.
+            _watched_mtime   -- Viimeksi havaittu tiedoston muutosaika nanosekunteina.
         """
         super().__init__()
         self.machine = KCPU16Machine()
@@ -635,12 +617,9 @@ class KCPU16TUI(App[None]):
         self.addr_to_line: dict[int, int] = {}
         self.is_assembled: bool = False
         self._last_screen_render: str = ""
-        self._output_buffer: list[str] = []  # Pelkään tekstin puskuri kopiointia varten
-        # Tallentamattomien muutosten seuranta
-        self._editor_dirty: bool = False
+        self._output_buffer: list[str] = []
         self._disk_dirty: bool = False
-        # Estää dirty-merkinnan ohjelmallisten tekstimuutosten aikana
-        self._suppress_editor_dirty: bool = True
+        self._watched_mtime: int | None = None  # st_mtime_ns (kokonaisluku)
 
     # ------------------------------------------------------------------
     # Layout
@@ -650,26 +629,21 @@ class KCPU16TUI(App[None]):
         """Rakenna sovelluksen widget-puu (Textual compose -pattern).
 
         Widget-hierarkia:
-            Toolbar (#toolbar): Open, Save, New, Assemble, Step, Run, Reset,
+            Toolbar (#toolbar): Open, Assemble, Step, Run, Reset,
                                 BP, Clear, Help -painikkeet
             Content area (#content-area, Horizontal):
-                #left-panel (Vertical, 142 lev.):
+                #left-panel (Vertical, 1fr):
                     #top-section (Horizontal):
                         #screen-section: Static (VRAM 80x24)
                         #disasm-tabs (TabbedContent: Disassembly|Memory|Stack)
                     #output-pane: RichLog (kaikki tulosteet) + Input (komentosyöte)
-                #editor-pane (Vertical, 1fr, koko korkeus):
-                    TextArea (lähdekoodieditori)
-            Bottom bar (#bottom-bar, Horizontal):
-                #cmd-input-col: Input (komentosyöte, 142 lev., 1 rivi)
-                #flags-pane: Flags + CPU-tila
-                #regs-pane: Rekisterit
+                    #bottom-bar (Horizontal):
+                        #flags-pane: Flags + CPU-tila
+                        #regs-pane: Rekisterit
         """
         # Toolbar
         with Horizontal(id="toolbar"):
             yield Button("Load", id="btn-open", variant="default")
-            yield Button("Save", id="btn-save", variant="default")
-            yield Button("New", id="btn-new", variant="default")
             yield Static(" ", classes="sep")
             yield Button("Assemble ^B", id="btn-asm", variant="primary")
             yield Static(" ", classes="sep")
@@ -681,9 +655,8 @@ class KCPU16TUI(App[None]):
             yield Button("Clear F9", id="btn-clear", variant="default")
             yield Button("Help F1", id="btn-help", variant="default")
 
-        # Content area: left panel + editor
+        # Content area: left panel (full width)
         with Horizontal(id="content-area"):
-            # Left panel: Screen+Disasm top, Log+CmdOutput bottom
             with Vertical(id="left-panel"):
                 with Horizontal(id="top-section"):
                     with Vertical(id="screen-section"):
@@ -710,10 +683,6 @@ class KCPU16TUI(App[None]):
                         placeholder="Command: help, step, run, bp, mem, mset, disk, reset ...",
                         id="cmd-input",
                     )
-
-            # Right column: Editor + bottom info
-            with Vertical(id="editor-pane"):
-                yield TextArea("", language=None, show_line_numbers=True, id="editor")
                 with Horizontal(id="bottom-bar"):
                     with Vertical(id="flags-pane"):
                         yield Static(id="flags-content")
@@ -732,12 +701,11 @@ class KCPU16TUI(App[None]):
         DOM-puuhun. Tässä:
         1. Asetetaan paneelien otsikot (border_title)
         2. Resetoidaan kone (cold_reset) ja otetaan rekisterisnapshot
-        3. Asetetaan oletuskoodi editoriin (esimerkki-kommentit)
-        4. Kirjoitetaan tervetuloa-viestit lokiin
+        3. Kirjoitetaan tervetuloa-viestit lokiin
+        4. Lataa käynnistysparametreilla annetut tiedostot
         5. Päivitetään kaikki näkymät (_refresh_all)
-        6. Käynnistetään Screen-tabin 0.5s päivitystimer
+        6. Käynnistetään timereita: Screen-päivitys (1.0s) + tiedoston tarkkailu (1.0s)
         """
-        self.query_one("#editor-pane").border_title = "Editor"
         self.query_one("#regs-pane").border_title = "Registers"
         self.query_one("#flags-pane").border_title = "Flags"
         self.query_one("#screen-section").border_title = "Screen"
@@ -746,23 +714,10 @@ class KCPU16TUI(App[None]):
         self.machine.cold_reset()
         self.dbg.snapshot_registers(self.machine.dump_registers())
 
-        # _suppress_editor_dirty on jo True (__init__:ssa), joten tekstin
-        # asettaminen ei merkitse editoria muokatuksi.
-        self.query_one("#editor", TextArea).text = (
-            "; kCPU16 Assembly\n"
-            "; Ctrl+O = Open | Ctrl+B = Assemble | F7 = Step | F5 = Run\n"
-            ";\n"
-            "; Example:\n"
-            ";   LOAD R0, #42\n"
-            ";   LOAD R1, #8\n"
-            ";   ADD  R0, R1\n"
-            ";   HALT\n"
-        )
-
         self._log(f"[bold]kCPU16 Debugger[/bold] v{__version__} ready.")
         self._log(
             "[dim]F7/F10=Step  F5=Run  F2=Breakpoint  "
-            "Ctrl+B=Assemble  Ctrl+O=Open[/dim]"
+            "Ctrl+B=Assemble  Ctrl+O=Load[/dim]"
         )
         self._log("[dim]Type 'help' for command list.[/dim]")
 
@@ -784,30 +739,8 @@ class KCPU16TUI(App[None]):
 
         self._refresh_all()
         self.set_interval(1.0, self._refresh_screen_tab)
+        self.set_interval(1.0, self._check_file_changes)
         self.query_one("#cmd-input", Input).focus()
-
-        # Tyhjennä dirty-tila init-vaiheen jälkeen kaikkien
-        # tekstimuutosten jo prosessoitua.
-        self.call_after_refresh(self._init_clean_state)
-
-    def _init_clean_state(self) -> None:
-        """Merkitse editori ja levy puhtaiksi käynnistyksen jälkeen."""
-        self._suppress_editor_dirty = False
-        self._editor_dirty = False
-        self._disk_dirty = False
-        self._update_editor_title()
-        self._update_disk_title()
-
-    # ------------------------------------------------------------------
-    # Muokattu-tilan seuranta
-    # ------------------------------------------------------------------
-
-    def on_text_area_changed(self, event: TextArea.Changed) -> None:
-        """Merkitse editori muokatuksi kun käyttäjä muuttaa tekstiä."""
-        if not self._suppress_editor_dirty:
-            if not self._editor_dirty:
-                self._editor_dirty = True
-                self._update_editor_title()
 
     # ------------------------------------------------------------------
     # Painikkeet
@@ -822,8 +755,6 @@ class KCPU16TUI(App[None]):
         """
         actions = {
             "btn-open": self.action_open_file,
-            "btn-save": self.action_save_file,
-            "btn-new": self._do_new,
             "btn-asm": self.action_assemble_code,
             "btn-step": self.action_step_once,
             "btn-run": self.action_run_program,
@@ -873,15 +804,13 @@ class KCPU16TUI(App[None]):
         """Suorita yksi konekielikäsky (F7/F10 tai Step-painike).
 
         Tarkistaa ensin onko CPU pysähtynyt (HALT/EXIT). Jos ei,
-        suorittaa yhden käskyn, siirtää editorikursorin vastaavalle
-        riville, logittaa käskyn tiedot ja päivittää näkymät.
+        suorittaa yhden käskyn, logittaa käskyn tiedot ja päivittää näkymät.
         """
         if self.machine.cpu.halted or self.machine.process_exited:
             self._log("[yellow]CPU stopped. Reset to continue.[/yellow]")
             self._refresh_all()
             return
         self.machine.step()
-        self._update_exec_line()
         self._log_step_info()
         self._refresh_all()
 
@@ -894,7 +823,6 @@ class KCPU16TUI(App[None]):
         """
         result = self._run_with_breakpoints(DEFAULT_RUN_CYCLES)
         self._log(result)
-        self._update_exec_line()
         self._refresh_all()
 
     def action_reset_machine(self) -> None:
@@ -927,43 +855,20 @@ class KCPU16TUI(App[None]):
         self._refresh_all()
 
     def action_open_file(self) -> None:
-        """Avaa assembly-tiedosto editoriin (Ctrl+O).
+        """Avaa assembly-tiedosto (Ctrl+O).
 
-        Jos komentosyötteessä ei ole polkua, asettaa fokuksen syötekenttään
-        ja kirjoittaa "open " alkuun. Käyttäjä kirjoittaa polun ja painaa
-        Enter, jolloin on_input_submitted → _execute_command käsittelee sen.
+        Asettaa fokuksen syötekenttään ja kirjoittaa "load " alkuun.
+        Käyttäjä kirjoittaa polun ja painaa Enter,
+        jolloin on_input_submitted → _execute_command käsittelee sen.
         """
         cmd_input = self.query_one("#cmd-input", Input)
-        path_str = cmd_input.value.strip()
-        if not path_str or path_str.startswith("load "):
-            cmd_input.focus()
+        cmd_input.focus()
+        if not cmd_input.value.strip().startswith("load "):
             cmd_input.value = "load "
-            self._log("Type filename after 'load' and press Enter.")
-            return
-        path = Path(path_str)
-        if not path.is_absolute():
-            path = self.code_dir / path
-        self._do_open(path)
-
-    def action_save_file(self) -> None:
-        """Tallenna editorin sisältö tiedostoon (Ctrl+S).
-
-        Jos tiedosto on jo avattu tai aiemmin tallennettu (current_file),
-        tallennetaan suoraan. Muuten ohjataan käyttäjä kirjoittamaan
-        polku komentosyötteeseen.
-        """
-        if self.current_file:
-            self._do_save(self.current_file)
-        else:
-            cmd_input = self.query_one("#cmd-input", Input)
-            cmd_input.focus()
-            cmd_input.value = "save "
-            self._log(
-                "[yellow]Ei tallennettua tiedostoa. Kirjoita nimi komennon jälkeen.[/yellow]"
-            )
+        self._log("Type filename after 'load' and press Enter.")
 
     def action_assemble_code(self) -> None:
-        """Assembloi editorin koodi ja lataa se muistiin (Ctrl+B).
+        """Assembloi ladattu koodi ja lataa se muistiin (Ctrl+B).
 
         Delegoi _do_assemble()-metodille. Tämä on vain action-wrapperi
         joka mahdollistaa kutsumisen sekä näppäimellä että painikkeella.
@@ -981,50 +886,39 @@ class KCPU16TUI(App[None]):
         self._refresh_all()
 
     def action_quit(self) -> None:
-        """Sulje sovellus – tarkista tallentamattomat muutokset ensin (Ctrl+Q).
+        """Sulje sovellus – tarkista tallentamattomat levymuutokset (Ctrl+Q).
 
-        Jos editorissa tai levyllä on tallentamattomia muutoksia, näytetään
-        vahvistusikkuna:
-          - KYLLÄ: tallennetaan rastitetut kohteet, sitten poistutaan
-          - EI:    poistutaan tallentamatta
-          - PERUUTA: palataan sovellukseen
-
-        Jos käyttäjä haluaa tallentaa mutta kohteelle ei ole tiedostonimeä,
-        poistuminen keskeytetään ja virhe näytetään dialogissa.
+        Jos levyllä on tallentamattomia muutoksia, näytetään vahvistusikkuna.
         """
-        if not self._editor_dirty and not self._disk_dirty:
+        if not self._disk_dirty:
             self.exit()
             return
 
         def _on_confirm(result: tuple) -> None:
-            choice, save_editor, save_disk = result
+            choice, _save_editor, save_disk = result
 
             if choice == "cancel":
                 return  # Palataan takaisin sovellukseen
 
-            if choice == "yes":
-                # Tallenna pyydetyt kohteet (tiedostonimet on jo tarkistettu dialogissa)
-                if save_editor and self.current_file:
-                    self._do_save(self.current_file)
-                if save_disk and self.current_disk_file:
-                    try:
-                        self.machine.storage.save_to_file(self.current_disk_file)
-                        self._disk_dirty = False
-                        self._update_disk_title()
-                        self._log(
-                            f"[green]Disk saved to {self.current_disk_file.name}[/green]"
-                        )
-                    except Exception as e:
-                        self._log(f"[red]Levyn tallennus epäonnistui: {e}[/red]")
-                        return  # Älä poistu jos tallennus epäonnistui
+            if choice == "yes" and save_disk and self.current_disk_file:
+                try:
+                    self.machine.storage.save_to_file(self.current_disk_file)
+                    self._disk_dirty = False
+                    self._update_disk_title()
+                    self._log(
+                        f"[green]Disk saved to {self.current_disk_file.name}[/green]"
+                    )
+                except Exception as e:
+                    self._log(f"[red]Levyn tallennus epäonnistui: {e}[/red]")
+                    return  # Älä poistu jos tallennus epäonnistui
 
             self.exit()
 
         self.push_screen(
             SaveConfirmDialog(
-                editor_dirty=self._editor_dirty,
+                editor_dirty=False,
                 disk_dirty=self._disk_dirty,
-                editor_has_file=self.current_file is not None,
+                editor_has_file=False,
                 disk_has_file=self.current_disk_file is not None,
             ),
             callback=_on_confirm,
@@ -1040,24 +934,16 @@ class KCPU16TUI(App[None]):
         self._log("[bold]--- kCPU16 Debugger Help ---[/bold]")
         self._log("")
         self._log("[bold]Keyboard shortcuts:[/bold]")
-        self._log("  Ctrl+O  Open file       Ctrl+S  Save file")
-        self._log("  Ctrl+B  Assemble code   F2      Toggle breakpoint")
+        self._log("  Ctrl+O  Load file       Ctrl+B  Assemble code")
         self._log("  F7/F10  Step 1 instr    F5      Run (stops at BP)")
         self._log("  Ctrl+R  Reset machine   F9      Clear VRAM")
-        self._log("  Ctrl+Q  Quit            F1      This help")
-        self._log("  Ctrl+C  Copy (editor selection / output log)")
-        self._log("  Ctrl+X  Cut  (editor)   Ctrl+V  Paste (editor)")
+        self._log("  F2      Toggle BP       F1      This help")
+        self._log("  Ctrl+Q  Quit")
         self._log("")
         self._log("[bold cyan]File & Assembly:[/bold cyan]")
-        self._log("  load <filename>              Load .asm from code/ directory")
-        self._log(
-            "  save [filename]              Save editor to code/ directory (adds .asm if no suffix)"
-        )
-        self._log("  asm                          Assemble, reset and load into memory")
-        self._log("  check                        Syntax check only (no load)")
-        self._log(
-            "  fmt                          Format code (indent, UPPERCASE, align comments)"
-        )
+        self._log("  load <filename>              Load .asm (watches for changes, auto-reassembles)")
+        self._log("  asm                          Manually reassemble loaded file")
+        self._log("  check                        Syntax check loaded file (no load)")
         self._log("[bold cyan]CPU Control:[/bold cyan]")
         self._log("  step [n]                     Step n instructions (default 1)")
         self._log("  run  [n]                     Run to BP/halt (max n cycles)")
@@ -1110,68 +996,8 @@ class KCPU16TUI(App[None]):
         self._log("---")
 
     # ------------------------------------------------------------------
-    # Leikepöytätoiminnot
-    # ------------------------------------------------------------------
-
-    def action_copy(self) -> None:
-        """Kopioi leikepöydälle: valittu teksti editorissa tai koko output-puskuri."""
-        focused = self.focused
-        if focused is None:
-            return
-        if isinstance(focused, TextArea):
-            focused.action_copy()
-        elif getattr(focused, "id", None) == "output-view":
-            self._do_copy_output()
-
-    def action_cut(self) -> None:
-        """Leikkaa valittu teksti editorissa leikepöydälle."""
-        focused = self.focused
-        if isinstance(focused, TextArea):
-            focused.action_cut()
-
-    def action_paste(self) -> None:
-        """Liitä leikepöydältä editoriin."""
-        focused = self.focused
-        if isinstance(focused, TextArea):
-            focused.action_paste()
-
-    def _do_copy_output(self) -> None:
-        """Kopioi output-puskurin sisältö järjestelmän leikepöydälle."""
-        if not self._output_buffer:
-            return
-        text = "\n".join(self._output_buffer)
-        self.copy_to_clipboard(text)
-        self._log("[dim]Output copied to clipboard.[/dim]")
-
-    # ------------------------------------------------------------------
     # Perusoperaatiot
     # ------------------------------------------------------------------
-
-    def _do_new(self) -> None:
-        """Luo uusi tyhjä dokumentti editoriin.
-
-        Tyhjentää editorin, nollaa tiedostopolun ja assembly-tilan.
-        Ei resetoi konetta - kone jää edelliseen tilaan.
-        """
-        self._suppress_editor_dirty = True
-        self.query_one("#editor", TextArea).text = ""
-        self.current_file = None
-        self.is_assembled = False
-        self.addr_to_line = {}
-        self._log("New document.")
-        self.call_after_refresh(self._finish_editor_load)
-
-    def _update_editor_title(self) -> None:
-        """Päivitä Editor-paneelin alaotsikko näyttämään nykyinen tiedostonimi.
-
-        Näyttää tähden (*) nimen perässä kun editorissa on tallentamattomia muutoksia.
-        """
-        pane = self.query_one("#editor-pane")
-        name = self.current_file.name if self.current_file else ""
-        if self._editor_dirty:
-            pane.border_subtitle = f"{name} *" if name else "*"
-        else:
-            pane.border_subtitle = name
 
     def _update_disk_title(self) -> None:
         """Päivitä Disassembly-paneelin alaotsikko näyttämään nykyinen levytiedosto.
@@ -1186,69 +1012,50 @@ class KCPU16TUI(App[None]):
             tabs.border_subtitle = name
 
     def _do_open(self, path: Path) -> None:
-        """Avaa tiedosto ja lataa sen sisältö editoriin.
+        """Avaa tiedosto, tallentaa polun ja kääntää sen automaattisesti.
 
-        Lukee tiedoston UTF-8-enkoodauksella. Onnistuessa asettaa
-        current_file = path ja is_assembled = False (koodi pitää
-        assembloida uudelleen). Virhetilanteessa logittaa virheen.
+        Tiedoston olemassaolo tarkistetaan ennen latausta. Onnistuessa
+        asetetaan current_file = path, tallennetaan tiedoston mtime
+        tiedoston tarkkailua varten ja kutsutaan _do_assemble().
+        Virhetilanteessa logitetaan virhe.
         """
         try:
-            content = path.read_text(encoding="utf-8")
-            self._suppress_editor_dirty = True
-            self.query_one("#editor", TextArea).text = content
+            if not path.exists():
+                self._log(f"[red]Tiedostoa ei löydy: {path}[/red]")
+                return
             self.current_file = path
             self.is_assembled = False
-            self._log(f"Opened: [bold]{path.name}[/bold] ({len(content)} chars)")
-            # Tyhjennä dirty-lippu kun kaikki odottavat Changed-tapahtumat on käsitelty
-            self.call_after_refresh(self._finish_editor_load)
-        except Exception as e:
-            self._log(f"[red]Error: {e}[/red]")
-
-    def _finish_editor_load(self) -> None:
-        """Tyhjennä editorin dirty-lippu latauksen jälkeen."""
-        self._suppress_editor_dirty = False
-        self._editor_dirty = False
-        self._update_editor_title()
-
-    def _do_save(self, path: Path) -> None:
-        """Tallenna editorin sisältö tiedostoon.
-
-        Kirjoittaa editorin tekstin UTF-8-tiedostoksi. Asettaa
-        current_file = path, jotta seuraava Ctrl+S tallentaa samaan
-        paikkaan. Virhetilanteessa logittaa virheen.
-        """
-        try:
-            content = self.query_one("#editor", TextArea).text
-            path.write_text(content, encoding="utf-8")
-            self.current_file = path
-            self._editor_dirty = False
-            self._update_editor_title()
-            self._log(f"Saved: [bold]{path.name}[/bold]")
+            self.addr_to_line = {}
+            self._watched_mtime = path.stat().st_mtime_ns
+            self._log(f"Loaded: [bold]{path}[/bold]")
+            self._do_assemble()
         except Exception as e:
             self._log(f"[red]Error: {e}[/red]")
 
     def _do_assemble(self) -> None:
-        """Assembloi editorin koodi ja lataa se koneen muistiin.
+        """Assembloi ladattu tiedosto ja lataa se koneen muistiin.
 
-        Tämä on TUI:n keskeinen operaatio - "editori → konekieli → muisti":
+        Tämä on TUI:n keskeinen operaatio - "tiedosto → konekieli → muisti":
 
-        1. Lue editorin teksti (source)
+        1. Lue current_file tiedostosta (source)
         2. assembler.assemble(source) → lista (osoite, sanat) -segmenttejä
         3. machine.cold_reset() → nollaa CPU, muisti, laitteet
         4. machine.load_segments(segments) → lataa segmentit muistiin
         5. _build_addr_to_line() → rakenna osoite→rivi -mappi
         6. dbg.snapshot_registers() → ota vertailupiste rekistereille
-        7. _update_exec_line() → siirrä kursori PC:n riville
-        8. _refresh_all() → päivitä kaikki näkymät
+        7. _refresh_all() → päivitä kaikki näkymät
 
         Virhetilanteessa (syntaksivirhe, tuntematon käsky) assembly
         keskeytyy ja virhe näytetään lokissa punaisella.
         """
-        source = self.query_one("#editor", TextArea).text
-        if not source.strip():
-            self._log("[yellow]Editor is empty.[/yellow]")
+        if not self.current_file:
+            self._log("[yellow]No file loaded. Use 'load <file>' or Ctrl+O.[/yellow]")
             return
         try:
+            source = self.current_file.read_text(encoding="utf-8")
+            if not source.strip():
+                self._log("[yellow]File is empty.[/yellow]")
+                return
             segments = self.assembler.assemble(source)
             self.machine.cold_reset()
             self.machine.load_segments(segments)
@@ -1276,11 +1083,29 @@ class KCPU16TUI(App[None]):
                     f"[cyan].diskblock: {total_words} sanaa tallennettu "
                     f"levyblokkiin {blk}.[/cyan]"
                 )
-            self._update_exec_line()
             self._refresh_all()
         except Exception as e:
             self._log(f"[red]Assembly error: {e}[/red]")
             self.is_assembled = False
+
+    def _check_file_changes(self) -> None:
+        """Tarkista onko ladattu tiedosto muuttunut (1s timer).
+
+        Jos tiedoston muutosaika (mtime) on muuttunut viimeksi havaitusta,
+        ladataan ja käännetään tiedosto automaattisesti uudelleen.
+        """
+        if not self.current_file or not self.current_file.exists():
+            return
+        try:
+            mtime = self.current_file.stat().st_mtime_ns
+            if self._watched_mtime is not None and mtime != self._watched_mtime:
+                self._watched_mtime = mtime
+                self._log(
+                    f"[dim]File changed: {self.current_file.name}. Reloading...[/dim]"
+                )
+                self._do_assemble()
+        except Exception:
+            pass
 
     # ------------------------------------------------------------------
     # Breakpoint-tietoinen suoritus
@@ -1654,34 +1479,6 @@ class KCPU16TUI(App[None]):
         self.query_one("#stack-view", Static).update("\n".join(lines))
 
     # ------------------------------------------------------------------
-    # PC -> editoririvi -korostus
-    # ------------------------------------------------------------------
-
-    def _update_exec_line(self) -> None:
-        """Siirrä editorin kursori nykyistä PC:tä vastaavalle riville.
-
-        Käyttää addr_to_line-mappia (_build_addr_to_line) löytääkseen
-        mikä lähdekoodirivi vastaa nykyistä PC-osoitetta. Jos löytyy,
-        siirtää TextArea:n kursorin kyseiselle riville. Tämä mahdollistaa
-        "source-level debugging" -kokemuksen: käyttäjä näkee editorissa
-        missä kohdassa lähdekoodia suoritus on.
-
-        Ei tee mitään jos addr_to_line on tyhjä (koodi ei assembloitu)
-        tai PC:tä ei löydy mapista (esim. kernel-koodi).
-        """
-        if not self.addr_to_line:
-            return
-        pc = self.machine.regs.pc
-        line_no = self.addr_to_line.get(pc)
-        if line_no is not None:
-            try:
-                editor = self.query_one("#editor", TextArea)
-                target = max(0, line_no - 1)
-                if target < len(editor.text.splitlines()):
-                    editor.move_cursor((target, 0))
-            except Exception:
-                pass
-
     def _log_step_info(self) -> None:
         """Logita yksityiskohdat viimeisestä stepistä.
 
@@ -1729,11 +1526,9 @@ class KCPU16TUI(App[None]):
 
         Komennot:
             --- Tiedostot & assembly ---
-            load <path>                  -- Avaa .asm tiedosto editoriin
-            save [path]                  -- Tallenna editori tiedostoon
-            asm                          -- Käännä, reset, lataa muistiin
-            check                        -- Tarkista syntaksi
-            fmt                          -- Muotoile koodi (sisentää, isot kirjaimet, kommentit)
+            load <path>                  -- Avaa .asm tiedosto ja assembloi
+            asm                          -- Käännä uudelleen ladattu tiedosto
+            check                        -- Tarkista syntaksi ilman latausta
             --- CPU-ohjaus ---
             step [n]                     -- Steppaa n käskyä (oletus 1)
             run [n]                      -- Aja breakpointiin/halttiin
@@ -1779,38 +1574,12 @@ class KCPU16TUI(App[None]):
                 self._do_open(path)
                 return CommandResult(True, "")
 
-            if op == "save":
-                if not args:
-                    if self.current_file:
-                        self._do_save(self.current_file)
-                        return CommandResult(True, "")
-                    return CommandResult(
-                        False,
-                        "[yellow]Ei tallennettua tiedostoa. Käytä: save <nimi>[/yellow]",
-                    )
-                path = Path(" ".join(args))
-                if not path.suffix:
-                    path = path.with_suffix(".asm")
-                if not path.is_absolute():
-                    path = self.code_dir / path
-                self._do_save(path)
-                return CommandResult(True, "")
-
             if op == "asm":
                 self._do_assemble()
                 return CommandResult(True, "")
 
             if op == "check":
                 return self._do_syntax_check()
-
-            if op == "fmt":
-                editor = self.query_one("#editor", TextArea)
-                source = editor.text
-                if not source.strip():
-                    return CommandResult(False, "[yellow]Editor is empty.[/yellow]")
-                formatted = self._format_asm_source(source)
-                editor.load_text(formatted)
-                return CommandResult(True, "[green]Code formatted.[/green]")
 
             # --- CPU-ohjaus ---
             if op == "step":
@@ -1819,14 +1588,12 @@ class KCPU16TUI(App[None]):
                     if self.machine.cpu.halted or self.machine.process_exited:
                         break
                     self.machine.step()
-                self._update_exec_line()
                 ic = self.machine.cpu.instruction_counter
                 return CommandResult(True, f"Stepped {max(1, count)}. IC={ic}")
 
             if op == "run":
                 cycles = int(args[0], 0) if args else DEFAULT_RUN_CYCLES
                 result = self._run_with_breakpoints(max(1, cycles))
-                self._update_exec_line()
                 return CommandResult(True, result)
 
             if op == "stop":
@@ -1918,148 +1685,16 @@ class KCPU16TUI(App[None]):
     # Uudet komentokäsittelijät
     # ------------------------------------------------------------------
 
-    def _format_asm_source(self, source: str) -> str:
-        """Muotoile assembly-lähdekoodi hyvien käytäntöjen mukaisesti.
-
-        Säännöt:
-            - Poistetaan rivien lopusta turhat välilyönnit
-            - Peräkkäiset tyhjät rivit tiivistetään yhdeksi
-            - Johtavat ja lopussa olevat tyhjät rivit poistetaan
-            - Kommentti-rivit (alkavat ;): säilytetään sellaisenaan
-            - Labelit: ei sisennystä, UPPERCASE, muoto LABEL:
-            - Direktiivit (.at, .db, .dstr, .const, .macro, .endmacro,
-              .diskblock, .org): 8 välilyönnin sisennys
-            - Käskyt: 8 välilyönnin sisennys, mnemoniikka UPPERCASE,
-              padattu 10 merkkiin, operandeissa välilyönti pilkun jälkeen
-            - Inline-kommentit: tasattu sarakkeeseen 40
-        """
-        INDENT = "        "  # 8 spaces
-        MNE_WIDTH = 10  # mnemonic column width (padded)
-        CMT_COL = 40  # target column for inline comments
-
-        def _split_comment(line: str) -> tuple[str, str]:
-            """Erota koodi ja inline-kommentti toisistaan (string-literaalit huomioiden)."""
-            in_sq = False
-            in_dq = False
-            for i, ch in enumerate(line):
-                if ch == "'" and not in_dq:
-                    in_sq = not in_sq
-                elif ch == '"' and not in_sq:
-                    in_dq = not in_dq
-                elif ch == ";" and not in_sq and not in_dq:
-                    return line[:i], line[i:]
-            return line, ""
-
-        def _fmt_comment(comment: str) -> str:
-            """Normalisoi kommenttiteksti: '  ; teksti' → '; teksti'."""
-            text = comment.lstrip().lstrip(";").strip()
-            return f"; {text}" if text else ""
-
-        raw_lines = source.splitlines()
-        out: list[str] = []
-        blank_run = 0
-
-        for raw in raw_lines:
-            line = raw.rstrip()
-            stripped = line.strip()
-
-            # Tyhjä rivi
-            if not stripped:
-                blank_run += 1
-                if blank_run <= 1:
-                    out.append("")
-                continue
-            blank_run = 0
-
-            # Pelkkä kommentti
-            if stripped.startswith(";"):
-                out.append(line)
-                continue
-
-            code_raw, cmt_raw = _split_comment(stripped)
-            code = code_raw.strip()
-            cmt = _fmt_comment(cmt_raw) if cmt_raw else ""
-
-            if not code:
-                # Pelkkä kommentti splitin jälkeen (ei pitäisi tapahtua, mutta varmuuden vuoksi)
-                out.append(line)
-                continue
-
-            # Label (muoto SANA: ilman välilyöntejä ennen kaksoispistettä)
-            # Tuetaan myös LABEL: KÄSKY -rivit: label erotetaan omaksi riviksi
-            if ":" in code:
-                colon_idx = code.index(":")
-                potential_label = code[:colon_idx].strip()
-                if " " not in potential_label and potential_label:
-                    label_str = potential_label.upper() + ":"
-                    if cmt:
-                        out.append(f"{label_str}  {cmt}")
-                    else:
-                        out.append(label_str)
-                    # Jos labelin jälkeen on käsky samalla rivillä, lisää se seuraavaksi
-                    rest = code[colon_idx + 1 :].strip()
-                    if rest:
-                        code = rest
-                        cmt = ""
-                        # Käsitellään alla olevalla logiikalla — aseta stripped ja jatka
-                        # (tehdään fall-through kääntelemällä muuttujia)
-                        stripped = rest
-                        code_raw2, cmt_raw2 = _split_comment(rest)
-                        code = code_raw2.strip()
-                        cmt = _fmt_comment(cmt_raw2) if cmt_raw2 else ""
-                    else:
-                        continue
-
-            # Direktiivi (alkaa pisteellä)
-            if code.startswith("."):
-                parts = code.split(None, 1)
-                directive = parts[0].lower()
-                rest = parts[1] if len(parts) > 1 else ""
-                formatted = directive
-                if rest:
-                    formatted += f" {rest}"
-                if cmt:
-                    pad = max(1, CMT_COL - len(formatted))
-                    formatted += " " * pad + cmt
-                out.append(formatted)
-                continue
-
-            # Käsky
-            # Erota mnemoniikka ja operandit
-            parts = code.split(None, 1)
-            mnemonic = parts[0].upper()
-            ops = ""
-            if len(parts) > 1:
-                # Normalisoi operandien pilkut: välilyönti pilkun jälkeen
-                raw_ops = parts[1]
-                # Pilko operandit pilkuilla, trimmaa jokainen ja liitä uudelleen
-                op_list = [p.strip() for p in raw_ops.split(",")]
-                ops = ", ".join(op_list)
-
-            if ops:
-                formatted = f"{INDENT}{mnemonic:<{MNE_WIDTH}}{ops}"
-            else:
-                formatted = f"{INDENT}{mnemonic}"
-
-            if cmt:
-                pad = max(1, CMT_COL - len(formatted))
-                formatted += " " * pad + cmt
-            out.append(formatted)
-
-        # Poista johtavat ja loppuiset tyhjät rivit
-        while out and not out[0].strip():
-            out.pop(0)
-        while out and not out[-1].strip():
-            out.pop()
-
-        return "\n".join(out)
-
     def _do_syntax_check(self) -> CommandResult:
-        """Tarkista editorin assembly-koodin syntaksi ilman latausta muistiin."""
-        source = self.query_one("#editor", TextArea).text.strip()
-        if not source:
-            return CommandResult(False, "[yellow]Editor is empty.[/yellow]")
+        """Tarkista ladatun tiedoston assembly-koodin syntaksi ilman latausta muistiin."""
+        if not self.current_file:
+            return CommandResult(
+                False, "[yellow]No file loaded. Use 'load <file>' first.[/yellow]"
+            )
         try:
+            source = self.current_file.read_text(encoding="utf-8").strip()
+            if not source:
+                return CommandResult(False, "[yellow]File is empty.[/yellow]")
             segments = self.assembler.assemble(source)
             total_words = sum(len(w) for _, w in segments)
             return CommandResult(
