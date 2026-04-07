@@ -57,8 +57,10 @@ _RICH_MARKUP_RE = re.compile(r"\[/?[^\[\]]+?\]")
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
+from textual.screen import ModalScreen
 from textual.widgets import (
     Button,
+    Checkbox,
     Input,
     RichLog,
     Static,
@@ -269,6 +271,143 @@ def _build_addr_to_line(source: str, assembler: Assembler) -> dict[int, int]:
         addr += 1 + operand_count
 
     return result
+
+
+# ===========================================================================
+# Tallentamattomien muutosten vahvistusikkuna
+# ===========================================================================
+
+
+class SaveConfirmDialog(ModalScreen):
+    """Modalikkuna tallentamattomien muutosten tallentamiseen ennen sulkemista.
+
+    Näyttää KYLLÄ/EI/PERUUTA -painikkeet sekä valintaruudut niille
+    kohteille (editori, tallennuslaite), joissa on tallentamattomia muutoksia.
+    Käyttäjä voi poistaa ruksit kohteilta, joita ei halua tallentaa.
+
+    Palauttaa dismiss():lla tuplen:
+        ("yes",    save_editor: bool, save_disk: bool)  -- Tallenna ja poistu
+        ("no",     False, False)                         -- Poistu tallentamatta
+        ("cancel", False, False)                         -- Peruuta (älä poistu)
+    """
+
+    CSS = """
+    SaveConfirmDialog {
+        align: center middle;
+    }
+    #save-dialog {
+        background: $surface;
+        border: thick $primary;
+        padding: 1 2;
+        width: 56;
+        height: auto;
+    }
+    #save-dialog-title {
+        text-align: center;
+        text-style: bold;
+        color: $warning;
+        margin-bottom: 1;
+    }
+    #save-dialog-question {
+        margin-bottom: 1;
+    }
+    #save-dialog-checks {
+        margin-bottom: 1;
+        height: auto;
+    }
+    #save-dialog-error {
+        color: $error;
+        height: auto;
+        min-height: 1;
+        margin-bottom: 1;
+    }
+    #save-dialog-buttons {
+        layout: horizontal;
+        align: center middle;
+        height: 3;
+    }
+    #save-dialog-buttons Button {
+        margin: 0 1;
+    }
+    """
+
+    def __init__(
+        self,
+        editor_dirty: bool,
+        disk_dirty: bool,
+        editor_has_file: bool,
+        disk_has_file: bool,
+    ) -> None:
+        super().__init__()
+        self._editor_dirty = editor_dirty
+        self._disk_dirty = disk_dirty
+        self._editor_has_file = editor_has_file
+        self._disk_has_file = disk_has_file
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="save-dialog"):
+            yield Static("Tallentamattomat muutokset", id="save-dialog-title")
+            yield Static("Tallenetaanko muuttuneet tiedot?", id="save-dialog-question")
+            with Vertical(id="save-dialog-checks"):
+                if self._editor_dirty:
+                    yield Checkbox("Editori (.asm)", value=True, id="chk-editor")
+                if self._disk_dirty:
+                    yield Checkbox("Tallennuslaite (.dsk)", value=True, id="chk-disk")
+            yield Static("", id="save-dialog-error")
+            with Horizontal(id="save-dialog-buttons"):
+                yield Button("Kyllä", id="btn-save-yes", variant="primary")
+                yield Button("Ei", id="btn-save-no", variant="default")
+                yield Button("Peruuta", id="btn-save-cancel", variant="warning")
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        btn_id = event.button.id
+
+        if btn_id == "btn-save-cancel":
+            self.dismiss(("cancel", False, False))
+            return
+
+        if btn_id == "btn-save-no":
+            self.dismiss(("no", False, False))
+            return
+
+        if btn_id == "btn-save-yes":
+            save_editor = False
+            save_disk = False
+
+            if self._editor_dirty:
+                try:
+                    save_editor = bool(self.query_one("#chk-editor", Checkbox).value)
+                except Exception:
+                    save_editor = True
+
+            if self._disk_dirty:
+                try:
+                    save_disk = bool(self.query_one("#chk-disk", Checkbox).value)
+                except Exception:
+                    save_disk = True
+
+            # Tarkista: rastitettu kohde tarvitsee tiedostonimen
+            errors: list[str] = []
+            if save_editor and not self._editor_has_file:
+                errors.append(
+                    "Editorin .asm-tiedostolla ei ole tallennusnimeä.\n"
+                    "Tallenna ensin komennolla: save <nimi>"
+                )
+            if save_disk and not self._disk_has_file:
+                errors.append(
+                    "Tallennuslaitteen .dsk-tiedostolla ei ole tallennusnimeä.\n"
+                    "Tallenna ensin komennolla: disk save <nimi>"
+                )
+
+            if errors:
+                self.query_one("#save-dialog-error", Static).update("\n".join(errors))
+                return  # Pysytään dialogissa, ei suljeta
+
+            self.dismiss(("yes", save_editor, save_disk))
+
+    def on_key(self, event) -> None:
+        if event.key == "escape":
+            self.dismiss(("cancel", False, False))
 
 
 # ===========================================================================
@@ -497,6 +636,11 @@ class KCPU16TUI(App[None]):
         self.is_assembled: bool = False
         self._last_screen_render: str = ""
         self._output_buffer: list[str] = []  # Pelkään tekstin puskuri kopiointia varten
+        # Tallentamattomien muutosten seuranta
+        self._editor_dirty: bool = False
+        self._disk_dirty: bool = False
+        # Estää dirty-merkinnan ohjelmallisten tekstimuutosten aikana
+        self._suppress_editor_dirty: bool = True
 
     # ------------------------------------------------------------------
     # Layout
@@ -602,6 +746,8 @@ class KCPU16TUI(App[None]):
         self.machine.cold_reset()
         self.dbg.snapshot_registers(self.machine.dump_registers())
 
+        # _suppress_editor_dirty on jo True (__init__:ssa), joten tekstin
+        # asettaminen ei merkitse editoria muokatuksi.
         self.query_one("#editor", TextArea).text = (
             "; kCPU16 Assembly\n"
             "; Ctrl+O = Open | Ctrl+B = Assemble | F7 = Step | F5 = Run\n"
@@ -627,6 +773,8 @@ class KCPU16TUI(App[None]):
         if startup_dsk is not None:
             try:
                 self.machine.storage.load_from_file(startup_dsk)
+                self.current_disk_file = startup_dsk
+                self._update_disk_title()
                 self._log(f"[green]Storage loaded from {startup_dsk}[/green]")
             except Exception as e:
                 self._log(f"[red]Storage load error: {e}[/red]")
@@ -637,6 +785,29 @@ class KCPU16TUI(App[None]):
         self._refresh_all()
         self.set_interval(1.0, self._refresh_screen_tab)
         self.query_one("#cmd-input", Input).focus()
+
+        # Tyhjennä dirty-tila init-vaiheen jälkeen kaikkien
+        # tekstimuutosten jo prosessoitua.
+        self.call_after_refresh(self._init_clean_state)
+
+    def _init_clean_state(self) -> None:
+        """Merkitse editori ja levy puhtaiksi käynnistyksen jälkeen."""
+        self._suppress_editor_dirty = False
+        self._editor_dirty = False
+        self._disk_dirty = False
+        self._update_editor_title()
+        self._update_disk_title()
+
+    # ------------------------------------------------------------------
+    # Muokattu-tilan seuranta
+    # ------------------------------------------------------------------
+
+    def on_text_area_changed(self, event: TextArea.Changed) -> None:
+        """Merkitse editori muokatuksi kun käyttäjä muuttaa tekstiä."""
+        if not self._suppress_editor_dirty:
+            if not self._editor_dirty:
+                self._editor_dirty = True
+                self._update_editor_title()
 
     # ------------------------------------------------------------------
     # Painikkeet
@@ -809,6 +980,56 @@ class KCPU16TUI(App[None]):
         self._log("VRAM cleared.")
         self._refresh_all()
 
+    def action_quit(self) -> None:
+        """Sulje sovellus – tarkista tallentamattomat muutokset ensin (Ctrl+Q).
+
+        Jos editorissa tai levyllä on tallentamattomia muutoksia, näytetään
+        vahvistusikkuna:
+          - KYLLÄ: tallennetaan rastitetut kohteet, sitten poistutaan
+          - EI:    poistutaan tallentamatta
+          - PERUUTA: palataan sovellukseen
+
+        Jos käyttäjä haluaa tallentaa mutta kohteelle ei ole tiedostonimeä,
+        poistuminen keskeytetään ja virhe näytetään dialogissa.
+        """
+        if not self._editor_dirty and not self._disk_dirty:
+            self.exit()
+            return
+
+        def _on_confirm(result: tuple) -> None:
+            choice, save_editor, save_disk = result
+
+            if choice == "cancel":
+                return  # Palataan takaisin sovellukseen
+
+            if choice == "yes":
+                # Tallenna pyydetyt kohteet (tiedostonimet on jo tarkistettu dialogissa)
+                if save_editor and self.current_file:
+                    self._do_save(self.current_file)
+                if save_disk and self.current_disk_file:
+                    try:
+                        self.machine.storage.save_to_file(self.current_disk_file)
+                        self._disk_dirty = False
+                        self._update_disk_title()
+                        self._log(
+                            f"[green]Disk saved to {self.current_disk_file.name}[/green]"
+                        )
+                    except Exception as e:
+                        self._log(f"[red]Levyn tallennus epäonnistui: {e}[/red]")
+                        return  # Älä poistu jos tallennus epäonnistui
+
+            self.exit()
+
+        self.push_screen(
+            SaveConfirmDialog(
+                editor_dirty=self._editor_dirty,
+                disk_dirty=self._disk_dirty,
+                editor_has_file=self.current_file is not None,
+                disk_has_file=self.current_disk_file is not None,
+            ),
+            callback=_on_confirm,
+        )
+
     def action_show_help(self) -> None:
         """Näytä ohje-teksti lokissa (F1).
 
@@ -932,24 +1153,37 @@ class KCPU16TUI(App[None]):
         Tyhjentää editorin, nollaa tiedostopolun ja assembly-tilan.
         Ei resetoi konetta - kone jää edelliseen tilaan.
         """
+        self._suppress_editor_dirty = True
         self.query_one("#editor", TextArea).text = ""
         self.current_file = None
         self.is_assembled = False
         self.addr_to_line = {}
-        self._update_editor_title()
         self._log("New document.")
+        self.call_after_refresh(self._finish_editor_load)
 
     def _update_editor_title(self) -> None:
-        """Päivitä Editor-paneelin alaotsikko näyttämään nykyinen tiedostonimi."""
+        """Päivitä Editor-paneelin alaotsikko näyttämään nykyinen tiedostonimi.
+
+        Näyttää tähden (*) nimen perässä kun editorissa on tallentamattomia muutoksia.
+        """
         pane = self.query_one("#editor-pane")
-        pane.border_subtitle = self.current_file.name if self.current_file else ""
+        name = self.current_file.name if self.current_file else ""
+        if self._editor_dirty:
+            pane.border_subtitle = f"{name} *" if name else "*"
+        else:
+            pane.border_subtitle = name
 
     def _update_disk_title(self) -> None:
-        """Päivitä Disassembly-paneelin alaotsikko näyttämään nykyinen levytiedosto."""
+        """Päivitä Disassembly-paneelin alaotsikko näyttämään nykyinen levytiedosto.
+
+        Näyttää tähden (*) nimen perässä kun levyllä on tallentamattomia muutoksia.
+        """
         tabs = self.query_one("#disasm-tabs")
-        tabs.border_subtitle = (
-            self.current_disk_file.name if self.current_disk_file else ""
-        )
+        name = self.current_disk_file.name if self.current_disk_file else ""
+        if self._disk_dirty:
+            tabs.border_subtitle = f"{name} *" if name else "*"
+        else:
+            tabs.border_subtitle = name
 
     def _do_open(self, path: Path) -> None:
         """Avaa tiedosto ja lataa sen sisältö editoriin.
@@ -960,13 +1194,21 @@ class KCPU16TUI(App[None]):
         """
         try:
             content = path.read_text(encoding="utf-8")
+            self._suppress_editor_dirty = True
             self.query_one("#editor", TextArea).text = content
             self.current_file = path
             self.is_assembled = False
-            self._update_editor_title()
             self._log(f"Opened: [bold]{path.name}[/bold] ({len(content)} chars)")
+            # Tyhjennä dirty-lippu kun kaikki odottavat Changed-tapahtumat on käsitelty
+            self.call_after_refresh(self._finish_editor_load)
         except Exception as e:
             self._log(f"[red]Error: {e}[/red]")
+
+    def _finish_editor_load(self) -> None:
+        """Tyhjennä editorin dirty-lippu latauksen jälkeen."""
+        self._suppress_editor_dirty = False
+        self._editor_dirty = False
+        self._update_editor_title()
 
     def _do_save(self, path: Path) -> None:
         """Tallenna editorin sisältö tiedostoon.
@@ -979,6 +1221,7 @@ class KCPU16TUI(App[None]):
             content = self.query_one("#editor", TextArea).text
             path.write_text(content, encoding="utf-8")
             self.current_file = path
+            self._editor_dirty = False
             self._update_editor_title()
             self._log(f"Saved: [bold]{path.name}[/bold]")
         except Exception as e:
@@ -1027,6 +1270,8 @@ class KCPU16TUI(App[None]):
                 # Täytä loppublokki nollilla
                 code = (code + [0] * blk_size)[:blk_size]
                 self.machine.storage.write_block(blk, code)
+                self._disk_dirty = True
+                self._update_disk_title()
                 self._log(
                     f"[cyan].diskblock: {total_words} sanaa tallennettu "
                     f"levyblokkiin {blk}.[/cyan]"
@@ -1897,6 +2142,8 @@ class KCPU16TUI(App[None]):
             if len(args) < 2:
                 if self.current_disk_file:
                     self.machine.storage.save_to_file(self.current_disk_file)
+                    self._disk_dirty = False
+                    self._update_disk_title()
                     return CommandResult(
                         True,
                         f"[green]Disk saved to {self.current_disk_file.name}[/green]",
@@ -1912,6 +2159,7 @@ class KCPU16TUI(App[None]):
                 path = self.storage_dir / path
             self.machine.storage.save_to_file(path)
             self.current_disk_file = path
+            self._disk_dirty = False
             self._update_disk_title()
             return CommandResult(True, f"[green]Disk saved to {path.name}[/green]")
         block_idx = int(args[0], 0)
@@ -1929,6 +2177,8 @@ class KCPU16TUI(App[None]):
         value = int(args[2], 0)
         word_addr = block * self.machine.storage.block_size_words + offset
         self.machine.storage.write_word(word_addr, value)
+        self._disk_dirty = True
+        self._update_disk_title()
         return CommandResult(
             True,
             f"[green]Block {block} offset {offset} = 0x{value & WORD_MASK:04X}[/green]",
@@ -1943,6 +2193,8 @@ class KCPU16TUI(App[None]):
         bsw = self.machine.storage.block_size_words
         data = [value] * bsw
         self.machine.storage.write_block(block_idx, data)
+        self._disk_dirty = True
+        self._update_disk_title()
         return CommandResult(
             True,
             f"[green]Block {block_idx} filled with 0x{value:04X}[/green]",
@@ -1957,6 +2209,8 @@ class KCPU16TUI(App[None]):
         bsw = self.machine.storage.block_size_words
         data = [self.machine.memory.read(addr + i) for i in range(bsw)]
         self.machine.storage.write_block(block_idx, data)
+        self._disk_dirty = True
+        self._update_disk_title()
         return CommandResult(
             True,
             f"[green]Mem 0x{addr:04X}–0x{(addr + bsw - 1) & WORD_MASK:04X} "
@@ -1996,6 +2250,8 @@ class KCPU16TUI(App[None]):
             self.is_assembled = False
             self.addr_to_line = {}
             self.dbg.snapshot_registers(self.machine.dump_registers())
+            self._disk_dirty = False
+            self._update_disk_title()
             return CommandResult(
                 True, "[green]Deep reset (memory + CPU + storage).[/green]"
             )
