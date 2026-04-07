@@ -413,7 +413,8 @@ yhteenlasku:
     ADD   R0, R1        ; R0 = 42
 
     POP   R1            ; palauta R1 (poistaa b:n tallennuksen)
-    POP   R3            ; poista a:n tallenne (tulos on jo R0:ssa)
+    POP   R3            ; pinosta poistetaan a:n tallenne; ei R0:aan,
+                        ; koska R0 sisältää jo tuloksen (42)
     RET                 ; R0 = 42
 ```
 
