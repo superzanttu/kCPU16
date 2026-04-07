@@ -345,6 +345,79 @@ mysub:
 .expect_flag Z, 0       ; Tarkista että Z-lippu = 0
 ```
 
+## 7.8 FP-rekisterin käyttö (pinokehys)
+
+### Juurisyy
+
+SP (Stack Pointer) muuttuu jokaisen `PUSH`-, `POP`-, `CALL`- ja `RET`-käskyn
+yhteydessä. Jos aliohjelmassa yritettäisiin hakea pinoon tallennettuja
+paikallismuuttujia SP:n avulla, jokainen uusi pinooperaatio muuttaisi
+tarvittavan siirtymän — erityisesti sisäkkäisissä kutsuissa kirjanpito
+muuttuisi nopeasti virhealttiiksi.
+
+**FP (Frame Pointer) ratkaisee tämän:** se asetetaan kerran aliohjelman alussa
+(`CPY FP, SP`) kiinteäksi viittaukseksi pinokehyksen pohjalle, eikä sen arvo
+muutu koko aliohjelman suorituksen aikana. Näin `[FP+1]`, `[FP+2]` jne.
+osoittavat aina samoihin muistipaikkoihin riippumatta siitä, minne SP on
+sittemmin siirtynyt.
+
+### Pinokehyksen rakenne
+
+Kun aliohjelma kutsutaan ja se tallentaa argumentit pinoon ennen `CPY FP, SP`
+-käskyä, kehyksen rakenne on seuraava:
+
+```
+  osoite       sisältö
+  ──────────────────────
+  [FP+3]   paluuosoite  ← CALL tallentaa tämän
+  [FP+2]   argumentti a ← PUSH R0
+  [FP+1]   argumentti b ← PUSH R1
+  [FP]     SP:n huippu  ← CPY FP, SP (kehyksen pohja)
+```
+
+Koska FP on kiinnitetty, `[FP+2]` tarkoittaa aina argumenttia `a` — vaikka SP
+myöhemmin liikkuisi sisäkkäisten kutsujen tai muiden `PUSH`/`POP`-operaatioiden
+vuoksi.
+
+### Esimerkki
+
+```asm
+.origin 0x0200
+
+; Pääohjelma: laske 10 + 32
+main:
+    LOAD  R0, 10
+    LOAD  R1, 32
+    CALL  yhteenlasku       ; kutsu aliohjelma; paluuarvo R0:ssa
+    HALT                    ; R0 = 42
+
+; Aliohjelma yhteenlasku
+;   Sisääntulo : R0 = a, R1 = b
+;   Paluuarvo  : R0 = a + b
+;
+; Pinon tila CPY FP, SP -käskyn jälkeen:
+;   [FP+3] = paluuosoite    (CALL tallensi)
+;   [FP+2] = a = 10         (PUSH R0)
+;   [FP+1] = b = 32         (PUSH R1)
+;   [FP]   = kehyksen pohja (CPY FP, SP)
+;
+; SP voi myöhemmin muuttua (esim. sisäkkäisessä CALL:ssa),
+; mutta FP pysyy kiinteänä ja [FP+1]/[FP+2] toimivat aina.
+yhteenlasku:
+    PUSH  R0            ; tallenna a pinoon → [SP] = 10, SP--
+    PUSH  R1            ; tallenna b pinoon → [SP] = 32, SP--
+    CPY   FP, SP        ; kiinnitä FP kehyksen pohjalle
+
+    LOAD  R0, [FP+2]    ; R0 = a = 10  (vakio-offset, vaikka SP muuttuisi)
+    LOAD  R1, [FP+1]    ; R1 = b = 32
+    ADD   R0, R1        ; R0 = 42
+
+    POP   R1            ; palauta R1 (poistaa b:n tallennuksen)
+    POP   R3            ; pinosta poistetaan a:n tallenne; ei R0:aan,
+                        ; koska R0 sisältää jo tuloksen (42)
+    RET                 ; R0 = 42
+```
+
 ---
 
 Kaikki esimerkkiohjelmat löytyvät hakemistosta `kcpu16/code/`.
