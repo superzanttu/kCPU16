@@ -171,6 +171,11 @@ _REG_SECOND = {
     "DWRITE",
 }
 
+# Hyppy/kutsukäskyt joissa viimeinen operandi on kohdeosoite (labelinimi)
+_BRANCH_MNEMONICS: frozenset[str] = frozenset(
+    {"JUMP", "CALL", "JZ", "JNZ", "JLT", "JGT", "JLE", "JGE"}
+)
+
 
 @dataclass
 class CommandResult:
@@ -1196,9 +1201,7 @@ class KCPU16TUI(App[None]):
             {"JUMP", "CALL", "JZ", "JNZ", "JLT", "JGT", "JLE", "JGE"}
         )
         # osoite → lähdekoodi-rivi (kommentit mukaan, ei trimmattuna)
-        self._asm_addr_to_src = {
-            addr: src for src, addr in self.assembler.source_map
-        }
+        self._asm_addr_to_src = {addr: src for src, addr in self.assembler.source_map}
         # osoite → labelinimi (vain käyttäjän labelit, ei arch-symbolit)
         arch_addrs: set[int] = set(ARCH_SYMBOLS.values())
         self._asm_addr_to_label = {
@@ -1222,9 +1225,7 @@ class KCPU16TUI(App[None]):
                     and i + op_count < len(words)
                 ):
                     target = words[i + op_count] & WORD_MASK
-                    jump_targets.setdefault(target, []).append(
-                        f"{mnemonic}@{pc:04X}"
-                    )
+                    jump_targets.setdefault(target, []).append(f"{mnemonic}@{pc:04X}")
                 i += 1 + op_count
                 pc += 1 + op_count
         self._asm_jump_targets = jump_targets
@@ -1507,7 +1508,8 @@ class KCPU16TUI(App[None]):
                     f" [bold]{label}[/bold]: \u2190 {srcs}[/dim]"
                 )
 
-            # Hex bytes column (max 14 chars)
+            # Hex bytes column — pad to fixed width
+            # Max instruction = 3 words = "XXXX XXXX XXXX" = 14 chars
             hex_str = " ".join(f"{w:04X}" for w in instr_words)
 
             # Rich-colored mnemonic + operands
@@ -1516,10 +1518,25 @@ class KCPU16TUI(App[None]):
             # Source comment (instruction text only, strip inline comments)
             src_line = self._asm_addr_to_src.get(addr, "")
             src_clean = src_line.split(";", 1)[0].strip()
-            src_part = f"  [dim]; {src_clean}[/dim]" if src_clean else ""
+
+            # Pad the disasm column to a fixed VISUAL width so the comment
+            # column stays aligned. Rich markup tags add invisible characters;
+            # also \[ and \] are Rich literal-bracket escapes that each render
+            # as a single character, so strip tags first then convert escapes.
+            DISASM_VIS_WIDTH = 26
+            _stripped = (
+                _RICH_MARKUP_RE.sub("", disasm_rich)
+                .replace("\\[", "[")
+                .replace("\\]", "]")
+            )
+            disasm_visible_len = len(_stripped)
+            disasm_pad = " " * max(0, DISASM_VIS_WIDTH - disasm_visible_len)
+            src_part = f"{disasm_pad}  [dim]; {src_clean}[/dim]" if src_clean else ""
 
             # BP and PC markers
-            bp_marker = "[bold red]\u25cf[/] " if self.dbg.has_breakpoint(addr) else "  "
+            bp_marker = (
+                "[bold red]\u25cf[/] " if self.dbg.has_breakpoint(addr) else "  "
+            )
 
             if addr == pc:
                 lines.append(
@@ -1627,7 +1644,14 @@ class KCPU16TUI(App[None]):
             except ValueError:
                 result.append(op)
                 continue
-            if (i == 0 and mnemonic in _REG_FIRST) or (
+            # Hypyn kohdeosoite → labelinimi jos tunnetaan
+            if mnemonic in _BRANCH_MNEMONICS and i == len(ops) - 1:
+                label = self._asm_addr_to_label.get(val)
+                if label:
+                    result.append(f"[bold magenta]{label}[/]")
+                else:
+                    result.append(f"[green]0x{val:04X}[/]")
+            elif (i == 0 and mnemonic in _REG_FIRST) or (
                 i == 1 and mnemonic in _REG_SECOND
             ):
                 name = REG_NAMES.get(val, f"?{val}")
