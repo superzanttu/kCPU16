@@ -180,17 +180,18 @@ class KCPU16Machine:
             self.memory.load_words(seg_addr, seg_words)
         self.regs.pc = segments[0][0]
 
-    def run(self, max_cycles: int = 1000000) -> None:
+    def run(self, max_cycles: int | None = None) -> None:
         """
         Aja ohjelmaa kunnes pysaytysehto tayttyy.
 
         Pysaytysehdot:
         - HALT-kasky suoritettu
         - EXIT-kasky suoritettu
-        - max_cycles-raja saavutettu
+        - max_cycles-raja saavutettu (jos annettu)
 
         Args:
-            max_cycles: Maksimi kaskyjen maara (esto ikuisille silmukoille)
+            max_cycles: Maksimi kaskyjen maara.
+                        None (oletus) = ei rajaa, aja kunnes HALT tai EXIT.
         """
         self.cpu.run(max_cycles=max_cycles)
 
@@ -220,12 +221,25 @@ class KCPU16Machine:
             "R1": self.regs.r1,
             "R2": self.regs.r2,
             "R3": self.regs.r3,
+            "R4": self.regs.r4,
+            "R5": self.regs.r5,
+            "R6": self.regs.r6,
+            "R7": self.regs.r7,
+            "R8": self.regs.r8,
+            "R9": self.regs.r9,
+            "R10": self.regs.r10,
+            "R11": self.regs.r11,
+            "R12": self.regs.r12,
+            "R13": self.regs.r13,
+            "R14": self.regs.r14,
+            "R15": self.regs.r15,
             "FP": self.regs.fp,
             "SP": self.regs.sp,
             "PC": self.regs.pc,
             "SR": self.regs.sr,
             "MPR": self.regs.mpr,
             "TMR": self.regs.tmr,
+            "CTMR": self.regs.ctmr,
         }
 
     @property

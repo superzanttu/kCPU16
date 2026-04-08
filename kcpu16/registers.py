@@ -32,6 +32,7 @@ from dataclasses import dataclass, field
 
 from .constants import (
     BOOT_RAM_START,
+    DEFAULT_CLOCK_INT_INTERVAL,
     DEFAULT_MPR,
     DEFAULT_TIMER_INTERVAL,
     KERNEL_STACK_END,
@@ -65,24 +66,41 @@ class RegisterFile:
         tmr: Timer Register - ajastinkeskeytyksen vali kaskyina
     """
 
-    # Yleiskayttoiset rekisterit (alustetaan nollaksi)
+    # Yleiskayttoiset rekisterit R0-R15 (alustetaan nollaksi)
     r0: int = 0
     r1: int = 0
     r2: int = 0
     r3: int = 0
+    r4: int = 0
+    r5: int = 0
+    r6: int = 0
+    r7: int = 0
+    r8: int = 0
+    r9: int = 0
+    r10: int = 0
+    r11: int = 0
+    r12: int = 0
+    r13: int = 0
+    r14: int = 0
+    r15: int = 0
 
-    # Erikoisrekisterit
-    fp: int = 0  # Frame Pointer (ei kaytos kaynnistyksessa)
-    sp: int = KERNEL_STACK_END  # Stack Pointer alkaa muistin lopusta
+    # Erikoisrekisterit (indeksit 16 ja 17)
+    fp: int = 0  # Frame Pointer (indeksi 16)
+    sp: int = KERNEL_STACK_END  # Stack Pointer alkaa muistin lopusta (indeksi 17)
     pc: int = BOOT_RAM_START  # Program Counter alkaa bootloader-alueelta
     sr: int = 0  # Status Register (liput nollaa)
 
     # Jarjestelmarekisterit
     mpr: int = DEFAULT_MPR  # Memory Protection Register
-    tmr: int = DEFAULT_TIMER_INTERVAL  # Timer Register
+    tmr: int = DEFAULT_TIMER_INTERVAL  # Timer Register (kaskyvalikeskeytys)
+    ctmr: int = DEFAULT_CLOCK_INT_INTERVAL  # Clock Timer Register (ms-vali, 0=pois)
 
     # Sisainen: rekisterinimien lista (ei alusteta ulkoisesti)
-    _gpr_names: tuple[str, ...] = field(default=("R0", "R1", "R2", "R3"), init=False)
+    _gpr_names: tuple[str, ...] = field(
+        default=("R0","R1","R2","R3","R4","R5","R6","R7",
+                 "R8","R9","R10","R11","R12","R13","R14","R15"),
+        init=False,
+    )
 
     def reset(self) -> None:
         """
@@ -98,12 +116,25 @@ class RegisterFile:
         self.r1 = 0
         self.r2 = 0
         self.r3 = 0
+        self.r4 = 0
+        self.r5 = 0
+        self.r6 = 0
+        self.r7 = 0
+        self.r8 = 0
+        self.r9 = 0
+        self.r10 = 0
+        self.r11 = 0
+        self.r12 = 0
+        self.r13 = 0
+        self.r14 = 0
+        self.r15 = 0
         self.fp = 0
         self.sp = KERNEL_STACK_END
         self.pc = BOOT_RAM_START
         self.sr = 0
         self.mpr = DEFAULT_MPR
         self.tmr = DEFAULT_TIMER_INTERVAL
+        self.ctmr = DEFAULT_CLOCK_INT_INTERVAL
         # Aseta Kernel Mode (P=1) ja deaktivoi keskeytykset (I=0)
         self.set_flag(SR_FLAG_P, MODE_KERNEL)
         self.set_flag(SR_FLAG_I, 0)

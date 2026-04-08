@@ -20,7 +20,7 @@ Bitit 8-10:   Edusta-väri (FG, 3 bittiä = 8 väriä)
     3 = Keltainen   7 = Valkoinen
 Bitit 11-13:  Tausta-väri (BG, 3 bittiä = 8 väriä, sama paletti)
 Bitti 14:     Lihavointi (1 = paalla)
-Bitti 15:     Vilkkuminen (1 = paalla)
+Bitti 15:     Varattu (kirjoittaminen sallittu, lukeminen ignorataan)
 
 Oletusarvo: pelkkä ASCII-merkki (esim. 0x0041 = 'A') näytetään
 valkoisena tekstinä mustalla pohjalla (FG=0 tulkitaan valkoisena
@@ -60,7 +60,6 @@ from ..constants import (
     VRAM_BG_MASK,
     VRAM_BG_SHIFT,
     VRAM_ATTR_BOLD,
-    VRAM_ATTR_BLINK,
 )
 from ..memory import Memory
 
@@ -119,7 +118,7 @@ class ScreenDevice:
 
         return "\n".join(lines)
 
-    def extract_char_with_attrs(self, word: int) -> tuple[str, int, int, bool, bool]:
+    def extract_char_with_attrs(self, word: int) -> tuple[str, int, int, bool]:
         """
         Erota VRAM-sanasta merkki, värit ja attribuutit.
 
@@ -127,19 +126,17 @@ class ScreenDevice:
             word: 16-bittinen VRAM-sana
 
         Returns:
-            Tuple: (merkki, fg_väri, bg_väri, bold, blink)
+            Tuple: (merkki, fg_väri, bg_väri, bold)
                 - merkki: str (ASCII-merkki)
                 - fg_väri: int (0-7)
                 - bg_väri: int (0-7)
                 - bold: bool
-                - blink: bool
         """
         ch = chr(word & VRAM_CHAR_MASK)
         fg = (word & VRAM_FG_MASK) >> VRAM_FG_SHIFT
         bg = (word & VRAM_BG_MASK) >> VRAM_BG_SHIFT
         bold = bool(word & VRAM_ATTR_BOLD)
-        blink = bool(word & VRAM_ATTR_BLINK)
-        return ch, fg, bg, bold, blink
+        return ch, fg, bg, bold
 
     def render_with_rich_colors(self, memory: Memory) -> str:
         """
@@ -164,7 +161,7 @@ class ScreenDevice:
 
             for _ in range(self.cols):
                 word = memory.read(addr)
-                ch, fg, bg, bold, blink = self.extract_char_with_attrs(word)
+                ch, fg, bg, bold = self.extract_char_with_attrs(word)
 
                 if not (32 <= ord(ch) < 127):
                     ch = " "

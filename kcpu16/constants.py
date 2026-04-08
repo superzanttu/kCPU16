@@ -24,8 +24,8 @@ WORD_SIGN_BIT = 0x8000
 # Sanan bittileveysarvo (SHL/SHR-laskuissa)
 WORD_BITS = 16
 
-# 3-bitin rekisteriindeksimaski (rekisterit koodataan 3 alimmalla bitilla)
-REG_IDX_MASK = 0x7
+# 5-bitin rekisteriindeksimaski (kattaa R0-R15=0-15, FP=16, SP=17)
+REG_IDX_MASK = 0x1F
 
 # Kokonaismuistiavaruus sanoina (2^16 = 65536 sanaa)
 MEMORY_WORDS = 0x10000
@@ -45,16 +45,50 @@ INT_MEMORY_ACCESS_FAULT = 5  # User-tila yrittaa lukea suojattua muistia
 INT_KEYBOARD = 6  # Nappaimiston laitteistokeskeytys
 INT_TIMER = 7  # Ajastinkeskeytys (TMR-rekisterin maarittama)
 INT_PROCESS_EXIT = 8  # Prosessin hallittu lopetus (EXIT-kasky)
+INT_CLOCK = 9  # Kellokeskeytys (CTMR-rekisterin ms-vali)
 
 # Keskeytysvektorit alkavat muistin alusta
 INT_VECTOR_BASE = 0x0000
-# Tuettujen keskeytysten maara
-INT_VECTOR_COUNT = 9
+# Varattu tila vektoritaulukolle (16 paikkaa, $0000-$000F)
+# Tällä hetkellä käytössä 9 (0-8), loput 7 varattuna tulevaisuutta varten
+INT_VECTOR_COUNT = 16
 
 # =============================================================================
 # MUISTIALUEET (MEMORY MAP)
 # Muistiavaruus 0x0000-0xFFFF on jaettu eri tarkoituksiin.
 # =============================================================================
+
+# =============================================================================
+# KELLOKELLO-MMIO (SYSTEM CLOCK MMIO)
+# Osoitteet $0010-$001F ovat vain luettavia MMIO-rekisterejä.
+# Lukeminen palauttaa reaaliaikaisen järjestelmäkellon arvon.
+# Kirjoittaminen $001B:hen (CLOCK_INT_INTERVAL) säätää kellokeskeytyksen välin.
+# =============================================================================
+
+CLOCK_MMIO_START = 0x0010    # MMIO-alueen alku
+CLOCK_MMIO_END = 0x001F      # MMIO-alueen loppu
+
+CLOCK_YEAR = 0x0010          # Vuosi (esim. 2026)
+CLOCK_MONTH = 0x0011         # Kuukausi (1-12)
+CLOCK_DAY = 0x0012           # Päivä (1-31)
+CLOCK_HOUR = 0x0013          # Tunti (0-23)
+CLOCK_MINUTE = 0x0014        # Minuutti (0-59)
+CLOCK_SECOND = 0x0015        # Sekunti (0-59)
+CLOCK_MILLIS = 0x0016        # Millisekunti (0-999)
+
+# 64-bittinen sekuntilaskuri (nousee yhden kerran sekunnissa, pyörähtää 2^64:ssä)
+# Tallennettu neljään 16-bittiseen sanaan, MSW ensin
+UPTIME_W3 = 0x0017           # Laskurin bitit 48-63 (korkein)
+UPTIME_W2 = 0x0018           # Laskurin bitit 32-47
+UPTIME_W1 = 0x0019           # Laskurin bitit 16-31
+UPTIME_W0 = 0x001A           # Laskurin bitit  0-15 (matalin)
+
+# Kellokeskeytyksen väli millisekunteina (0 = pois päältä)
+# Asetetaan SCTMR-käskyllä; INT_CLOCK (9) laukeaa kun I=1 ja aika täyttynyt
+CLOCK_INT_INTERVAL = 0x001B  # CTMR MMIO-osoite (kirjoitus asettaa välin)
+
+# Oletusarvo CTMR:lle (0 = kellokeskeytys pois)
+DEFAULT_CLOCK_INT_INTERVAL = 0
 
 # Boot-alue: Bootloader kopioidaan tallennuslaitteelta tanne kaynnistyksessa
 BOOT_RAM_START = 0x0100  # Ensimmainen bootloaderin osoite RAM:ssa
@@ -64,9 +98,10 @@ BOOT_RAM_END = 0x01FF  # Viimeinen bootloaderin osoite RAM:ssa
 # Jokainen sana = merkki (bitit 0-7) + attribuutit (bitit 8-15)
 # SANAN RAKENNE:
 #   Bitit 0-7:   ASCII-merkki
-#   Bitit 8-11:  Attribuutit (lihavointi, kursiivi, vilkku, alleviivaus, yliviivaus)
-#   Bitit 12-14: Edusta-väri (FG, 0-7, 3 bittiä)
-#   Bitit 15:    Tausta-väri (BG, 1-bittinen ensin, sitten laajennetaan)
+#   Bitit 8-10:  Edusta-väri (FG, 3 bittiä = 8 väriä)
+#   Bitit 11-13: Tausta-väri (BG, 3 bittiä = 8 väriä)
+#   Bitti 14:    Lihavointi
+#   Bitti 15:    Varattu (0)
 VRAM_START = 0xF800  # Nayttomuistin alkuosoite (vasen ylanurkka)
 VRAM_END = 0xFF7F  # Nayttomuistin loppuosoite (80x24 = 1920 sanaa)
 VRAM_WORDS = 1920  # 80 cols x 24 rows
@@ -89,9 +124,9 @@ VRAM_FG_SHIFT = 8
 VRAM_BG_MASK = 0x3800  # Bitit 11-13: Tausta-väri (BG, 3 bittiä = 8 väriä)
 VRAM_BG_SHIFT = 11
 
-# Attribuutit (Bitit 14-15)
+# Attribuutit
 VRAM_ATTR_BOLD = 0x4000  # Bitti 14: Lihavointi
-VRAM_ATTR_BLINK = 0x8000  # Bitti 15: Vilkkuminen
+# Bitti 15 on varattu — kirjoittaminen sallittu, lukeminen ignorataan
 
 # Värikoodit (0-7 tai 0-1 taustalle)
 COLOR_BLACK = 0
@@ -209,7 +244,6 @@ ARCH_SYMBOLS: dict[str, int] = {
     "VRAM_BG_MASK": VRAM_BG_MASK,  # Tausta-värikenttä maski (0x3800)
     "VRAM_BG_SHIFT": VRAM_BG_SHIFT,  # Tausta-värikentän shift (11)
     "VRAM_ATTR_BOLD": VRAM_ATTR_BOLD,  # Lihavointi-attribuutti (0x4000)
-    "VRAM_ATTR_BLINK": VRAM_ATTR_BLINK,  # Vilkkumis-attribuutti (0x8000)
     # ---- Värikoodit --------------------------------------------------
     "COLOR_BLACK": COLOR_BLACK,  # Musta  (0)
     "COLOR_RED": COLOR_RED,  # Punainen (1)
@@ -224,7 +258,7 @@ ARCH_SYMBOLS: dict[str, int] = {
     "KERNEL_STACK_END": KERNEL_STACK_END,  # Kernelin pinon loppu (0xFFFF)
     # ---- Keskeytysvektorit -------------------------------------------
     "INT_VECTOR_BASE": INT_VECTOR_BASE,  # Vektorialueen alku (0x0000)
-    "INT_VECTOR_COUNT": INT_VECTOR_COUNT,  # Tuettujen vektorien määrä (9)
+    "INT_VECTOR_COUNT": INT_VECTOR_COUNT,  # Varattu vektoritaulukko (16)
     "INT_DIV_ZERO": INT_DIV_ZERO,  # Jako nollalla (0)
     "INT_INVALID_OPCODE": INT_INVALID_OPCODE,  # Tuntematon opcode (1)
     "INT_STACK_OVERFLOW": INT_STACK_OVERFLOW,  # Pinon ylivuoto (2)
@@ -234,6 +268,22 @@ ARCH_SYMBOLS: dict[str, int] = {
     "INT_KEYBOARD": INT_KEYBOARD,  # Näppäimistökeskeytys (6)
     "INT_TIMER": INT_TIMER,  # Ajastinkeskeytys (7)
     "INT_PROCESS_EXIT": INT_PROCESS_EXIT,  # Prosessin lopetus (8)
+    "INT_CLOCK": INT_CLOCK,  # Kellokeskeytys (9)
+    # ---- Kellon MMIO-osoitteet ($0010-$001F) -------------------------
+    "CLOCK_MMIO_START": CLOCK_MMIO_START,  # MMIO-alueen alku  (0x0010)
+    "CLOCK_MMIO_END": CLOCK_MMIO_END,  # MMIO-alueen loppu (0x001F)
+    "CLOCK_YEAR": CLOCK_YEAR,  # Vuosi MMIO   (0x0010)
+    "CLOCK_MONTH": CLOCK_MONTH,  # Kuukausi MMIO (0x0011)
+    "CLOCK_DAY": CLOCK_DAY,  # Päivä MMIO   (0x0012)
+    "CLOCK_HOUR": CLOCK_HOUR,  # Tunti MMIO   (0x0013)
+    "CLOCK_MINUTE": CLOCK_MINUTE,  # Minuutti MMIO (0x0014)
+    "CLOCK_SECOND": CLOCK_SECOND,  # Sekunti MMIO  (0x0015)
+    "CLOCK_MILLIS": CLOCK_MILLIS,  # Millisekunti MMIO (0x0016)
+    "UPTIME_W3": UPTIME_W3,  # Uptime bitit 48-63 (0x0017)
+    "UPTIME_W2": UPTIME_W2,  # Uptime bitit 32-47 (0x0018)
+    "UPTIME_W1": UPTIME_W1,  # Uptime bitit 16-31 (0x0019)
+    "UPTIME_W0": UPTIME_W0,  # Uptime bitit  0-15 (0x001A)
+    "CLOCK_INT_INTERVAL": CLOCK_INT_INTERVAL,  # CTMR MMIO (0x001B)
     # ---- Tallennuslaite ----------------------------------------------
     "STORAGE_BLOCK_SIZE": STORAGE_BLOCK_SIZE,  # Blokin koko sanoina (256)
     "STORAGE_BLOCK_COUNT": STORAGE_BLOCK_COUNT,  # Blokkien lukumäärä (256)

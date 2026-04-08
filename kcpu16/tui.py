@@ -49,6 +49,7 @@ Layout:
 from __future__ import annotations
 
 import re
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -59,6 +60,8 @@ from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.screen import ModalScreen
+from textual.worker import get_current_worker
+from textual._work_decorator import work
 from textual.widgets import (
     Button,
     Checkbox,
@@ -71,8 +74,8 @@ from textual.widgets import (
 
 from .assembler import Assembler, MNEMONIC_TO_OPCODE
 from .constants import (
+    ARCH_SYMBOLS,
     BOOT_RAM_START,
-    DEFAULT_RUN_CYCLES,
     SR_FLAG_C,
     SR_FLAG_I,
     SR_FLAG_N,
@@ -82,7 +85,7 @@ from .constants import (
     WORD_MASK,
 )
 from .debugger import DebugState
-from .disassembler import Disassembler
+from .disassembler import Disassembler, REVERSE_TABLE
 
 from .instruction import OPCODE_TABLE
 from .machine import KCPU16Machine
@@ -101,7 +104,26 @@ from . import __version__
 # onko numero rekisteri-indeksi vai välitön arvo.
 # ---------------------------------------------------------------------------
 
-REG_NAMES = {0: "R0", 1: "R1", 2: "R2", 3: "R3", 4: "FP", 5: "SP"}
+REG_NAMES = {
+    0: "R0",
+    1: "R1",
+    2: "R2",
+    3: "R3",
+    4: "R4",
+    5: "R5",
+    6: "R6",
+    7: "R7",
+    8: "R8",
+    9: "R9",
+    10: "R10",
+    11: "R11",
+    12: "R12",
+    13: "R13",
+    14: "R14",
+    15: "R15",
+    16: "FP",
+    17: "SP",
+}
 
 # Käskyt joissa 1. operandi on rekisteri-indeksi (esim. LOAD R0, ...)
 _REG_FIRST = {
@@ -124,6 +146,7 @@ _REG_FIRST = {
     "SWSP",
     "SMPR",
     "STMR",
+    "SCTMR",
     "DREAD",
     "DWRITE",
     "KGET",
@@ -147,6 +170,11 @@ _REG_SECOND = {
     "DREAD",
     "DWRITE",
 }
+
+# Hyppy/kutsukäskyt joissa viimeinen operandi on kohdeosoite (labelinimi)
+_BRANCH_MNEMONICS: frozenset[str] = frozenset(
+    {"JUMP", "CALL", "JZ", "JNZ", "JLT", "JGT", "JLE", "JGE"}
+)
 
 
 @dataclass
@@ -488,6 +516,13 @@ class KCPU16TUI(App[None]):
         width: 1;
         height: 3;
     }
+    #run-mode-label {
+        min-width: 14;
+        height: 3;
+        padding: 0 1;
+        content-align: center middle;
+        color: $text-muted;
+    }
 
     /* ---- Content area ---- */
     #content-area {
@@ -536,6 +571,7 @@ class KCPU16TUI(App[None]):
         padding: 0 1;
     }
     #output-pane {
+        width: 1fr;
         height: 1fr;
         border: solid $primary-darken-2;
         border-title-color: $accent;
@@ -550,21 +586,24 @@ class KCPU16TUI(App[None]):
         width: 1fr;
     }
 
-    /* ---- Bottom bar: Flags+CPU | Registers ---- */
+    /* ---- Bottom bar: Flags | Registers | Output ---- */
     #bottom-bar {
-        height: auto;
-        max-height: 14;
+        height: 1fr;
     }
     #flags-pane {
         width: 30;
+        height: 1fr;
         border: solid $warning-darken-1;
         border-title-color: $accent;
         padding: 0 1;
     }
     #regs-pane {
+        width: 40;
+        height: 1fr;
         border: solid $warning-darken-1;
         border-title-color: $accent;
         padding: 0 1;
+        overflow-y: auto;
     }
     """
 
@@ -574,7 +613,9 @@ class KCPU16TUI(App[None]):
     BINDINGS = [
         Binding("ctrl+q", "quit", "Quit", priority=True),
         Binding("f2", "toggle_breakpoint", "BP F2", priority=True),
-        Binding("f5", "run_program", "Run F5", priority=True),
+        Binding("f5", "run_full_speed", "Full F5", priority=True),
+        Binding("f6", "run_slow_speed", "Slow F6", priority=True),
+        Binding("f8", "stop_program", "Stop F8", priority=True),
         Binding("f7", "step_once", "Step F7", priority=True),
         Binding("f10", "step_once", "Step", priority=True),
         Binding("ctrl+r", "reset_machine", "Reset", priority=True),
@@ -620,6 +661,11 @@ class KCPU16TUI(App[None]):
         self._output_buffer: list[str] = []
         self._disk_dirty: bool = False
         self._watched_mtime: int | None = None  # st_mtime_ns (kokonaisluku)
+        self._exec_mode: str = "stopped"  # "stopped" | "full" | "slow"
+        # --asm listing caches (rebuilt each assemble)
+        self._asm_addr_to_src: dict[int, str] = {}  # addr → raw source line
+        self._asm_addr_to_label: dict[int, str] = {}  # addr → label name
+        self._asm_jump_targets: dict[int, list[str]] = {}  # addr → list of "MNEM@XXXX"
 
     # ------------------------------------------------------------------
     # Layout
@@ -648,12 +694,15 @@ class KCPU16TUI(App[None]):
             yield Button("Assemble ^B", id="btn-asm", variant="primary")
             yield Static(" ", classes="sep")
             yield Button("Step F7", id="btn-step", variant="warning")
-            yield Button("Run F5", id="btn-run", variant="success")
+            yield Button("Full F5", id="btn-run-full", variant="success")
+            yield Button("Slow F6", id="btn-run-slow", variant="primary")
+            yield Button("Stop F8", id="btn-stop", variant="default")
             yield Button("Reset ^R", id="btn-reset", variant="error")
             yield Static(" ", classes="sep")
             yield Button("BP F2", id="btn-bp", variant="default")
             yield Button("Clear F9", id="btn-clear", variant="default")
             yield Button("Help F1", id="btn-help", variant="default")
+            yield Static("\u25a0 STOPPED", id="run-mode-label")
 
         # Content area: left panel (full width)
         with Horizontal(id="content-area"):
@@ -671,24 +720,24 @@ class KCPU16TUI(App[None]):
                         with TabPane("Stack", id="tab-stack"):
                             with VerticalScroll():
                                 yield Static(id="stack-view")
-                with Vertical(id="output-pane"):
-                    yield RichLog(
-                        id="output-view",
-                        wrap=True,
-                        highlight=False,
-                        markup=True,
-                        max_lines=500,
-                    )
-                    yield Input(
-                        placeholder="Command: help, step, run, bp, mem, mset, disk, reset ...",
-                        id="cmd-input",
-                    )
                 with Horizontal(id="bottom-bar"):
                     with Vertical(id="flags-pane"):
                         yield Static(id="flags-content")
                         yield Static(id="cpu-content")
                     with Vertical(id="regs-pane"):
                         yield Static(id="regs-content")
+                    with Vertical(id="output-pane"):
+                        yield RichLog(
+                            id="output-view",
+                            wrap=True,
+                            highlight=False,
+                            markup=True,
+                            max_lines=500,
+                        )
+                        yield Input(
+                            placeholder="Command: help, step, run, bp, mem, mset, disk, reset ...",
+                            id="cmd-input",
+                        )
 
     # ------------------------------------------------------------------
     # Alustus
@@ -757,7 +806,9 @@ class KCPU16TUI(App[None]):
             "btn-open": self.action_open_file,
             "btn-asm": self.action_assemble_code,
             "btn-step": self.action_step_once,
-            "btn-run": self.action_run_program,
+            "btn-run-full": self.action_run_full_speed,
+            "btn-run-slow": self.action_run_slow_speed,
+            "btn-stop": self.action_stop_program,
             "btn-reset": self.action_reset_machine,
             "btn-bp": self.action_toggle_breakpoint,
             "btn-clear": self.action_clear_screen,
@@ -793,8 +844,8 @@ class KCPU16TUI(App[None]):
 
         # VAIN step/run komennot päivittävät näkymän
         cmd_verb = cmd.split()[0].lower()
-        if cmd_verb in {"step", "run", "restart", "asm", "reset"}:
-            self._refresh_all()
+        if cmd_verb in {"step", "run", "slow", "restart", "asm", "reset", "stop"}:
+            self._refresh_all(include_screen=True)
 
     # ------------------------------------------------------------------
     # Actions (näppäinsidonnaisuudet)
@@ -808,36 +859,74 @@ class KCPU16TUI(App[None]):
         """
         if self.machine.cpu.halted or self.machine.process_exited:
             self._log("[yellow]CPU stopped. Reset to continue.[/yellow]")
-            self._refresh_all()
+            self._refresh_all(include_screen=True)
             return
         self.machine.step()
         self._log_step_info()
-        self._refresh_all()
+        self._refresh_all(include_screen=True)
 
-    def action_run_program(self) -> None:
-        """Suorita ohjelma breakpointiin tai max 10000 sykliin asti (F5).
+    def action_run_full_speed(self) -> None:
+        """Käynnistä CPU täydellä nopeudella (F5). Toinen painalus pysäyttää.
 
-        Käyttää _run_with_breakpoints()-metodia, joka steppaa yksi käsky
-        kerrallaan ja tarkistaa breakpointit jokaisen jälkeen. Logittaa
-        tuloksen ja päivittää näkymät.
+        Ajo päättyy HALT-, EXIT-käskyyn, breakpointiin tai Stop-komentoon.
+        Käyttöliittymä päivittyy noin 5 kertaa sekunnissa ajon aikana.
         """
-        result = self._run_with_breakpoints(DEFAULT_RUN_CYCLES)
-        self._log(result)
-        self._refresh_all()
+        if self._exec_mode == "full":
+            self.action_stop_program()
+            return
+        if self.machine.cpu.halted or self.machine.process_exited:
+            self._log("[yellow]CPU stopped. Reset to continue.[/yellow]")
+            return
+        self.workers.cancel_all()
+        self._exec_mode = "full"
+        self._update_run_mode_ui()
+        self._log("[green]Running full speed... (F5/F8 to stop)[/green]")
+        self._cpu_run_worker("full")
+
+    def action_run_slow_speed(self) -> None:
+        """Käynnistä CPU hidas suoritus (F6): ~10 IPS. Toinen painalus pysäyttää.
+
+        Joka käskyn jälkeen kaikki paneelit päivittyvät (rekisterit, liput,
+        disassembly, näyttö) joten prosessori "elää" ruudulla.
+        """
+        if self._exec_mode == "slow":
+            self.action_stop_program()
+            return
+        if self.machine.cpu.halted or self.machine.process_exited:
+            self._log("[yellow]CPU stopped. Reset to continue.[/yellow]")
+            return
+        self.workers.cancel_all()
+        self._exec_mode = "slow"
+        self._update_run_mode_ui()
+        self._log("[cyan]Running slow (10 IPS)... (F6/F8 to stop)[/cyan]")
+        self._cpu_run_worker("slow")
+
+    def action_stop_program(self) -> None:
+        """Pysäytä CPU:n suoritus (F8 tai Stop-painike)."""
+        self.workers.cancel_all()
+        self._exec_mode = "stopped"
+        self._update_run_mode_ui()
+        self._log("[yellow]Stopped.[/yellow]")
+        self._refresh_all(include_screen=True)
 
     def action_reset_machine(self) -> None:
         """Resetoi kone alkutilaan (Ctrl+R tai Reset-painike).
 
-        Cold reset nollaa CPU:n, muistin ja laitteet. Asettaa
-        is_assembled=False ja tyhjentää addr_to_line-mapin. Ottaa
-        uuden rekisterisnapshot vertailua varten.
+        Peruuttaa mahdollisen käynnissä olevan taustayö-suorituksen ensin,
+        sitten cold reset nollaa CPU:n, muistin ja laitteet.
         """
+        self.workers.cancel_all()
+        self._exec_mode = "stopped"
         self.machine.cold_reset()
         self.is_assembled = False
         self.addr_to_line = {}
+        self._asm_addr_to_src = {}
+        self._asm_addr_to_label = {}
+        self._asm_jump_targets = {}
         self.dbg.snapshot_registers(self.machine.dump_registers())
+        self._update_run_mode_ui()
         self._log("[green]Machine reset.[/green]")
-        self._refresh_all()
+        self._refresh_all(include_screen=True)
 
     def action_toggle_breakpoint(self) -> None:
         """Aseta tai poista breakpoint nykyiseen PC-osoitteeseen (F2).
@@ -935,19 +1024,27 @@ class KCPU16TUI(App[None]):
         self._log("")
         self._log("[bold]Keyboard shortcuts:[/bold]")
         self._log("  Ctrl+O  Load file       Ctrl+B  Assemble code")
-        self._log("  F7/F10  Step 1 instr    F5      Run (stops at BP)")
+        self._log("  F7/F10  Step 1 instr    F5      Full Speed run")
+        self._log("  F6      Slow run (10 IPS)  F8      Stop execution")
         self._log("  Ctrl+R  Reset machine   F9      Clear VRAM")
         self._log("  F2      Toggle BP       F1      This help")
         self._log("  Ctrl+Q  Quit")
         self._log("")
         self._log("[bold cyan]File & Assembly:[/bold cyan]")
-        self._log("  load <filename>              Load .asm (watches for changes, auto-reassembles)")
+        self._log(
+            "  load <filename>              Load .asm (watches for changes, auto-reassembles)"
+        )
         self._log("  asm                          Manually reassemble loaded file")
         self._log("  check                        Syntax check loaded file (no load)")
         self._log("[bold cyan]CPU Control:[/bold cyan]")
         self._log("  step [n]                     Step n instructions (default 1)")
-        self._log("  run  [n]                     Run to BP/halt (max n cycles)")
-        self._log("  stop                         Halt CPU immediately")
+        self._log(
+            "  run  [n]                     Full speed run to BP/halt (max n cycles)"
+        )
+        self._log(
+            "  slow                         Slow run (~10 IPS), all panels update each instr"
+        )
+        self._log("  stop                         Stop running CPU")
         self._log("  restart                      Reassemble and restart from 0x0100")
         self._log("[bold cyan]Breakpoints:[/bold cyan]")
         self._log("  bp <addr>                    Toggle breakpoint at address")
@@ -1060,6 +1157,7 @@ class KCPU16TUI(App[None]):
             self.machine.cold_reset()
             self.machine.load_segments(segments)
             self.is_assembled = True
+            self._build_asm_caches(segments)
             self.addr_to_line = _build_addr_to_line(source, self.assembler)
             self.dbg.snapshot_registers(self.machine.dump_registers())
             total_words = sum(len(w) for _, w in segments)
@@ -1087,6 +1185,50 @@ class KCPU16TUI(App[None]):
         except Exception as e:
             self._log(f"[red]Assembly error: {e}[/red]")
             self.is_assembled = False
+
+    def _build_asm_caches(self, segments: list[tuple[int, list[int]]]) -> None:
+        """Rakenna --asm-listauksen tukitiedot assembloinnin jälkeen.
+
+        Täyttää kolme hakutaulukkoa:
+            _asm_addr_to_src      -- osoite → alkuperäinen lähdekoodi-rivi
+            _asm_addr_to_label    -- osoite → käyttäjän labelinimi
+            _asm_jump_targets     -- osoite → lista hyppääjistä ("MNEM@XXXX")
+
+        Parametrit:
+            segments: assemble():n palauttama lista (base_addr, words) -pareista.
+        """
+        _BRANCH_MNEMONICS: frozenset[str] = frozenset(
+            {"JUMP", "CALL", "JZ", "JNZ", "JLT", "JGT", "JLE", "JGE"}
+        )
+        # osoite → lähdekoodi-rivi (kommentit mukaan, ei trimmattuna)
+        self._asm_addr_to_src = {addr: src for src, addr in self.assembler.source_map}
+        # osoite → labelinimi (vain käyttäjän labelit, ei arch-symbolit)
+        arch_addrs: set[int] = set(ARCH_SYMBOLS.values())
+        self._asm_addr_to_label = {
+            addr: name
+            for name, addr in self.assembler.labels.items()
+            if addr not in arch_addrs and name not in ARCH_SYMBOLS
+        }
+        # Analysoi hyppykohteet segmentit läpikäyden
+        jump_targets: dict[int, list[str]] = {}
+        for seg_start, words in segments:
+            i = 0
+            pc = seg_start
+            while i < len(words):
+                opcode = words[i] & WORD_MASK
+                meta = REVERSE_TABLE.get(opcode)
+                op_count = meta[1] if meta is not None else 0
+                mnemonic = meta[0] if meta is not None else None
+                if (
+                    mnemonic in _BRANCH_MNEMONICS
+                    and op_count >= 1
+                    and i + op_count < len(words)
+                ):
+                    target = words[i + op_count] & WORD_MASK
+                    jump_targets.setdefault(target, []).append(f"{mnemonic}@{pc:04X}")
+                i += 1 + op_count
+                pc += 1 + op_count
+        self._asm_jump_targets = jump_targets
 
     def _check_file_changes(self) -> None:
         """Tarkista onko ladattu tiedosto muuttunut (1s timer).
@@ -1150,107 +1292,281 @@ class KCPU16TUI(App[None]):
                 )
         return f"Ran {cycles} cycles. PC=0x{self.machine.regs.pc:04X}"
 
+    def _update_run_mode_ui(self) -> None:
+        """Päivitä toolbar heijastamaan nykyistä suoritustilaa.
+
+        Päivittää #run-mode-label tekstin ja suorituspainikkeiden variantit.
+        Turvallinen kutsua pääsäikeessä tai call_from_thread():n kautta.
+        """
+        try:
+            label_text = {
+                "stopped": "\u25a0 STOPPED",
+                "full": "\u25b6 FULL",
+                "slow": "\u25b6 SLOW",
+            }.get(self._exec_mode, "\u25a0 STOPPED")
+            self.query_one("#run-mode-label", Static).update(label_text)
+            btn_full = self.query_one("#btn-run-full", Button)
+            btn_slow = self.query_one("#btn-run-slow", Button)
+            btn_stop = self.query_one("#btn-stop", Button)
+            if self._exec_mode == "full":
+                btn_full.variant = "warning"
+                btn_slow.variant = "default"
+                btn_stop.variant = "error"
+            elif self._exec_mode == "slow":
+                btn_full.variant = "default"
+                btn_slow.variant = "warning"
+                btn_stop.variant = "error"
+            else:  # stopped
+                btn_full.variant = "success"
+                btn_slow.variant = "primary"
+                btn_stop.variant = "default"
+        except Exception:
+            pass
+
+    @work(thread=True, exclusive=True)
+    def _cpu_run_worker(self, mode: str = "full") -> None:
+        """Aja CPU:ta taustasäikeessä (F5=Full Speed, F6=Slow Speed).
+
+        Parametrit:
+            mode: "full" = max nopeus, UI päivittyy ~200ms välein.
+                  "slow" = ~10 IPS, UI päivittyy jokaisen käskyn jälkeen.
+
+        Suoritus päättyy kun:
+        - HALT- tai EXIT-käsky suoritetaan
+        - Breakpoint osutaan
+        - Worker peruutetaan (Stop/Reset)
+        """
+        worker = get_current_worker()
+        cpu = self.machine.cpu
+        total_cycles = 0
+
+        def _done(msg: str) -> None:
+            """Kutsutaan pääsäikeessä suorituksen päättyessä."""
+            self._exec_mode = "stopped"
+            self._update_run_mode_ui()
+            if msg:
+                self._log(msg)
+            self._refresh_all(include_screen=True)
+
+        if mode == "slow":
+            # Hidas suoritus: yksi käsky kerrallaan, UI-päivitys joka käskyn jälkeen
+            SLOW_DELAY = 0.1  # sekuntia per käsky (10 IPS)
+            while not worker.is_cancelled:
+                if cpu.halted or cpu.process_exit_requested:
+                    break
+                self.machine.step()
+                total_cycles += 1
+                if cpu.halted:
+                    self.call_from_thread(
+                        _done, f"[red]HALTED after {total_cycles} cycles.[/red]"
+                    )
+                    return
+                if cpu.process_exit_requested:
+                    self.call_from_thread(
+                        _done, f"[yellow]EXIT after {total_cycles} cycles.[/yellow]"
+                    )
+                    return
+                if self.dbg.has_breakpoint(self.machine.regs.pc):
+                    addr = self.machine.regs.pc
+                    self.call_from_thread(
+                        _done,
+                        f"[red]Breakpoint at 0x{addr:04X} after {total_cycles} cycles.[/red]",
+                    )
+                    return
+                self.call_from_thread(self._refresh_all, True)
+                time.sleep(SLOW_DELAY)
+        else:
+            # Täysi nopeus: eräsuoritus, UI päivittyy ~200ms välein
+            BATCH = 5000
+            REFRESH_INTERVAL = 0.2  # sekuntia
+            last_refresh = time.monotonic()
+            while not worker.is_cancelled:
+                for _ in range(BATCH):
+                    if cpu.halted or cpu.process_exit_requested:
+                        break
+                    self.machine.step()
+                    total_cycles += 1
+                    if self.dbg.has_breakpoint(self.machine.regs.pc):
+                        addr = self.machine.regs.pc
+                        self.call_from_thread(
+                            _done,
+                            f"[red]Breakpoint at 0x{addr:04X} after {total_cycles} cycles.[/red]",
+                        )
+                        return
+                # Päivitä UI ~200ms välein
+                now = time.monotonic()
+                if now - last_refresh >= REFRESH_INTERVAL:
+                    last_refresh = now
+                    self.call_from_thread(self._refresh_all, True)
+                if cpu.halted:
+                    self.call_from_thread(
+                        _done, f"[red]HALTED after {total_cycles} cycles.[/red]"
+                    )
+                    return
+                if cpu.process_exit_requested:
+                    self.call_from_thread(
+                        _done, f"[yellow]EXIT after {total_cycles} cycles.[/yellow]"
+                    )
+                    return
+
+        # Worker peruutettu (Stop / Reset)
+        self.call_from_thread(_done, "")
+
     # ------------------------------------------------------------------
     # Näkymien päivitys
     # ------------------------------------------------------------------
 
-    def _refresh_all(self) -> None:
-        """Päivitä kaikki näkymäpaneelit kerralla (paitsi Screen).
+    def _refresh_all(self, include_screen: bool = False) -> None:
+        """Päivitä kaikki näkymäpaneelit kerralla.
 
         Kutsutaan jokaisen tilan muutoksen jälkeen (step, run, reset,
-        assemble, komentosyöte). Screen-näyttö päivittyy omalla 1s timerilla
-        eikä tässä, jotta komentojen suoritus pysyy ketteränä.
+        assemble, komentosyöte).
+
+        Parametrit:
+            include_screen: Jos True, päivittää myös VRAM-näytön (Screen-tab).
+                            Käytä True stepissä ja suoritustilan vaihtuessa.
         """
         self._refresh_disassembly()
         self._refresh_registers()
         self._refresh_flags()
         self._refresh_cpu_status()
-        # self._refresh_screen_tab()  # Käytetään vain 1s timeria
+        if include_screen:
+            self._refresh_screen_tab()
         self._refresh_memory()
         self._refresh_stack()
 
     def _refresh_disassembly(self) -> None:
-        """Päivitä disassembly-paneeli PC:n ympäriltä.
+        """Päivitä disassembly-paneeli PC:n ympäriltä (--asm-formaatti).
 
-        Näyttöikkuna (scan window):
-            - Skannaa taaksepäin PC:stä max 15 osoitetta löytääkseen
-              aiempia käskyjä. Ohittaa tyhjät muistipaikat (0x0000),
-              mutta pysähtyy kun löytää aukon → ei näytä turhaa dataa.
-            - Clamp: näytä enintään 10 sanaa ennen PC:tä.
-            - Eteenpäin: näytä max 80 sanaa PC:n jälkeen.
+        Näyttöikkuna:
+            - Skannaa taaksepäin PC:stä max 15 osoitetta.
+            - Eteenpäin max 80 osoitetta PC:n jälkeen.
+            - Ohittaa tyhjät muistipaikat paitsi PC:n lähellä tai BP:ssa.
 
-        Breakpointit:
-            - Breakpointatut osoitteet sisällytetään aina, vaikka ne
-              olisivat scan-ikkunan ulkopuolella (lähellä).
-            - Breakpointattu rivi saa ● (punainen pallo) -merkin.
+        Joka käskyrivillä näytetään:
+            ● ▶ ADDR: HEX_SANAT   MNEMONIC OPERANDIT   ; lähdekoodi
 
-        Suodatus:
-            - ".word 0x0000" -rivit piilotetaan (tyhjä muisti) PAITSI:
-              * Rivi on PC:n kohdalla tai max 3 osoitteen päässä
-              * Rivillä on breakpoint
+            ● = breakpoint (punainen)   ▶ = nykyinen PC (korostettu tausta)
+            ADDR syaanilla, mnemoniikki keltaisella, rekisterit sinisellä,
+            välittömät arvot vihreällä, lähdekomentit himmennettyinä.
 
-        Muotoilu:
-            - ▶ = nykyinen PC (korostettu tausta)
-            - ● = breakpoint (punainen pallo)
-            - Osoite syaanilla, mnemoniikki keltaisella
-            - Rekisterit sinisellä, välittömät arvot vihreällä
+        Jump target -merkit (label-nimi) näytetään ennen hyppykohdetä olevaa
+        käskyriviä.
         """
         pc = self.machine.regs.pc
 
-        # Scan backward from PC to find a good start point.
-        # Skip over empty memory (0x0000) to avoid showing noise.
-        # Show up to 5 instructions before PC if they contain real code.
+        # -- Scan window --
         scan_start = max(0, pc - 15)
-        start = pc  # default: start at PC
+        start = pc
         for a in range(pc - 1, scan_start - 1, -1):
             if self.machine.memory.read(a) != 0 or self.dbg.has_breakpoint(a):
                 start = a
             else:
                 break
-        # Also include any breakpoints slightly beyond the backward scan
         if self.dbg.breakpoints:
             for bp_addr in self.dbg.breakpoints:
                 if scan_start <= bp_addr < start:
                     start = bp_addr
-        # Clamp: show at most 10 words before PC
         start = max(start, pc - 10)
-
         end = min(WORD_MASK, pc + 80)
-        words = [self.machine.memory.read(a) for a in range(start, end + 1)]
-        raw = self.disassembler.disassemble(words, start_addr=start)
 
         lines: list[str] = []
-        for raw_line in raw.split("\n"):
-            if not raw_line.strip():
-                continue
-            addr_part = raw_line.split(":")[0].strip()
-            try:
-                addr = int(addr_part, 16)
-            except ValueError:
-                lines.append(raw_line)
-                continue
+        addr = start
+        while addr <= end:
+            opcode = self.machine.memory.read(addr)
+            meta = REVERSE_TABLE.get(opcode)
+            if meta is None:
+                instr_words = [opcode]
+                disasm_tail = f".word 0x{opcode:04X}"
+                op_count = 0
+            else:
+                mnemonic, op_count, _ = meta
+                instr_words = [
+                    self.machine.memory.read(addr + i) for i in range(1 + op_count)
+                ]
+                raw = self.disassembler.disassemble(
+                    instr_words, start_addr=addr
+                ).strip()
+                disasm_tail = raw.split(": ", 1)[1] if ": " in raw else raw
 
-            # Skip .word 0x0000 lines (empty memory) unless near PC or has breakpoint
+            # Skip .word 0x0000 unless near PC or on a breakpoint
             if (
-                ".word 0x0000" in raw_line
+                disasm_tail == ".word 0x0000"
                 and addr != pc
                 and abs(addr - pc) > 3
                 and not self.dbg.has_breakpoint(addr)
             ):
+                addr += 1 + op_count
                 continue
 
-            bp = "[bold red]\u25cf[/] " if self.dbg.has_breakpoint(addr) else "  "
-            display = self._fmt_disasm_line(raw_line)
+            # Jump-target separator line (label name)
+            if addr in self._asm_jump_targets:
+                label = self._asm_addr_to_label.get(addr, f"0x{addr:04X}")
+                srcs = "  ".join(self._asm_jump_targets[addr])
+                lines.append(
+                    f"[dim]\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500"
+                    f" [bold]{label}[/bold]: \u2190 {srcs}[/dim]"
+                )
+
+            # Hex bytes column — pad to fixed width
+            # Max instruction = 3 words = "XXXX XXXX XXXX" = 14 chars
+            hex_str = " ".join(f"{w:04X}" for w in instr_words)
+
+            # Rich-colored mnemonic + operands
+            disasm_rich = self._fmt_disasm_tail(disasm_tail)
+
+            # Source comment (instruction text only, strip inline comments)
+            src_line = self._asm_addr_to_src.get(addr, "")
+            src_clean = src_line.split(";", 1)[0].strip()
+
+            # Pad the disasm column to a fixed VISUAL width so the comment
+            # column stays aligned. Rich markup tags add invisible characters;
+            # also \[ and \] are Rich literal-bracket escapes that each render
+            # as a single character, so strip tags first then convert escapes.
+            DISASM_VIS_WIDTH = 26
+            _stripped = (
+                _RICH_MARKUP_RE.sub("", disasm_rich)
+                .replace("\\[", "[")
+                .replace("\\]", "]")
+            )
+            disasm_visible_len = len(_stripped)
+            disasm_pad = " " * max(0, DISASM_VIS_WIDTH - disasm_visible_len)
+            src_part = f"{disasm_pad}  [dim]; {src_clean}[/dim]" if src_clean else ""
+
+            # BP and PC markers
+            bp_marker = (
+                "[bold red]\u25cf[/] " if self.dbg.has_breakpoint(addr) else "  "
+            )
 
             if addr == pc:
-                lines.append(f"{bp}[bold white on #3a3a3a]\u25b6 {display}[/]")
+                lines.append(
+                    f"{bp_marker}[bold white on #3a3a3a]"
+                    f"\u25b6 {addr:04X}: {hex_str:<14}  {disasm_rich}[/]"
+                    f"{src_part}"
+                )
             else:
-                lines.append(f"{bp}  {display}")
+                lines.append(
+                    f"{bp_marker}  [cyan]{addr:04X}[/]: "
+                    f"{hex_str:<14}  {disasm_rich}"
+                    f"{src_part}"
+                )
+
+            addr += 1 + op_count
 
         self.query_one("#disasm-content", Static).update("\n".join(lines))
 
+    def _fmt_disasm_tail(self, disasm_tail: str) -> str:
+        """Muotoile mnemoniikka + operandit Rich-väreillä (ilman osoite-etuliitettä)."""
+        tokens = disasm_tail.split(None, 1)
+        if not tokens:
+            return disasm_tail
+        mnemonic = tokens[0]
+        operands = tokens[1] if len(tokens) > 1 else ""
+        fmt_ops = self._fmt_operands(mnemonic, operands)
+        return f"[yellow]{mnemonic:<10}[/] {fmt_ops}"
+
     def _fmt_disasm_line(self, line: str) -> str:
-        """Muotoile disassembly-rivi värikoodein."""
+        """Muotoile disassembly-rivi värikoodein (käytetään step-logissa)."""
         parts = line.split(":", 1)
         if len(parts) < 2:
             return line
@@ -1328,7 +1644,14 @@ class KCPU16TUI(App[None]):
             except ValueError:
                 result.append(op)
                 continue
-            if (i == 0 and mnemonic in _REG_FIRST) or (
+            # Hypyn kohdeosoite → labelinimi jos tunnetaan
+            if mnemonic in _BRANCH_MNEMONICS and i == len(ops) - 1:
+                label = self._asm_addr_to_label.get(val)
+                if label:
+                    result.append(f"[bold magenta]{label}[/]")
+                else:
+                    result.append(f"[green]0x{val:04X}[/]")
+            elif (i == 0 and mnemonic in _REG_FIRST) or (
                 i == 1 and mnemonic in _REG_SECOND
             ):
                 name = REG_NAMES.get(val, f"?{val}")
@@ -1338,23 +1661,37 @@ class KCPU16TUI(App[None]):
         return ", ".join(result)
 
     def _refresh_registers(self) -> None:
-        """Päivitä rekisteripaneeli.
+        """Päivitä rekisteripaneeli kahdessa sarakkeessa.
 
-        Näyttää kaikki rekisterit (R0-R3, FP, SP, PC, SR) sekä hex- että
-        desimaaliarvoina. Käyttää dbg.snapshot_registers()-metodia vertaamaan
-        edelliseen tilaan - muuttuneet rekisterit korostetaan punaisella
-        boldilla, muuttumattomat näytetään syaanilla.
+        Näyttää kaikki rekisterit (R0–R15, FP, SP, PC, SR, MPR, TMR, CTMR)
+        kahdessa vierekkäisessä sarakkeessa. Käyttää dbg.snapshot_registers()
+        -metodia vertaamaan edelliseen tilaan - muuttuneet rekisterit
+        korostetaan punaisella boldilla, muuttumattomat näytetään syaanilla.
         """
         regs = self.machine.dump_registers()
         changed = self.dbg.snapshot_registers(regs)
-        lines: list[str] = []
-        for name, value in regs.items():
+
+        names = list(regs.keys())
+        half = (len(names) + 1) // 2
+
+        def fmt_cell(name: str) -> str:
+            value = regs[name]
             h = f"0x{value:04X}"
             d = f"{value:>5}"
             if changed.get(name, False):
-                lines.append(f"[bold red]{name:>3}  {h}  {d}[/]")
+                return f"[bold red]{name:>4} {h} {d}[/]"
             else:
-                lines.append(f"[cyan]{name:>3}[/]  {h}  {d}")
+                return f"[cyan]{name:>4}[/] {h} {d}"
+
+        lines: list[str] = []
+        for i in range(half):
+            left = fmt_cell(names[i])
+            if i + half < len(names):
+                right = fmt_cell(names[i + half])
+                lines.append(f"{left}  {right}")
+            else:
+                lines.append(left)
+
         self.query_one("#regs-content", Static).update("\n".join(lines))
 
     def _refresh_flags(self) -> None:
@@ -1365,10 +1702,12 @@ class KCPU16TUI(App[None]):
           P (Privilege)
         - Asetettu lippu (1): vihreä bold
         - Nollattu lippu (0): himmennetty (dim)
-        - Moodi: KERNEL (vihreä) tai USER (keltainen), riippuen
-          privilege-bitistä (SR_FLAG_P / in_kernel_mode)
+        - Moodi: KERNEL (vihreä) tai USER (keltainen)
+        - Uptime: 32-bitin sekuntilaskuri HH:MM:SS -muodossa
+        - TMR/CTMR: säädettävissä olevien keskeytysten tila
         """
         r = self.machine.regs
+        cpu = self.machine.cpu
         flags = [
             ("Z", r.get_flag(SR_FLAG_Z)),
             ("N", r.get_flag(SR_FLAG_N)),
@@ -1385,9 +1724,26 @@ class KCPU16TUI(App[None]):
             else:
                 parts.append(f"[dim]{name}:0[/]")
         mode = "[bold green]KERNEL[/]" if r.in_kernel_mode else "[yellow]USER[/]"
-        self.query_one("#flags-content", Static).update(
-            f"{' '.join(parts)}\nMode: {mode}"
+
+        # Uptime (32-bit seconds)
+        uptime = cpu._uptime_counter & 0xFFFFFFFF
+        hours = uptime // 3600
+        mins = (uptime % 3600) // 60
+        secs = uptime % 60
+        uptime_str = f"{hours:02d}:{mins:02d}:{secs:02d}"
+
+        # Configurable interrupt states
+        tmr_str = f"[green]{r.tmr}[/] cyc" if r.tmr > 0 else "[dim]off[/]"
+        ctmr_str = f"[green]{r.ctmr}[/] ms" if r.ctmr > 0 else "[dim]off[/]"
+
+        content = (
+            f"{' '.join(parts)}\n"
+            f"Mode: {mode}\n"
+            f"Uptime: {uptime_str}\n"
+            f"TMR:  {tmr_str}\n"
+            f"CTMR: {ctmr_str}"
         )
+        self.query_one("#flags-content", Static).update(content)
 
     def _refresh_cpu_status(self) -> None:
         """Päivitä CPU-tilapaneeli.
@@ -1592,13 +1948,24 @@ class KCPU16TUI(App[None]):
                 return CommandResult(True, f"Stepped {max(1, count)}. IC={ic}")
 
             if op == "run":
-                cycles = int(args[0], 0) if args else DEFAULT_RUN_CYCLES
-                result = self._run_with_breakpoints(max(1, cycles))
-                return CommandResult(True, result)
+                if args:
+                    # Eksplisiittinen syklimäärä: synkroninen, rajoitettu ajo
+                    cycles = max(1, int(args[0], 0))
+                    result = self._run_with_breakpoints(cycles)
+                    return CommandResult(True, result)
+                else:
+                    # Ei argumenttia: loputon ajo taustasäikeessä (kuten F5)
+                    if self.machine.cpu.halted or self.machine.process_exited:
+                        return CommandResult(False, "CPU stopped. Reset to continue.")
+                    self._log(
+                        "[green]Running... (stop with 'stop' command or Reset)[/green]"
+                    )
+                    self._cpu_run_worker()
+                    return CommandResult(True, "")
 
             if op == "stop":
-                self.machine.cpu.halted = True
-                return CommandResult(True, "[red]CPU halted.[/red]")
+                self.action_stop_program()
+                return CommandResult(True, "")
 
             if op == "restart":
                 self._do_assemble()
@@ -1874,6 +2241,9 @@ class KCPU16TUI(App[None]):
             self.machine.cold_reset()
             self.is_assembled = False
             self.addr_to_line = {}
+            self._asm_addr_to_src = {}
+            self._asm_addr_to_label = {}
+            self._asm_jump_targets = {}
             self.dbg.snapshot_registers(self.machine.dump_registers())
             return CommandResult(
                 True, "[green]Reset (memory + CPU). Storage intact.[/green]"
@@ -1884,6 +2254,9 @@ class KCPU16TUI(App[None]):
             self.machine.storage.reset()
             self.is_assembled = False
             self.addr_to_line = {}
+            self._asm_addr_to_src = {}
+            self._asm_addr_to_label = {}
+            self._asm_jump_targets = {}
             self.dbg.snapshot_registers(self.machine.dump_registers())
             self._disk_dirty = False
             self._update_disk_title()

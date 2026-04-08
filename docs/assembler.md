@@ -23,19 +23,19 @@ label:                  ; Label (valinnainen, omalla rivillä tai käskyn edess�
 
 # 2. Operandien merkintätavat
 
-| Syntaksi       | Tyyppi                                                 | Esimerkki              |
-| -------------- | ------------------------------------------------------ | ---------------------- |
-| `R0`–`SP`      | Rekisteri (kirjainkoosta riippumaton)                  | `ADD R0, R1`           |
-| `42`           | Desimaali-literaali                                    | `LOAD R0, 42`          |
-| `0xFF`         | Heksadesimaali-literaali                               | `LOAD R0, 0xFF`        |
-| `0b1010`       | Binääri-literaali                                      | `LOAD R0, 0b1010`      |
-| `0o52`         | Oktaali-literaali                                      | `LOAD R0, 0o52`        |
-| `label`        | Label-viittaus                                         | `JUMP loop`            |
-| `VRAM_START`   | Arkkitehtuurivakio (ks. kohta 4)                       | `LOAD R0, VRAM_START`  |
-| `NIMI`         | Käyttäjän vakio (`.const`, ks. kohta 5)                | `LOAD R0, BUFFER_SIZE` |
-| `[addr]`       | Absoluuttinen muistiosoite (ks. kohta 6)               | `LOAD R0, [0x3000]`    |
-| `[reg]`        | Epäsuora muistiosoite rekisterin kautta (ks. kohta 6)  | `LOAD R0, [R1]`        |
-| `[FP+offset]`  | FP-suhteellinen muistiosoite (ks. kohta 6)             | `LOAD R0, [FP+2]`      |
+| Syntaksi      | Tyyppi                                                | Esimerkki              |
+| ------------- | ----------------------------------------------------- | ---------------------- |
+| `R0`–`SP`     | Rekisteri (kirjainkoosta riippumaton)                 | `ADD R0, R1`           |
+| `42`          | Desimaali-literaali                                   | `LOAD R0, 42`          |
+| `0xFF`        | Heksadesimaali-literaali                              | `LOAD R0, 0xFF`        |
+| `0b1010`      | Binääri-literaali                                     | `LOAD R0, 0b1010`      |
+| `0o52`        | Oktaali-literaali                                     | `LOAD R0, 0o52`        |
+| `label`       | Label-viittaus                                        | `JUMP loop`            |
+| `VRAM_START`  | Arkkitehtuurivakio (ks. kohta 4)                      | `LOAD R0, VRAM_START`  |
+| `NIMI`        | Käyttäjän vakio (`.const`, ks. kohta 5)               | `LOAD R0, BUFFER_SIZE` |
+| `[addr]`      | Absoluuttinen muistiosoite (ks. kohta 6)              | `LOAD R0, [0x3000]`    |
+| `[reg]`       | Epäsuora muistiosoite rekisterin kautta (ks. kohta 6) | `LOAD R0, [R1]`        |
+| `[FP+offset]` | FP-suhteellinen muistiosoite (ks. kohta 6)            | `LOAD R0, [FP+2]`      |
 
 Rekisterit: `R0`, `R1`, `R2`, `R3`, `FP`, `SP`. Kirjainkoosta riippumaton.
 
@@ -144,29 +144,28 @@ MY_CONST:                  ; VIRHE: nimi on jo .const-vakio
 
 # 6. Muistiosoitustavat ja LOAD/STORE-syntaksi
 
-Assembler tunnistaa kolme muistiosoitustapaa `LOAD`- ja `STORE`-käskyissä
-hakasulkunotaatiolla `[...]`. Syntaksimuodot yksinkertaistavat ohjelmoijan työtä:
-sen sijaan, että käytettäisiin erillisiä käskymnemoniikkoja (`READ`, `READ_IND`,
-`STORE_IND` jne.), riittää tuttu `LOAD`/`STORE`-notaatio oikean hakasulkumuodon
-kanssa.
+`LOAD`- ja `STORE`-käskyissä voidaan käyttää hakasulkunotaatiota `[...]`
+muistiosoituksen tarkentamiseen. Assembler valitsee sopivan konekielikäskyn
+automaattisesti hakasulkumuodon perusteella — ohjelmoija kirjoittaa aina vain
+`LOAD` tai `STORE`.
 
 ## 6.1 Osoitusmoodit
 
-| Syntaksi      | Osoitusmooodi | Selitys                                       |
-| ------------- | ------------- | --------------------------------------------- |
-| `[addr]`      | Absoluuttinen | Muistiosoite `addr` suoraan                   |
-| `[reg]`       | Epäsuora      | Osoite on rekisterin arvo                     |
-| `[FP+offset]` | Suhteellinen  | Osoite on `FP + offset` (aliohjelman kehys)   |
+| Syntaksi      | Osoitusmooodi | Selitys                                     |
+| ------------- | ------------- | ------------------------------------------- |
+| `[addr]`      | Absoluuttinen | Muistiosoite `addr` suoraan                 |
+| `[reg]`       | Epäsuora      | Osoite on rekisterin arvo                   |
+| `[FP+offset]` | Suhteellinen  | Osoite on `FP + offset` (aliohjelman kehys) |
 
 ## 6.2 LOAD reg, \[...\]
 
 `LOAD`-käsky hakasulkunotaatiolla lukee arvon muistista suoraan rekisteriin.
 
-| Syntaksi              | Kääntyy käskyksi | Toiminta            |
-| --------------------- | ---------------- | ------------------- |
-| `LOAD reg, [addr]`    | `READ`           | `reg ← [addr]`      |
-| `LOAD reg, [regS]`    | `READ_IND`       | `reg ← [regS]`      |
-| `LOAD reg, [FP+offs]` | `READ_REL`       | `reg ← [FP + offs]` |
+| Syntaksi              | Toiminta            |
+| --------------------- | ------------------- |
+| `LOAD reg, [addr]`    | `reg ← [addr]`      |
+| `LOAD reg, [regS]`    | `reg ← [regS]`      |
+| `LOAD reg, [FP+offs]` | `reg ← [FP + offs]` |
 
 ```asm
 LOAD R0, [0x3000]       ; Lue osoitteesta 0x3000 (absoluuttinen)
@@ -177,17 +176,16 @@ LOAD R0, [FP+2]         ; Lue aliohjelman paikallismuuttuja indeksillä 2 (suhte
 ## 6.3 STORE \[...\], lähde
 
 `STORE`-käsky hakasulkunotaatiolla kirjoittaa muistiin. Lähteeksi kelpaa rekisteri
-tai välitön arvo (immediate). Kun lähde on välitön arvo, assembler tuottaa
-automaattisesti `STOREI`-variantin.
+tai välitön arvo (immediate).
 
-| Syntaksi               | Kääntyy käskyksi | Toiminta              |
-| ---------------------- | ---------------- | --------------------- |
-| `STORE [addr], reg`    | `STORE`          | `[addr] ← reg`        |
-| `STORE [addr], imm`    | `STOREI`         | `[addr] ← imm`        |
-| `STORE [regD], reg`    | `STORE_IND`      | `[regD] ← reg`        |
-| `STORE [regD], imm`    | `STOREI_IND`     | `[regD] ← imm`        |
-| `STORE [FP+offs], reg` | `STORE_REL`      | `[FP + offs] ← reg`   |
-| `STORE [FP+offs], imm` | `STOREI_REL`     | `[FP + offs] ← imm`   |
+| Syntaksi               | Toiminta            |
+| ---------------------- | ------------------- |
+| `STORE [addr], reg`    | `[addr] ← reg`      |
+| `STORE [addr], imm`    | `[addr] ← imm`      |
+| `STORE [regD], reg`    | `[regD] ← reg`      |
+| `STORE [regD], imm`    | `[regD] ← imm`      |
+| `STORE [FP+offs], reg` | `[FP + offs] ← reg` |
+| `STORE [FP+offs], imm` | `[FP + offs] ← imm` |
 
 ```asm
 STORE [0x3000], R0      ; Kirjoita R0 osoitteeseen 0x3000 (absoluuttinen)
@@ -197,23 +195,6 @@ STORE [R1], 0xFF        ; Kirjoita vakio 0xFF epäsuoraan osoitteeseen (välitö
 STORE [FP+2], R0        ; Tallenna R0 aliohjelman paikallismuuttujaan (suhteellinen)
 STORE [FP+2], 99        ; Kirjoita välitön arvo paikallismuuttujaan (suhteellinen, välitön)
 ```
-
-## 6.4 Vanhat mnemonikat (poistettu käytöstä)
-
-Hakasulkunotaatio korvaa seuraavat erilliset käskymnemonikat, jotka on **poistettu
-käytöstä**. Niiden käyttö suoraan assembly-koodissa tuottaa assemblointivirheen.
-
-| Vanhentunut mnemoniikka   | Korvaava hakasulkunotaatio  |
-| ------------------------- | --------------------------- |
-| `READ reg, addr`          | `LOAD reg, [addr]`          |
-| `READ_IND regD, regS`     | `LOAD regD, [regS]`         |
-| `READ_REL reg, imm`       | `LOAD reg, [FP+imm]`        |
-| `STORE reg, addr`         | `STORE [addr], reg`         |
-| `STORE_IND regD, regS`    | `STORE [regD], regS`        |
-| `STORE_REL reg, imm`      | `STORE [FP+imm], reg`       |
-| `STOREI imm, addr`        | `STORE [addr], imm`         |
-| `STOREI_IND regD, imm`    | `STORE [regD], imm`         |
-| `STOREI_REL imm, offs`    | `STORE [FP+offs], imm`      |
 
 ---
 

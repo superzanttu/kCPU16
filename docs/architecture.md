@@ -26,7 +26,7 @@ kCPU16 on 16-bittinen von Neumann -arkkitehtuuriin perustuva prosessori.
 
 ## 2.1 Yleiskäyttöiset rekisterit (GPR)
 
-Neljä 16-bittistä yleiskäyttöistä rekisteriä. Käskyissä koodataan 3-bittisellä indeksillä.
+16 kpl 16-bittistä yleiskäyttöistä rekisteriä. Käskyissä koodataan 5-bittisellä indeksillä.
 
 | Rekisteri | Indeksi | Kuvaus                               |
 | --------- | ------- | ------------------------------------ |
@@ -34,13 +34,25 @@ Neljä 16-bittistä yleiskäyttöistä rekisteriä. Käskyissä koodataan 3-bitt
 | R1        | 1       | Yleiskäyttöinen datarekisteri        |
 | R2        | 2       | Yleiskäyttöinen datarekisteri        |
 | R3        | 3       | Yleiskäyttöinen / paluuarvorekisteri |
+| R4        | 4       | Yleiskäyttöinen datarekisteri        |
+| R5        | 5       | Yleiskäyttöinen datarekisteri        |
+| R6        | 6       | Yleiskäyttöinen datarekisteri        |
+| R7        | 7       | Yleiskäyttöinen datarekisteri        |
+| R8        | 8       | Yleiskäyttöinen datarekisteri        |
+| R9        | 9       | Yleiskäyttöinen datarekisteri        |
+| R10       | 10      | Yleiskäyttöinen datarekisteri        |
+| R11       | 11      | Yleiskäyttöinen datarekisteri        |
+| R12       | 12      | Yleiskäyttöinen datarekisteri        |
+| R13       | 13      | Yleiskäyttöinen datarekisteri        |
+| R14       | 14      | Yleiskäyttöinen datarekisteri        |
+| R15       | 15      | Yleiskäyttöinen datarekisteri        |
 
 ## 2.2 Erikoisrekisterit
 
 | Rekisteri | Indeksi | Kuvaus                                                                         |
 | --------- | ------- | ------------------------------------------------------------------------------ |
-| FP        | 4       | Frame Pointer — aliohjelman pinokehyksen pohja                                 |
-| SP        | 5       | Stack Pointer — pinon huippu, pino kasvaa alaspäin                             |
+| FP        | 16      | Frame Pointer — aliohjelman pinokehyksen pohja                                 |
+| SP        | 17      | Stack Pointer — pinon huippu, pino kasvaa alasпäin                             |
 | PC        | —       | Program Counter — seuraavan käskyn osoite (ei suoraan käytettävissä käskyissä) |
 | SR        | —       | Status Register — tilaliput (ks. 2.4)                                          |
 
@@ -52,6 +64,7 @@ Vain Kernel-tilassa kirjoitettavissa (SMPR, STMR -käskyillä).
 | --------- | ------------------------------------------------------------------------- |
 | MPR       | Memory Protection Register — User-muistin alaraja                         |
 | TMR       | Timer Register — ajastinkeskeytyksen väli käskyjen lukumääränä (0 = pois) |
+| CTMR      | Clock Timer Register — kellokeskeytyksen väli millisekunteina (0 = pois)  |
 
 ## 2.4 Tilarekisteri (SR)
 
@@ -94,28 +107,51 @@ SR on 16-bittinen, josta bitit 0–5 ovat käytössä.
 
 | Osoitealue    | Koko         | Kuvaus                          |
 | ------------- | ------------ | ------------------------------- |
-| $0000 – $0008 | 9 sanaa      | Keskeytysvektoritaulukko        |
-| $0009 – $00FF | 247 sanaa    | Käyttöjärjestelmän varattu alue |
+| $0000 – $000F | 16 sanaa     | Keskeytysvektoritaulukko        |
+| $0010 – $001F | 16 sanaa     | Kellokello MMIO (vain luettava) |
+| $0020 – $00FF | 224 sanaa    | Käyttöjärjestelmän varattu alue |
 | $0100 – $01FF | 256 sanaa    | Bootloaderin latausalue         |
 | $0200 – $F7FF | 62 464 sanaa | Vapaa RAM (ohjelmat ja data)    |
 | $F800 – $FF7F | 1920 sanaa   | Video RAM (80 × 24, MMIO)       |
 | $FF80 – $FFFF | 128 sanaa    | Kernel Stack                    |
 
-## 4.1 Keskeytysvektoritaulukko ($0000–$0008)
+## 4.1 Keskeytysvektoritaulukko ($0000–$000F)
 
 Jokainen vektoripaikka sisältää keskeytyskäsittelijän muistiosoitteen.
 
-| Vektori | Osoite | Keskeytys                |
-| ------- | ------ | ------------------------ |
-| 0       | $0000  | Jako nollalla            |
-| 1       | $0001  | Tuntematon käsky         |
-| 2       | $0002  | Pinon ylivuoto           |
-| 3       | $0003  | Debug / Breakpoint       |
-| 4       | $0004  | Privilege Violation      |
-| 5       | $0005  | Memory Access Fault      |
-| 6       | $0006  | Näppäimistökeskeytys     |
-| 7       | $0007  | Ajastinkeskeytys         |
-| 8       | $0008  | Prosessin lopetus (EXIT) |
+| Vektori | Osoite      | Keskeytys                    |
+| ------- | ----------- | ---------------------------- |
+| 0       | $0000       | Jako nollalla                |
+| 1       | $0001       | Tuntematon käsky             |
+| 2       | $0002       | Pinon ylivuoto               |
+| 3       | $0003       | Debug / Breakpoint           |
+| 4       | $0004       | Privilege Violation          |
+| 5       | $0005       | Memory Access Fault          |
+| 6       | $0006       | Näppäimistökeskeytys         |
+| 7       | $0007       | Ajastinkeskeytys             |
+| 8       | $0008       | Prosessin lopetus (EXIT)     |
+| 9–15    | $0009–$000F | Varattu tulevaisuutta varten |
+
+## 4.1b Kellokello MMIO ($0010–$001F)
+
+Osoitteet ovat vain luettavia lukuun ottamatta $001B (CTMR-kirjoitus).
+Lukeminen palauttaa reaaliaikaisen järjestelmäkellon arvon.
+
+| Osoite      | Vakio              | Kuvaus                                                     |
+| ----------- | ------------------ | ---------------------------------------------------------- |
+| $0010       | CLOCK_YEAR         | Vuosi (esim. 2026)                                         |
+| $0011       | CLOCK_MONTH        | Kuukausi (1–12)                                            |
+| $0012       | CLOCK_DAY          | Päivä (1–31)                                               |
+| $0013       | CLOCK_HOUR         | Tunti (0–23, 24 h)                                         |
+| $0014       | CLOCK_MINUTE       | Minuutti (0–59)                                            |
+| $0015       | CLOCK_SECOND       | Sekunti (0–59)                                             |
+| $0016       | CLOCK_MILLIS       | Millisekunti (0–999)                                       |
+| $0017       | UPTIME_W3          | Varattu (aina 0, 32-bit uptime ei käytä)                   |
+| $0018       | UPTIME_W2          | Varattu (aina 0, 32-bit uptime ei käytä)                   |
+| $0019       | UPTIME_W1          | 32-bit sekuntilaskuri bitit 16–31 (korkea)                 |
+| $001A       | UPTIME_W0          | 32-bit sekuntilaskuri bitit 0–15 (matala)                  |
+| $001B       | CLOCK_INT_INTERVAL | CTMR: kellokeskeytyksen väli ms (0 = pois, luku/kirjoitus) |
+| $001C–$001F | —                  | Varattu                                                    |
 
 ## 4.2 Video RAM ($F800–$FF7F)
 
@@ -129,7 +165,7 @@ Yhden sanan bittirakenne:
 | 8 – 10  | Edustaväri, FG (3 bittiä = 8 väriä) |
 | 11 – 13 | Taustaväri, BG (3 bittiä = 8 väriä) |
 | 14      | Lihavointi (1 = päällä)             |
-| 15      | Vilkkuminen (1 = päällä)            |
+| 15      | Varattu (0)                         |
 
 Värikoodit (FG, bitit 13–15):
 
@@ -176,7 +212,9 @@ Tämä palauttaa automaattisesti edellisen suojaustilan (User/Kernel) ja keskeyt
 | Virhepoikkeukset | 0–2     | Automaattinen: DIV/0, tuntematon opcode, stack overflow |
 | Ohjelmistokesk.  | 3, 8    | `INT`-käskyllä tai `EXIT`-käskyllä                      |
 | Suojausvirheet   | 4–5     | Automaattinen: käsky- tai muistisuojausrikkomus         |
-| Laitekesk.       | 6–7     | Laitteiston laukaisema (näppäimistö, ajastin)           |
+| Laitekesk.       | 6–7     | Laitteiston laukaisema (näppäimistö, käskylaskuri)       |
+| Kellokeskeytys   | 9       | Reaaliaikatimer (CTMR ms-väli, `SCTMR`-käsky)          |
+| Varattu          | 10–15   | Tulevaisuuden käyttöön                                  |
 
 ## 5.4 Ajastinkeskeytys (TMR)
 
@@ -184,6 +222,14 @@ Tämä palauttaa automaattisesti edellisen suojaustilan (User/Kernel) ja keskeyt
 - TMR = 0 → ajastin pois päältä
 - Int 7 laukeaa kun `instruction_counter % TMR == 0` **ja** `I = 1`
 - Ajastinta ei tarkisteta jos keskeytykset on estetty (I = 0)
+
+## 5.5 Kellokeskeytys (CTMR, Int 9)
+
+- CTMR-rekisteri määrittää aikavälin **millisekunteina** (reaaliaikainen kello)
+- CTMR = 0 → kellokeskeytys pois päältä
+- Int 9 laukeaa kun CTMR ms on kulunut edellisestä laukeamisesta **ja** `I = 1`
+- Asetetaan `SCTMR reg` -käskyllä (Kernel-tila)
+- Käsittelijassä voi lukea `CLOCK_MILLIS` ($0016) nykyisen millisekunnin
 
 ---
 
@@ -198,7 +244,9 @@ Jokainen `step()` suorittaa yhden käskyn seuraavassa järjestyksessä:
 | 3     | MEMORY    | Tarkista muistiviittausten laillisuus (User: addr < MPR → Int 5) |
 | 4     | EXECUTE   | Suorita käsky, päivitä rekisterit ja liput                       |
 | 5     | PC UPDATE | PC ← PC + käskyn sanamäärä                                       |
-| 6     | TIMER     | Tarkista ja laukaise ajastinkeskeytys tarvittaessa               |
+| 6     | TIMER     | Tarkista ja laukaise ajastinkeskeytys (TMR) tarvittaessa       |
+| 7     | UPTIME    | Kasvata 32-bittista sekuntilaskuria tarvittaessa               |
+| 8     | CLOCK INT | Tarkista ja laukaise kellokeskeytys (CTMR) tarvittaessa        |
 
 Jos vaiheissa 2–3 tapahtuu virhe, suoritetaan vastaava keskeytys eikä vaiheita 4–6 tehdä.
 

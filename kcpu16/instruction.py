@@ -288,6 +288,11 @@ OPCODE_TABLE: dict[int, tuple[str, int, bool]] = {
         1,
         True,
     ),  # STMR   reg         Aseta TMR                [KERNEL]
+    _op(1, 7, 5, 1): (
+        "SCTMR",
+        1,
+        True,
+    ),  # SCTMR  reg         Aseta CTMR (ms-kellokeskeytys) [KERNEL]
     _op(0, 7, 5, 0): (
         "EXIT",
         0,

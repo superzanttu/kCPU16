@@ -28,12 +28,25 @@ Operandeissa rekisterit koodataan indekseilla 0-5:
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+import time
+from dataclasses import dataclass, field
+from datetime import datetime
 from typing import TYPE_CHECKING
 
 from .constants import (
     BOOT_RAM_END,
     BOOT_RAM_START,
+    CLOCK_DAY,
+    CLOCK_HOUR,
+    CLOCK_INT_INTERVAL,
+    CLOCK_MILLIS,
+    CLOCK_MINUTE,
+    CLOCK_MMIO_END,
+    CLOCK_MMIO_START,
+    CLOCK_MONTH,
+    CLOCK_SECOND,
+    CLOCK_YEAR,
+    INT_CLOCK,
     INT_DIV_ZERO,
     INT_INVALID_OPCODE,
     INT_MEMORY_ACCESS_FAULT,
@@ -51,6 +64,10 @@ from .constants import (
     SR_FLAG_V,
     SR_FLAG_Z,
     MODE_KERNEL,
+    UPTIME_W0,
+    UPTIME_W1,
+    UPTIME_W2,
+    UPTIME_W3,
     WORD_BITS,
     WORD_MASK,
     WORD_SIGN_BIT,
@@ -102,6 +119,12 @@ class CPU:
     instruction_counter: int = 0  # Suoritettujen kaskyjen maara
     process_exit_requested: bool = False  # Onko EXIT kutsuttu?
 
+    # Kellonseuranta: reaaliaikaiset pisteet (time.monotonic())
+    _clock_start: float = field(default_factory=time.monotonic, init=False)
+    _uptime_counter: int = field(default=0, init=False)
+    _last_uptime_update: float = field(default_factory=time.monotonic, init=False)
+    _last_clock_int_time: float = field(default_factory=time.monotonic, init=False)
+
     def reset(self) -> None:
         """
         Nollaa CPU alkutilaan.
@@ -114,6 +137,11 @@ class CPU:
         self.halted = False
         self.instruction_counter = 0
         self.process_exit_requested = False
+        self._uptime_counter = 0
+        now = time.monotonic()
+        self._clock_start = now
+        self._last_uptime_update = now
+        self._last_clock_int_time = now
         self.regs.reset()
 
     def step(self) -> None:
@@ -168,6 +196,8 @@ class CPU:
             # Paivita laskuri ja tarkista ajastinkeskeytys
             self.instruction_counter += 1
             self._handle_timer_interrupt_if_needed()
+            self._update_uptime_if_needed()
+            self._handle_clock_interrupt_if_needed()
 
         # ----------------------------------------------------------------------
         # VIRHEENKASITTELY: Muunna poikkeukset keskeytyksiksi
@@ -188,22 +218,23 @@ class CPU:
             # Pino meni MPR:n alle -> INT 2
             self._trigger_interrupt(INT_STACK_OVERFLOW)
 
-    def run(self, max_cycles: int = 1_000_000) -> None:
+    def run(self, max_cycles: int | None = None) -> None:
         """
         Suorita kaskyjä kunnes pysaytysehto tayttyy.
 
         Pysaytysehdot:
         1. HALT-kasky suoritettu (halted = True)
         2. EXIT-kasky suoritettu (process_exit_requested = True)
-        3. max_cycles-raja saavutettu (ikuisen silmukan esto)
+        3. max_cycles-raja saavutettu (jos annettu)
 
         Args:
-            max_cycles: Maksimi suoritettavien kaskyjen maara
+            max_cycles: Maksimi suoritettavien kaskyjen maara.
+                        None (oletus) = ei rajaa, aja kunnes HALT tai EXIT.
         """
         cycles = 0
-        while (
-            not self.halted and not self.process_exit_requested and cycles < max_cycles
-        ):
+        while not self.halted and not self.process_exit_requested:
+            if max_cycles is not None and cycles >= max_cycles:
+                break
             self.step()
             cycles += 1
 
@@ -359,57 +390,57 @@ class CPU:
         elif ins.mnemonic == "READ":
             # READ reg, addr - Lue muistiosoitteen arvo rekisteriin
             reg_idx, addr = ins.operands
-            self._set_reg(reg_idx, self.memory.read(addr))
+            self._set_reg(reg_idx, self._read_word(addr))
 
         elif ins.mnemonic == "STORE":
             # STORE reg, addr - Tallenna rekisterin arvo muistiin
             reg_idx, addr = ins.operands
-            self.memory.write(addr, self._get_reg(reg_idx))
+            self._write_word(addr, self._get_reg(reg_idx))
 
         elif ins.mnemonic == "READ_IND":
             # READ_IND regD, regS - Lue muistista regS:n osoittamasta paikasta
             # regD = [regS]
             reg_dst, reg_addr = ins.operands
-            self._set_reg(reg_dst, self.memory.read(self._get_reg(reg_addr)))
+            self._set_reg(reg_dst, self._read_word(self._get_reg(reg_addr)))
 
         elif ins.mnemonic == "STORE_IND":
             # STORE_IND regD, regS - Kirjoita regS regD:n osoittamaan paikkaan
             # [regD] = regS
             reg_addr, reg_src = ins.operands
-            self.memory.write(self._get_reg(reg_addr), self._get_reg(reg_src))
+            self._write_word(self._get_reg(reg_addr), self._get_reg(reg_src))
 
         elif ins.mnemonic == "READ_REL":
             # READ_REL reg, imm - Lue muistista FP + imm rekisteriin
             # reg = [FP + imm]
             reg_idx, offset = ins.operands
             addr = (self.regs.fp + offset) & WORD_MASK
-            self._set_reg(reg_idx, self.memory.read(addr))
+            self._set_reg(reg_idx, self._read_word(addr))
 
         elif ins.mnemonic == "STORE_REL":
             # STORE_REL reg, imm - Kirjoita rekisteri muistiin FP + imm
             # [FP + imm] = reg
             reg_idx, offset = ins.operands
             addr = (self.regs.fp + offset) & WORD_MASK
-            self.memory.write(addr, self._get_reg(reg_idx))
+            self._write_word(addr, self._get_reg(reg_idx))
 
         elif ins.mnemonic == "STOREI":
             # STOREI imm, addr - Kirjoita välitön arvo muistiosoitteeseen
             # [addr] = imm
             imm, addr = ins.operands
-            self.memory.write(addr, imm & WORD_MASK)
+            self._write_word(addr, imm & WORD_MASK)
 
         elif ins.mnemonic == "STOREI_IND":
             # STOREI_IND regD, imm - Kirjoita välitön arvo regD:n osoittamaan paikkaan
             # [regD] = imm
             reg_addr, imm = ins.operands
-            self.memory.write(self._get_reg(reg_addr), imm & WORD_MASK)
+            self._write_word(self._get_reg(reg_addr), imm & WORD_MASK)
 
         elif ins.mnemonic == "STOREI_REL":
             # STOREI_REL imm, offset - Kirjoita välitön arvo [FP + offset]:een
             # [FP + offset] = imm
             imm, offset = ins.operands
             addr = (self.regs.fp + offset) & WORD_MASK
-            self.memory.write(addr, imm & WORD_MASK)
+            self._write_word(addr, imm & WORD_MASK)
 
         # ======================================================================
         # ARITMEETTISET KASKYT
@@ -718,6 +749,13 @@ class CPU:
             (reg_idx,) = ins.operands
             self.regs.tmr = self._get_reg(reg_idx)
 
+        elif ins.mnemonic == "SCTMR":
+            # SCTMR reg - Set Clock Timer Register (ms-vali, 0 = pois)
+            (reg_idx,) = ins.operands
+            self.regs.ctmr = self._get_reg(reg_idx)
+            # Nollaa ajastin heti jotta ensimmainen keskeytys tulee oikeaan aikaan
+            self._last_clock_int_time = time.monotonic()
+
         elif ins.mnemonic == "DREAD":
             # DREAD regD, regS - Lue tallennuslaitteelta
             # regD = storage[regS]
@@ -819,6 +857,88 @@ class CPU:
         ):
             self._trigger_interrupt(INT_TIMER)
 
+    def _update_uptime_if_needed(self) -> None:
+        """Kasvata 32-bittista sekuntilaskuria kun sekunti on kulunut."""
+        now = time.monotonic()
+        elapsed = now - self._last_uptime_update
+        if elapsed >= 1.0:
+            seconds = int(elapsed)
+            self._uptime_counter = (self._uptime_counter + seconds) % (2**32)
+            self._last_uptime_update += seconds  # siirrä tarkasti, ei ajaudu
+
+    def _handle_clock_interrupt_if_needed(self) -> None:
+        """Laukaise kellokeskeytys (INT 9) jos CTMR > 0 ja aika on kulunut.
+
+        Kellokeskeytys laukeaa kun:
+        - CTMR > 0 (ms-ajastin paalla)
+        - I = 1 (keskeytykset sallittu)
+        - CTMR millisekuntia kulunut edellisesta laukeamisesta
+        """
+        if self.regs.ctmr == 0:
+            return
+        if self.regs.get_flag(SR_FLAG_I) == 0:
+            return
+        now = time.monotonic()
+        elapsed_ms = (now - self._last_clock_int_time) * 1000.0
+        if elapsed_ms >= self.regs.ctmr:
+            self._last_clock_int_time = now
+            self._trigger_interrupt(INT_CLOCK)
+
+    # ==========================================================================
+    # MMIO-APUMETODIT: lue/kirjoita sana joka osaa hakea kellorekisterit
+    # ==========================================================================
+
+    def _read_word(self, addr: int) -> int:
+        """Lue sana muistista; palauttaa MMIO-arvon jos osoite on kellolohkossa."""
+        addr &= WORD_MASK
+        if CLOCK_MMIO_START <= addr <= CLOCK_MMIO_END:
+            return self._read_clock_mmio(addr)
+        return self.memory.read(addr)
+
+    def _write_word(self, addr: int, value: int) -> None:
+        """Kirjoita sana muistiin; CLOCK_INT_INTERVAL-kirjoitus asettaa CTMR:n."""
+        addr &= WORD_MASK
+        value &= WORD_MASK
+        if addr == CLOCK_INT_INTERVAL:
+            self.regs.ctmr = value
+            self._last_clock_int_time = time.monotonic()
+            return
+        # Muut kellolohkon osoitteet ovat vain luettavia — ohita hiljainen kirjoitus
+        if CLOCK_MMIO_START <= addr <= CLOCK_MMIO_END:
+            return
+        self.memory.write(addr, value)
+
+    def _read_clock_mmio(self, addr: int) -> int:
+        """Palauttaa reaaliaikaisen kellonarvon MMIO-osoitteen mukaan."""
+        now = datetime.now()
+        if addr == CLOCK_YEAR:
+            return now.year & WORD_MASK
+        if addr == CLOCK_MONTH:
+            return now.month
+        if addr == CLOCK_DAY:
+            return now.day
+        if addr == CLOCK_HOUR:
+            return now.hour
+        if addr == CLOCK_MINUTE:
+            return now.minute
+        if addr == CLOCK_SECOND:
+            return now.second
+        if addr == CLOCK_MILLIS:
+            return now.microsecond // 1000
+        # Uptime-laskuri: paivita ensin
+        self._update_uptime_if_needed()
+        if addr == UPTIME_W3:
+            return 0  # 32-bit uptime: upper 32 bits always 0
+        if addr == UPTIME_W2:
+            return 0  # 32-bit uptime: upper 32 bits always 0
+        if addr == UPTIME_W1:
+            return (self._uptime_counter >> 16) & WORD_MASK
+        if addr == UPTIME_W0:
+            return self._uptime_counter & WORD_MASK
+        if addr == CLOCK_INT_INTERVAL:
+            return self.regs.ctmr & WORD_MASK
+        return 0  # varattu osoite
+
     # ==========================================================================
     # PINOOPERAATIOT
     # ==========================================================================
@@ -878,7 +998,7 @@ class CPU:
         Raises:
             InvalidOpcodeError: Jos indeksi on 6 tai 7 (varattu)
         """
-        idx = encoded & REG_IDX_MASK  # Vain 3 alinta bittia
+        idx = encoded & REG_IDX_MASK  # Vain 5 alinta bittia
         if idx == 0:
             return self.regs.r0
         if idx == 1:
@@ -888,8 +1008,32 @@ class CPU:
         if idx == 3:
             return self.regs.r3
         if idx == 4:
-            return self.regs.fp
+            return self.regs.r4
         if idx == 5:
+            return self.regs.r5
+        if idx == 6:
+            return self.regs.r6
+        if idx == 7:
+            return self.regs.r7
+        if idx == 8:
+            return self.regs.r8
+        if idx == 9:
+            return self.regs.r9
+        if idx == 10:
+            return self.regs.r10
+        if idx == 11:
+            return self.regs.r11
+        if idx == 12:
+            return self.regs.r12
+        if idx == 13:
+            return self.regs.r13
+        if idx == 14:
+            return self.regs.r14
+        if idx == 15:
+            return self.regs.r15
+        if idx == 16:
+            return self.regs.fp
+        if idx == 17:
             return self.regs.sp
         raise InvalidOpcodeError(f"Invalid register index: {idx}")
 
@@ -915,8 +1059,32 @@ class CPU:
         elif idx == 3:
             self.regs.r3 = value
         elif idx == 4:
-            self.regs.fp = value
+            self.regs.r4 = value
         elif idx == 5:
+            self.regs.r5 = value
+        elif idx == 6:
+            self.regs.r6 = value
+        elif idx == 7:
+            self.regs.r7 = value
+        elif idx == 8:
+            self.regs.r8 = value
+        elif idx == 9:
+            self.regs.r9 = value
+        elif idx == 10:
+            self.regs.r10 = value
+        elif idx == 11:
+            self.regs.r11 = value
+        elif idx == 12:
+            self.regs.r12 = value
+        elif idx == 13:
+            self.regs.r13 = value
+        elif idx == 14:
+            self.regs.r14 = value
+        elif idx == 15:
+            self.regs.r15 = value
+        elif idx == 16:
+            self.regs.fp = value
+        elif idx == 17:
             self.regs.sp = value
         else:
             raise InvalidOpcodeError(f"Invalid register index: {idx}")

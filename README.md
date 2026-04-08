@@ -15,7 +15,7 @@ interaktiivisen Textual-pohjaisen käyttöliittymän.
 - **Disassembler** — konekieli → assembly-teksti
 - **Muistisuojaus** — MPR-rekisteri rajoittaa User-tilan muistinkäyttöä
 - **Keskeytykset** — 9 vektoria (INT 0–8), ohjelmallinen INT-käsky ja laitteistokeskeytykset
-- **Virtuaalinen tekstinäyttö** — 80 × 24 merkkiä, 8 edustusväriä (FG) + 8 taustaväriä (BG), bold/blink
+- **Virtuaalinen tekstinäyttö** — 80 × 24 merkkiä, 8 edustusväriä (FG) + 8 taustaVäriä (BG), bold
 - **Näppäimistölaite** — KGET-käsky lukee näppäinpuskurin
 - **Tallennuslaite** — lohkopohjainen levylaite (DREAD/DWRITE, boot-lataus sektorilta 0)
 - **TUI-debuggeri** — Textual-pohjainen, ammattitason käyttöliittymä

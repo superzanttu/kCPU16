@@ -11,7 +11,7 @@ von Neumann -arkkitehtuuriin. Projekti sisältää:
 - **CPU-emulaattorin** — rekisterit, muisti, käskyjen suoritus (Fetch-Decode-Execute)
 - **Assemblerin** — kolmipassinen (makrotuki, .origin-direktiivi, .diskblock-direktiivi)
 - **Disassemblerin** — konekielestä luettavaan muotoon
-- **Virtuaaliset laitteet** — näyttö (80×24, FG/BG-värit, bold/blink), näppäimistö, tallennuslaite
+- **Virtuaaliset laitteet** — näyttö (80×24, FG/BG-värit, bold), näppäimistö, tallennuslaite
 - **Debuggeri-TUI** — ammattimainen Textual-pohjainen käyttöliittymä (MARS/GDB TUI -inspiroitu)
 - **CLI** — komentorivi
 
@@ -116,7 +116,7 @@ Määrittää kaikki numeriset vakiot:
 - **Muistialueet**: `VRAM_START` (0xF800), `VRAM_END` (0xFF7F, 80×24), `KERNEL_STACK_START` (0xFF80), `BOOT_RAM_START` (0x0100)
 - **Tilaliput**: `SR_FLAG_Z` (0), `SR_FLAG_N` (1), `SR_FLAG_C` (2), `SR_FLAG_V` (3), `SR_FLAG_I` (4), `SR_FLAG_P` (5)
 - **Suoritustilat**: `MODE_KERNEL` (1), `MODE_USER` (0)
-- **Värijärjestelmä**: `VRAM_FG_MASK`, `VRAM_BG_MASK`, `COLOR_BLACK`…`COLOR_WHITE`, attribuutit (BOLD, ITALIC, BLINK, UNDERLINE, STRIKETHROUGH)
+- **Värijärjestelmä**: `VRAM_FG_MASK`, `VRAM_BG_MASK`, `COLOR_BLACK`…`COLOR_WHITE`, attribuutti BOLD (bitti 14), bitti 15 varattu
 
 #### `exceptions.py` — Poikkeusluokat
 CPU:n sisäiset virheet, jotka muunnetaan keskeytyksiksi:
@@ -275,7 +275,7 @@ Vie laiteluokat: `KeyboardDevice`, `ScreenDevice`, `BlockStorageDevice`
 #### `screen.py` — Tekstinäyttö
 `ScreenDevice`-dataluokka:
 - 80 saraketta × 24 riviä = 1920 sanaa VRAM:ssa (0xF800–0xFF7F)
-- VRAM-sanan rakenne: bitit 0–7 = ASCII-merkki, bitit 8–10 = FG-väri (0–7), bitit 11–13 = BG-väri (0–7), bitti 14 = lihavointi, bitti 15 = vilkkuminen
+- VRAM-sanan rakenne: bitit 0–7 = ASCII-merkki, bitit 8–10 = FG-väri (0–7), bitit 11–13 = BG-väri (0–7), bitti 14 = lihavointi, bitti 15 = varattu (0)
 - `render_text(memory)` — pelkkä teksti ilman värejä
 - `render_with_rich_colors(memory)` — Rich-muotoiltu teksti väreillä ja attribuuteilla (TUI:n käyttöön)
 - `extract_char_with_attrs(word)` — erota merkki, FG, BG ja attribuutit VRAM-sanasta
@@ -399,7 +399,7 @@ Osoite          Koko       Käyttö
 0x0009 - 0x00FF  247 sanaa   Varattu käyttöjärjestelmälle
 0x0100 - 0x01FF  256 sanaa   Bootloaderin latausalue (ohjelma ladataan tähän)
 0x0200 - 0xF7FF  ~61K sanaa  Vapaa RAM (käyttäjän ohjelmat ja data)
-0xF800 - 0xFF7F 1920 sanaa   Video RAM (80×24 merkkiä, FG/BG-värit, bold/blink)
+0xF800 - 0xFF7F 1920 sanaa   Video RAM (80×24 merkkiä, FG/BG-värit, bold)
 0xFF80 - 0xFFFF  128 sanaa   Kernel Stack
 ```
 
@@ -408,7 +408,7 @@ Osoite          Koko       Käyttö
 ## Värijärjestelmä (VRAM-sanan rakenne)
 
 ```
-Bitti 15       : Vilkkuminen (1 = päällä)
+Bitti 15       : Varattu (0)
 Bitti 14       : Lihavointi (1 = päällä)
 Bitit 11-13    : Taustaväri BG (0–7: musta..valkoinen)
 Bitit  8-10    : Edustaväri FG (0–7: musta..valkoinen)
