@@ -24,11 +24,12 @@
 ;   Bitti 14:    Lihavointi
 ;   Bitti 15:    Vilkkuminen
 ;
-;   Käytetty väri: keltainen teksti, musta tausta
-;     FG=3 (keltainen) → bitit 8–10 = 011 → 0x0300
-;     BG=0 (musta)     → bitit 11–13 = 000 → 0x0000
-;     Yhdistetty attribuutti: 0x0300
-;     Perusnumero '0' (ASCII 0x30): 0x0300 | 0x30 = 0x0330
+;   Käytetty väri: syaani lihavoitu teksti, musta tausta
+;     FG=6 (syaani) → bitit 8–10 = 110 → 0x0600
+;     BG=0 (musta)  → bitit 11–13 = 000 → 0x0000
+;     Bold          → bitti 14    = 1   → 0x4000
+;     Yhdistetty attribuutti: 0x4600
+;     Perusnumero '0' (ASCII 0x30): 0x4600 | 0x30 = 0x4630
 ;
 ; REKISTERIEN KÄYTTÖ (pysyvät koko ohjelman ajan):
 ;   R0  = VRAM-kirjoitusosoitin (asetetaan R2:sta joka iteraatiossa)
@@ -36,10 +37,8 @@
 ;   R2  = VRAM-kantaosoite ($FB8C, ei koskaan muutu)
 ;   R3  = vakio 1 (osoittimen kasvatus)
 ;   R4  = vakio 10 (jako kymmenjärjestelmässä)
-;   R5  = '0' + väri = $0330 (perusnumero '0' keltaisella)
+;   R5  = '0' + väri = $4630 (perusnumero '0' syaanilla, bold)
 ;   R6–R11 = aliohjelmien käyttöön (voidaan ylikirjoittaa)
-;   R12 = edellinen UPTIME_W0-arvo (1 sekunnin odotukseen)
-;   R13 = väliaikainen (UPTIME_W0-vertailuun)
 ;
 ; ALIOHJELMAT:
 ;   write2  — Kirjoita 2-numero (00–99), R0 += 2
@@ -57,8 +56,7 @@
         LOAD  R2, 0xFB8C      ; VRAM-kantaosoite: rivi 11, sarake 28
         LOAD  R3, 1           ; osoittimen askel (1 sana kerrallaan)
         LOAD  R4, 10          ; jakaja (kymmenjärjestelmä)
-        LOAD  R5, 0x0330      ; perusmerkki: '0' + keltainen teksti, musta tausta (FG=3)
-        LOAD  R12, [UPTIME_W0] ; tallenna nykyinen sekuntilaskuri
+        LOAD  R5, 0x4630      ; perusmerkki: '0' + syaani lihavoitu (FG=6, bold)
 
 ; =============================================================================
 ; PÄÄSILMUKKA: Lue kello, kirjoita VRAM, toista
@@ -71,7 +69,7 @@ main_loop:
         CALL  write2
 
         ; '.' erottaja
-        LOAD  R6, 0x032E      ; '.' keltainen teksti
+        LOAD  R6, 0x462E      ; '.' syaani bold
         STORE [R0], R6
         ADD   R0, R3
 
@@ -80,7 +78,7 @@ main_loop:
         CALL  write2
 
         ; '.' erottaja
-        LOAD  R6, 0x032E
+        LOAD  R6, 0x462E
         STORE [R0], R6
         ADD   R0, R3
 
@@ -89,7 +87,7 @@ main_loop:
         CALL  write4
 
         ; ' ' välilyönti
-        LOAD  R6, 0x0320      ; ' ' keltainen teksti
+        LOAD  R6, 0x4620      ; ' ' syaani bold
         STORE [R0], R6
         ADD   R0, R3
 
@@ -98,7 +96,7 @@ main_loop:
         CALL  write2
 
         ; ':' erottaja
-        LOAD  R6, 0x033A      ; ':' keltainen teksti
+        LOAD  R6, 0x463A      ; ':' syaani bold
         STORE [R0], R6
         ADD   R0, R3
 
@@ -107,7 +105,7 @@ main_loop:
         CALL  write2
 
         ; ':' erottaja
-        LOAD  R6, 0x033A
+        LOAD  R6, 0x463A
         STORE [R0], R6
         ADD   R0, R3
 
@@ -116,20 +114,13 @@ main_loop:
         CALL  write2
 
         ; '.' erottaja
-        LOAD  R6, 0x032E
+        LOAD  R6, 0x462E
         STORE [R0], R6
         ADD   R0, R3
 
         ; ------ mmm: Millisekunti (000–999) ------
         LOAD  R1, [CLOCK_MILLIS]
         CALL  write3
-
-        ; Odota kunnes sekuntilaskuri kasvaa (= 1 sekunti on kulunut)
-wait_second:
-        LOAD  R13, [UPTIME_W0]
-        CMP   R12, R13
-        JZ    wait_second
-        CPY   R12, R13          ; tallenna uusi sekuntiarvo
 
         JUMP  main_loop
 
