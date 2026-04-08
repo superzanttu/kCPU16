@@ -22,7 +22,7 @@
 ;   Bitit  8–10: Edustaväri FG (3 bittiä, 0–7)
 ;   Bitit 11–13: Taustaväri BG (3 bittiä, 0–7)
 ;   Bitti 14:    Lihavointi
-;   Bitti 15:    Vilkkuminen
+;   Bitti 15:    Varattu (0)
 ;
 ;   Käytetty väri: syaani lihavoitu teksti, musta tausta
 ;     FG=6 (syaani) → bitit 8–10 = 110 → 0x0600

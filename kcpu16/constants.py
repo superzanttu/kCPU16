@@ -98,9 +98,10 @@ BOOT_RAM_END = 0x01FF  # Viimeinen bootloaderin osoite RAM:ssa
 # Jokainen sana = merkki (bitit 0-7) + attribuutit (bitit 8-15)
 # SANAN RAKENNE:
 #   Bitit 0-7:   ASCII-merkki
-#   Bitit 8-11:  Attribuutit (lihavointi, kursiivi, vilkku, alleviivaus, yliviivaus)
-#   Bitit 12-14: Edusta-väri (FG, 0-7, 3 bittiä)
-#   Bitit 15:    Tausta-väri (BG, 1-bittinen ensin, sitten laajennetaan)
+#   Bitit 8-10:  Edusta-väri (FG, 3 bittiä = 8 väriä)
+#   Bitit 11-13: Tausta-väri (BG, 3 bittiä = 8 väriä)
+#   Bitti 14:    Lihavointi
+#   Bitti 15:    Varattu (0)
 VRAM_START = 0xF800  # Nayttomuistin alkuosoite (vasen ylanurkka)
 VRAM_END = 0xFF7F  # Nayttomuistin loppuosoite (80x24 = 1920 sanaa)
 VRAM_WORDS = 1920  # 80 cols x 24 rows
@@ -123,9 +124,9 @@ VRAM_FG_SHIFT = 8
 VRAM_BG_MASK = 0x3800  # Bitit 11-13: Tausta-väri (BG, 3 bittiä = 8 väriä)
 VRAM_BG_SHIFT = 11
 
-# Attribuutit (Bitit 14-15)
+# Attribuutit
 VRAM_ATTR_BOLD = 0x4000  # Bitti 14: Lihavointi
-VRAM_ATTR_BLINK = 0x8000  # Bitti 15: Vilkkuminen
+# Bitti 15 on varattu — kirjoittaminen sallittu, lukeminen ignorataan
 
 # Värikoodit (0-7 tai 0-1 taustalle)
 COLOR_BLACK = 0
@@ -243,7 +244,6 @@ ARCH_SYMBOLS: dict[str, int] = {
     "VRAM_BG_MASK": VRAM_BG_MASK,  # Tausta-värikenttä maski (0x3800)
     "VRAM_BG_SHIFT": VRAM_BG_SHIFT,  # Tausta-värikentän shift (11)
     "VRAM_ATTR_BOLD": VRAM_ATTR_BOLD,  # Lihavointi-attribuutti (0x4000)
-    "VRAM_ATTR_BLINK": VRAM_ATTR_BLINK,  # Vilkkumis-attribuutti (0x8000)
     # ---- Värikoodit --------------------------------------------------
     "COLOR_BLACK": COLOR_BLACK,  # Musta  (0)
     "COLOR_RED": COLOR_RED,  # Punainen (1)

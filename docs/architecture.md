@@ -165,7 +165,7 @@ Yhden sanan bittirakenne:
 | 8 – 10  | Edustaväri, FG (3 bittiä = 8 väriä) |
 | 11 – 13 | Taustaväri, BG (3 bittiä = 8 väriä) |
 | 14      | Lihavointi (1 = päällä)             |
-| 15      | Vilkkuminen (1 = päällä)            |
+| 15      | Varattu (0)                         |
 
 Värikoodit (FG, bitit 13–15):
 
