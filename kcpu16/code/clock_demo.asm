@@ -9,7 +9,7 @@
 ;       DD.MM.YYYY HH:MM:SS.mmm
 ;
 ;   Lukee arvot suoraan MMIO-kellon rekistereistä ja kirjoittaa
-;   ne VRAM-muistiin. Silmukka päivittää näyttöä jatkuvasti.
+;   ne VRAM-muistiin. Silmukka päivittää näyttöä kerran sekunnissa.
 ;
 ; NÄYTTÖASETTELU:
 ;   Näyttö: 80 saraketta x 24 riviä
@@ -24,20 +24,22 @@
 ;   Bitti 14:    Lihavointi
 ;   Bitti 15:    Vilkkuminen
 ;
-;   Käytetty väri: keltainen lihavoitu, musta tausta
+;   Käytetty väri: keltainen teksti, musta tausta
 ;     FG=3 (keltainen) → bitit 8–10 = 011 → 0x0300
-;     Bold → bitti 14  = 1        → 0x4000
-;     Yhdistetty attribuutti: 0x4300
-;     Perusnumero '0' (ASCII 0x30): 0x4300 | 0x30 = 0x4330
+;     BG=0 (musta)     → bitit 11–13 = 000 → 0x0000
+;     Yhdistetty attribuutti: 0x0300
+;     Perusnumero '0' (ASCII 0x30): 0x0300 | 0x30 = 0x0330
 ;
 ; REKISTERIEN KÄYTTÖ (pysyvät koko ohjelman ajan):
-;   R0 = VRAM-kirjoitusosoitin (asetetaan R2:sta joka iteraatiossa)
-;   R1 = luettava arvo (syöte aliohjelmille)
-;   R2 = VRAM-kantaosoite ($FB8C, ei koskaan muutu)
-;   R3 = vakio 1 (osoittimen kasvatus)
-;   R4 = vakio 10 (jako kymmenjärjestelmässä)
-;   R5 = '0' + väri = $4330 (perusnumero '0')
+;   R0  = VRAM-kirjoitusosoitin (asetetaan R2:sta joka iteraatiossa)
+;   R1  = luettava arvo (syöte aliohjelmille)
+;   R2  = VRAM-kantaosoite ($FB8C, ei koskaan muutu)
+;   R3  = vakio 1 (osoittimen kasvatus)
+;   R4  = vakio 10 (jako kymmenjärjestelmässä)
+;   R5  = '0' + väri = $0330 (perusnumero '0' keltaisella)
 ;   R6–R11 = aliohjelmien käyttöön (voidaan ylikirjoittaa)
+;   R12 = edellinen UPTIME_W0-arvo (1 sekunnin odotukseen)
+;   R13 = väliaikainen (UPTIME_W0-vertailuun)
 ;
 ; ALIOHJELMAT:
 ;   write2  — Kirjoita 2-numero (00–99), R0 += 2
@@ -55,7 +57,8 @@
         LOAD  R2, 0xFB8C      ; VRAM-kantaosoite: rivi 11, sarake 28
         LOAD  R3, 1           ; osoittimen askel (1 sana kerrallaan)
         LOAD  R4, 10          ; jakaja (kymmenjärjestelmä)
-        LOAD  R5, 0x4330      ; perusmerkki: '0' + keltainen bold (FG=3, bold)
+        LOAD  R5, 0x0330      ; perusmerkki: '0' + keltainen teksti, musta tausta (FG=3)
+        LOAD  R12, [UPTIME_W0] ; tallenna nykyinen sekuntilaskuri
 
 ; =============================================================================
 ; PÄÄSILMUKKA: Lue kello, kirjoita VRAM, toista
@@ -68,7 +71,7 @@ main_loop:
         CALL  write2
 
         ; '.' erottaja
-        LOAD  R6, 0x432E      ; '.' keltainen bold
+        LOAD  R6, 0x032E      ; '.' keltainen teksti
         STORE [R0], R6
         ADD   R0, R3
 
@@ -77,7 +80,7 @@ main_loop:
         CALL  write2
 
         ; '.' erottaja
-        LOAD  R6, 0x432E
+        LOAD  R6, 0x032E
         STORE [R0], R6
         ADD   R0, R3
 
@@ -86,7 +89,7 @@ main_loop:
         CALL  write4
 
         ; ' ' välilyönti
-        LOAD  R6, 0x4320      ; ' ' keltainen bold
+        LOAD  R6, 0x0320      ; ' ' keltainen teksti
         STORE [R0], R6
         ADD   R0, R3
 
@@ -95,7 +98,7 @@ main_loop:
         CALL  write2
 
         ; ':' erottaja
-        LOAD  R6, 0x433A      ; ':' keltainen bold
+        LOAD  R6, 0x033A      ; ':' keltainen teksti
         STORE [R0], R6
         ADD   R0, R3
 
@@ -104,7 +107,7 @@ main_loop:
         CALL  write2
 
         ; ':' erottaja
-        LOAD  R6, 0x433A
+        LOAD  R6, 0x033A
         STORE [R0], R6
         ADD   R0, R3
 
@@ -113,13 +116,20 @@ main_loop:
         CALL  write2
 
         ; '.' erottaja
-        LOAD  R6, 0x432E
+        LOAD  R6, 0x032E
         STORE [R0], R6
         ADD   R0, R3
 
         ; ------ mmm: Millisekunti (000–999) ------
         LOAD  R1, [CLOCK_MILLIS]
         CALL  write3
+
+        ; Odota kunnes sekuntilaskuri kasvaa (= 1 sekunti on kulunut)
+wait_second:
+        LOAD  R13, [UPTIME_W0]
+        CMP   R12, R13
+        JZ    wait_second
+        CPY   R12, R13          ; tallenna uusi sekuntiarvo
 
         JUMP  main_loop
 
