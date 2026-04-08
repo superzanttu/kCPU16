@@ -59,6 +59,8 @@ from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.screen import ModalScreen
+from textual.worker import get_current_worker
+from textual._work_decorator import work
 from textual.widgets import (
     Button,
     Checkbox,
@@ -72,7 +74,6 @@ from textual.widgets import (
 from .assembler import Assembler, MNEMONIC_TO_OPCODE
 from .constants import (
     BOOT_RAM_START,
-    DEFAULT_RUN_CYCLES,
     SR_FLAG_C,
     SR_FLAG_I,
     SR_FLAG_N,
@@ -817,7 +818,7 @@ class KCPU16TUI(App[None]):
 
         # VAIN step/run komennot päivittävät näkymän
         cmd_verb = cmd.split()[0].lower()
-        if cmd_verb in {"step", "run", "restart", "asm", "reset"}:
+        if cmd_verb in {"step", "run", "restart", "asm", "reset", "stop"}:
             self._refresh_all()
 
     # ------------------------------------------------------------------
@@ -839,23 +840,24 @@ class KCPU16TUI(App[None]):
         self._refresh_all()
 
     def action_run_program(self) -> None:
-        """Suorita ohjelma breakpointiin tai max 10000 sykliin asti (F5).
+        """Käynnistä CPU loputon suoritus taustassäkteessä (F5).
 
-        Käyttää _run_with_breakpoints()-metodia, joka steppaa yksi käsky
-        kerrallaan ja tarkistaa breakpointit jokaisen jälkeen. Logittaa
-        tuloksen ja päivittää näkymät.
+        Ajo päättyy vasta HALT-, EXIT-käskyyn tai breakpointiin.
+        Käyttöliittymä pysyy reagoivana ajon aikana. Estopainike: 'stop'.
         """
-        result = self._run_with_breakpoints(DEFAULT_RUN_CYCLES)
-        self._log(result)
-        self._refresh_all()
+        if self.machine.cpu.halted or self.machine.process_exited:
+            self._log("[yellow]CPU stopped. Reset to continue.[/yellow]")
+            return
+        self._log("[green]Running... (stop with 'stop' command or Reset)[/green]")
+        self._cpu_run_worker()
 
     def action_reset_machine(self) -> None:
         """Resetoi kone alkutilaan (Ctrl+R tai Reset-painike).
 
-        Cold reset nollaa CPU:n, muistin ja laitteet. Asettaa
-        is_assembled=False ja tyhjentää addr_to_line-mapin. Ottaa
-        uuden rekisterisnapshot vertailua varten.
+        Peruuttaa mahdollisen käynnissä olevan taustayö-suorituksen ensin,
+        sitten cold reset nollaa CPU:n, muistin ja laitteet.
         """
+        self.workers.cancel_all()
         self.machine.cold_reset()
         self.is_assembled = False
         self.addr_to_line = {}
@@ -1175,6 +1177,55 @@ class KCPU16TUI(App[None]):
                     f"after {cycles} cycles.[/red]"
                 )
         return f"Ran {cycles} cycles. PC=0x{self.machine.regs.pc:04X}"
+
+    @work(thread=True, exclusive=True)
+    def _cpu_run_worker(self) -> None:
+        """Aja CPU:ta taustasäikeessä loputtomasti (F5 / run ilman N-argumenttia).
+
+        Suoritus päättyy vain kun:
+        - HALT-käsky suoritetaan
+        - EXIT-käsky suoritetaan
+        - Breakpoint osutaan
+        - Worker peruutetaan (Reset tai 'stop'-komento)
+
+        Käyttöliittymä pysyy reagoivana ajon aikana (taustasäie).
+        Näytön päivitys tapahtuu 1s timerillä kuten normaalistikin.
+        Lopputulos ja CPU-tila päivitetään suorituksen päätyttyä.
+        """
+        worker = get_current_worker()
+        cpu = self.machine.cpu
+        total_cycles = 0
+        BATCH = 5000  # käskyjä per erä ennen peruutustarkistusta
+
+        while not worker.is_cancelled:
+            for _ in range(BATCH):
+                if cpu.halted or cpu.process_exit_requested:
+                    break
+                self.machine.step()
+                total_cycles += 1
+                if self.dbg.has_breakpoint(self.machine.regs.pc):
+                    addr = self.machine.regs.pc
+                    self.call_from_thread(
+                        self._log,
+                        f"[red]Breakpoint at 0x{addr:04X} "
+                        f"after {total_cycles} cycles.[/red]",
+                    )
+                    self.call_from_thread(self._refresh_all)
+                    return
+            if cpu.halted:
+                self.call_from_thread(
+                    self._log, f"[red]HALTED after {total_cycles} cycles.[/red]"
+                )
+                self.call_from_thread(self._refresh_all)
+                return
+            if cpu.process_exit_requested:
+                self.call_from_thread(
+                    self._log, f"[yellow]EXIT after {total_cycles} cycles.[/yellow]"
+                )
+                self.call_from_thread(self._refresh_all)
+                return
+        # Worker peruutettu (Reset / stop)
+        self.call_from_thread(self._refresh_all)
 
     # ------------------------------------------------------------------
     # Näkymien päivitys
@@ -1651,11 +1702,23 @@ class KCPU16TUI(App[None]):
                 return CommandResult(True, f"Stepped {max(1, count)}. IC={ic}")
 
             if op == "run":
-                cycles = int(args[0], 0) if args else DEFAULT_RUN_CYCLES
-                result = self._run_with_breakpoints(max(1, cycles))
-                return CommandResult(True, result)
+                if args:
+                    # Eksplisiittinen syklimäärä: synkroninen, rajoitettu ajo
+                    cycles = max(1, int(args[0], 0))
+                    result = self._run_with_breakpoints(cycles)
+                    return CommandResult(True, result)
+                else:
+                    # Ei argumenttia: loputon ajo taustasäikeessä (kuten F5)
+                    if self.machine.cpu.halted or self.machine.process_exited:
+                        return CommandResult(False, "CPU stopped. Reset to continue.")
+                    self._log(
+                        "[green]Running... (stop with 'stop' command or Reset)[/green]"
+                    )
+                    self._cpu_run_worker()
+                    return CommandResult(True, "")
 
             if op == "stop":
+                self.workers.cancel_all()
                 self.machine.cpu.halted = True
                 return CommandResult(True, "[red]CPU halted.[/red]")
 

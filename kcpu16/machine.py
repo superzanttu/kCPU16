@@ -180,17 +180,18 @@ class KCPU16Machine:
             self.memory.load_words(seg_addr, seg_words)
         self.regs.pc = segments[0][0]
 
-    def run(self, max_cycles: int = 1000000) -> None:
+    def run(self, max_cycles: int | None = None) -> None:
         """
         Aja ohjelmaa kunnes pysaytysehto tayttyy.
 
         Pysaytysehdot:
         - HALT-kasky suoritettu
         - EXIT-kasky suoritettu
-        - max_cycles-raja saavutettu
+        - max_cycles-raja saavutettu (jos annettu)
 
         Args:
-            max_cycles: Maksimi kaskyjen maara (esto ikuisille silmukoille)
+            max_cycles: Maksimi kaskyjen maara.
+                        None (oletus) = ei rajaa, aja kunnes HALT tai EXIT.
         """
         self.cpu.run(max_cycles=max_cycles)
 

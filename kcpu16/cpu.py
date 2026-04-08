@@ -218,22 +218,23 @@ class CPU:
             # Pino meni MPR:n alle -> INT 2
             self._trigger_interrupt(INT_STACK_OVERFLOW)
 
-    def run(self, max_cycles: int = 1_000_000) -> None:
+    def run(self, max_cycles: int | None = None) -> None:
         """
         Suorita kaskyjä kunnes pysaytysehto tayttyy.
 
         Pysaytysehdot:
         1. HALT-kasky suoritettu (halted = True)
         2. EXIT-kasky suoritettu (process_exit_requested = True)
-        3. max_cycles-raja saavutettu (ikuisen silmukan esto)
+        3. max_cycles-raja saavutettu (jos annettu)
 
         Args:
-            max_cycles: Maksimi suoritettavien kaskyjen maara
+            max_cycles: Maksimi suoritettavien kaskyjen maara.
+                        None (oletus) = ei rajaa, aja kunnes HALT tai EXIT.
         """
         cycles = 0
-        while (
-            not self.halted and not self.process_exit_requested and cycles < max_cycles
-        ):
+        while not self.halted and not self.process_exit_requested:
+            if max_cycles is not None and cycles >= max_cycles:
+                break
             self.step()
             cycles += 1
 

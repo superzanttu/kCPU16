@@ -75,9 +75,26 @@ _FLAG_NAME_TO_BIT: dict[str, int] = {
 
 # Rekisterinimistä hakuavain
 _VALID_REGS = {
-    "R0", "R1", "R2", "R3", "R4", "R5", "R6", "R7",
-    "R8", "R9", "R10", "R11", "R12", "R13", "R14", "R15",
-    "FP", "SP", "PC", "SR",
+    "R0",
+    "R1",
+    "R2",
+    "R3",
+    "R4",
+    "R5",
+    "R6",
+    "R7",
+    "R8",
+    "R9",
+    "R10",
+    "R11",
+    "R12",
+    "R13",
+    "R14",
+    "R15",
+    "FP",
+    "SP",
+    "PC",
+    "SR",
 }
 
 
@@ -292,7 +309,7 @@ def run_test(path: Path) -> int:
     machine.reset_for_test()
     machine.load_segments(segments)
     try:
-        machine.run()
+        machine.run(max_cycles=1_000_000)  # turvaraja testien ikuisen silmukan varalle
     except Exception as exc:
         print(f"VIRHE suorituksessa: {exc}", file=sys.stderr)
         return 1
