@@ -171,8 +171,8 @@ class ScreenDevice:
 
                 fg_color = _COLOR_MAP.get(fg, "white")
                 bg_color = _COLOR_MAP.get(bg, "black")
-                style = "bold" if bold else "normal"
-                tag = f"[{style} on {bg_color} {fg_color}]"
+                style_prefix = "bold " if bold else ""
+                tag = f"[{style_prefix}{fg_color} on {bg_color}]"
 
                 if tag == run_tag:
                     run_chars.append(ch)
