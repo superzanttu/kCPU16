@@ -74,6 +74,7 @@ from textual.widgets import (
 
 from .assembler import Assembler, MNEMONIC_TO_OPCODE
 from .constants import (
+    ARCH_SYMBOLS,
     BOOT_RAM_START,
     SR_FLAG_C,
     SR_FLAG_I,
@@ -84,7 +85,7 @@ from .constants import (
     WORD_MASK,
 )
 from .debugger import DebugState
-from .disassembler import Disassembler
+from .disassembler import Disassembler, REVERSE_TABLE
 
 from .instruction import OPCODE_TABLE
 from .machine import KCPU16Machine
@@ -656,6 +657,10 @@ class KCPU16TUI(App[None]):
         self._disk_dirty: bool = False
         self._watched_mtime: int | None = None  # st_mtime_ns (kokonaisluku)
         self._exec_mode: str = "stopped"  # "stopped" | "full" | "slow"
+        # --asm listing caches (rebuilt each assemble)
+        self._asm_addr_to_src: dict[int, str] = {}  # addr → raw source line
+        self._asm_addr_to_label: dict[int, str] = {}  # addr → label name
+        self._asm_jump_targets: dict[int, list[str]] = {}  # addr → list of "MNEM@XXXX"
 
     # ------------------------------------------------------------------
     # Layout
@@ -910,6 +915,9 @@ class KCPU16TUI(App[None]):
         self.machine.cold_reset()
         self.is_assembled = False
         self.addr_to_line = {}
+        self._asm_addr_to_src = {}
+        self._asm_addr_to_label = {}
+        self._asm_jump_targets = {}
         self.dbg.snapshot_registers(self.machine.dump_registers())
         self._update_run_mode_ui()
         self._log("[green]Machine reset.[/green]")
@@ -1144,6 +1152,7 @@ class KCPU16TUI(App[None]):
             self.machine.cold_reset()
             self.machine.load_segments(segments)
             self.is_assembled = True
+            self._build_asm_caches(segments)
             self.addr_to_line = _build_addr_to_line(source, self.assembler)
             self.dbg.snapshot_registers(self.machine.dump_registers())
             total_words = sum(len(w) for _, w in segments)
@@ -1171,6 +1180,54 @@ class KCPU16TUI(App[None]):
         except Exception as e:
             self._log(f"[red]Assembly error: {e}[/red]")
             self.is_assembled = False
+
+    def _build_asm_caches(self, segments: list[tuple[int, list[int]]]) -> None:
+        """Rakenna --asm-listauksen tukitiedot assembloinnin jälkeen.
+
+        Täyttää kolme hakutaulukkoa:
+            _asm_addr_to_src      -- osoite → alkuperäinen lähdekoodi-rivi
+            _asm_addr_to_label    -- osoite → käyttäjän labelinimi
+            _asm_jump_targets     -- osoite → lista hyppääjistä ("MNEM@XXXX")
+
+        Parametrit:
+            segments: assemble():n palauttama lista (base_addr, words) -pareista.
+        """
+        _BRANCH_MNEMONICS: frozenset[str] = frozenset(
+            {"JUMP", "CALL", "JZ", "JNZ", "JLT", "JGT", "JLE", "JGE"}
+        )
+        # osoite → lähdekoodi-rivi (kommentit mukaan, ei trimmattuna)
+        self._asm_addr_to_src = {
+            addr: src for src, addr in self.assembler.source_map
+        }
+        # osoite → labelinimi (vain käyttäjän labelit, ei arch-symbolit)
+        arch_addrs: set[int] = set(ARCH_SYMBOLS.values())
+        self._asm_addr_to_label = {
+            addr: name
+            for name, addr in self.assembler.labels.items()
+            if addr not in arch_addrs and name not in ARCH_SYMBOLS
+        }
+        # Analysoi hyppykohteet segmentit läpikäyden
+        jump_targets: dict[int, list[str]] = {}
+        for seg_start, words in segments:
+            i = 0
+            pc = seg_start
+            while i < len(words):
+                opcode = words[i] & WORD_MASK
+                meta = REVERSE_TABLE.get(opcode)
+                op_count = meta[1] if meta is not None else 0
+                mnemonic = meta[0] if meta is not None else None
+                if (
+                    mnemonic in _BRANCH_MNEMONICS
+                    and op_count >= 1
+                    and i + op_count < len(words)
+                ):
+                    target = words[i + op_count] & WORD_MASK
+                    jump_targets.setdefault(target, []).append(
+                        f"{mnemonic}@{pc:04X}"
+                    )
+                i += 1 + op_count
+                pc += 1 + op_count
+        self._asm_jump_targets = jump_targets
 
     def _check_file_changes(self) -> None:
         """Tarkista onko ladattu tiedosto muuttunut (1s timer).
@@ -1378,87 +1435,121 @@ class KCPU16TUI(App[None]):
         self._refresh_stack()
 
     def _refresh_disassembly(self) -> None:
-        """Päivitä disassembly-paneeli PC:n ympäriltä.
+        """Päivitä disassembly-paneeli PC:n ympäriltä (--asm-formaatti).
 
-        Näyttöikkuna (scan window):
-            - Skannaa taaksepäin PC:stä max 15 osoitetta löytääkseen
-              aiempia käskyjä. Ohittaa tyhjät muistipaikat (0x0000),
-              mutta pysähtyy kun löytää aukon → ei näytä turhaa dataa.
-            - Clamp: näytä enintään 10 sanaa ennen PC:tä.
-            - Eteenpäin: näytä max 80 sanaa PC:n jälkeen.
+        Näyttöikkuna:
+            - Skannaa taaksepäin PC:stä max 15 osoitetta.
+            - Eteenpäin max 80 osoitetta PC:n jälkeen.
+            - Ohittaa tyhjät muistipaikat paitsi PC:n lähellä tai BP:ssa.
 
-        Breakpointit:
-            - Breakpointatut osoitteet sisällytetään aina, vaikka ne
-              olisivat scan-ikkunan ulkopuolella (lähellä).
-            - Breakpointattu rivi saa ● (punainen pallo) -merkin.
+        Joka käskyrivillä näytetään:
+            ● ▶ ADDR: HEX_SANAT   MNEMONIC OPERANDIT   ; lähdekoodi
 
-        Suodatus:
-            - ".word 0x0000" -rivit piilotetaan (tyhjä muisti) PAITSI:
-              * Rivi on PC:n kohdalla tai max 3 osoitteen päässä
-              * Rivillä on breakpoint
+            ● = breakpoint (punainen)   ▶ = nykyinen PC (korostettu tausta)
+            ADDR syaanilla, mnemoniikki keltaisella, rekisterit sinisellä,
+            välittömät arvot vihreällä, lähdekomentit himmennettyinä.
 
-        Muotoilu:
-            - ▶ = nykyinen PC (korostettu tausta)
-            - ● = breakpoint (punainen pallo)
-            - Osoite syaanilla, mnemoniikki keltaisella
-            - Rekisterit sinisellä, välittömät arvot vihreällä
+        Jump target -merkit (label-nimi) näytetään ennen hyppykohdetä olevaa
+        käskyriviä.
         """
         pc = self.machine.regs.pc
 
-        # Scan backward from PC to find a good start point.
-        # Skip over empty memory (0x0000) to avoid showing noise.
-        # Show up to 5 instructions before PC if they contain real code.
+        # -- Scan window --
         scan_start = max(0, pc - 15)
-        start = pc  # default: start at PC
+        start = pc
         for a in range(pc - 1, scan_start - 1, -1):
             if self.machine.memory.read(a) != 0 or self.dbg.has_breakpoint(a):
                 start = a
             else:
                 break
-        # Also include any breakpoints slightly beyond the backward scan
         if self.dbg.breakpoints:
             for bp_addr in self.dbg.breakpoints:
                 if scan_start <= bp_addr < start:
                     start = bp_addr
-        # Clamp: show at most 10 words before PC
         start = max(start, pc - 10)
-
         end = min(WORD_MASK, pc + 80)
-        words = [self.machine.memory.read(a) for a in range(start, end + 1)]
-        raw = self.disassembler.disassemble(words, start_addr=start)
 
         lines: list[str] = []
-        for raw_line in raw.split("\n"):
-            if not raw_line.strip():
-                continue
-            addr_part = raw_line.split(":")[0].strip()
-            try:
-                addr = int(addr_part, 16)
-            except ValueError:
-                lines.append(raw_line)
-                continue
+        addr = start
+        while addr <= end:
+            opcode = self.machine.memory.read(addr)
+            meta = REVERSE_TABLE.get(opcode)
+            if meta is None:
+                instr_words = [opcode]
+                disasm_tail = f".word 0x{opcode:04X}"
+                op_count = 0
+            else:
+                mnemonic, op_count, _ = meta
+                instr_words = [
+                    self.machine.memory.read(addr + i) for i in range(1 + op_count)
+                ]
+                raw = self.disassembler.disassemble(
+                    instr_words, start_addr=addr
+                ).strip()
+                disasm_tail = raw.split(": ", 1)[1] if ": " in raw else raw
 
-            # Skip .word 0x0000 lines (empty memory) unless near PC or has breakpoint
+            # Skip .word 0x0000 unless near PC or on a breakpoint
             if (
-                ".word 0x0000" in raw_line
+                disasm_tail == ".word 0x0000"
                 and addr != pc
                 and abs(addr - pc) > 3
                 and not self.dbg.has_breakpoint(addr)
             ):
+                addr += 1 + op_count
                 continue
 
-            bp = "[bold red]\u25cf[/] " if self.dbg.has_breakpoint(addr) else "  "
-            display = self._fmt_disasm_line(raw_line)
+            # Jump-target separator line (label name)
+            if addr in self._asm_jump_targets:
+                label = self._asm_addr_to_label.get(addr, f"0x{addr:04X}")
+                srcs = "  ".join(self._asm_jump_targets[addr])
+                lines.append(
+                    f"[dim]\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500"
+                    f" [bold]{label}[/bold]: \u2190 {srcs}[/dim]"
+                )
+
+            # Hex bytes column (max 14 chars)
+            hex_str = " ".join(f"{w:04X}" for w in instr_words)
+
+            # Rich-colored mnemonic + operands
+            disasm_rich = self._fmt_disasm_tail(disasm_tail)
+
+            # Source comment (instruction text only, strip inline comments)
+            src_line = self._asm_addr_to_src.get(addr, "")
+            src_clean = src_line.split(";", 1)[0].strip()
+            src_part = f"  [dim]; {src_clean}[/dim]" if src_clean else ""
+
+            # BP and PC markers
+            bp_marker = "[bold red]\u25cf[/] " if self.dbg.has_breakpoint(addr) else "  "
 
             if addr == pc:
-                lines.append(f"{bp}[bold white on #3a3a3a]\u25b6 {display}[/]")
+                lines.append(
+                    f"{bp_marker}[bold white on #3a3a3a]"
+                    f"\u25b6 {addr:04X}: {hex_str:<14}  {disasm_rich}[/]"
+                    f"{src_part}"
+                )
             else:
-                lines.append(f"{bp}  {display}")
+                lines.append(
+                    f"{bp_marker}  [cyan]{addr:04X}[/]: "
+                    f"{hex_str:<14}  {disasm_rich}"
+                    f"{src_part}"
+                )
+
+            addr += 1 + op_count
 
         self.query_one("#disasm-content", Static).update("\n".join(lines))
 
+    def _fmt_disasm_tail(self, disasm_tail: str) -> str:
+        """Muotoile mnemoniikka + operandit Rich-väreillä (ilman osoite-etuliitettä)."""
+        tokens = disasm_tail.split(None, 1)
+        if not tokens:
+            return disasm_tail
+        mnemonic = tokens[0]
+        operands = tokens[1] if len(tokens) > 1 else ""
+        fmt_ops = self._fmt_operands(mnemonic, operands)
+        return f"[yellow]{mnemonic:<10}[/] {fmt_ops}"
+
     def _fmt_disasm_line(self, line: str) -> str:
-        """Muotoile disassembly-rivi värikoodein."""
+        """Muotoile disassembly-rivi värikoodein (käytetään step-logissa)."""
         parts = line.split(":", 1)
         if len(parts) < 2:
             return line
@@ -2126,6 +2217,9 @@ class KCPU16TUI(App[None]):
             self.machine.cold_reset()
             self.is_assembled = False
             self.addr_to_line = {}
+            self._asm_addr_to_src = {}
+            self._asm_addr_to_label = {}
+            self._asm_jump_targets = {}
             self.dbg.snapshot_registers(self.machine.dump_registers())
             return CommandResult(
                 True, "[green]Reset (memory + CPU). Storage intact.[/green]"
@@ -2136,6 +2230,9 @@ class KCPU16TUI(App[None]):
             self.machine.storage.reset()
             self.is_assembled = False
             self.addr_to_line = {}
+            self._asm_addr_to_src = {}
+            self._asm_addr_to_label = {}
+            self._asm_jump_targets = {}
             self.dbg.snapshot_registers(self.machine.dump_registers())
             self._disk_dirty = False
             self._update_disk_title()
