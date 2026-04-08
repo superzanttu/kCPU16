@@ -50,7 +50,7 @@ Tulkki tukee seuraavaa minimaalista komentojoukkoa:
 | `RUN` | Suorittaa ohjelman alusta |
 | `NEW` | Tyhjentää ohjelmapuskurin |
 | `SAVE` | Tallentaa ohjelman tallennuslaitteelle |
-| `JARI` | Lataa ohjelman tallennuslaitteelta |
+| `LOAD` | Lataa ohjelman tallennuslaitteelta |
 | `RENUM [alku [askel]]` | Numeroi rivit uudelleen (oletus: alku=10, askel=10) |
 
 ### 2.3 Lausekkeet (Expressions)
@@ -163,7 +163,7 @@ Lohkot 2–16 (0x0200–0x10FF):  Ohjelmapuskurin data
 2. Kopioi ohjelmapuskuri (0x0800–0x0FFF) DWRITE-käskyllä tallennuslaitteelle lohkoihin 2–16.
 3. Näytä "OK" tai virheviesti.
 
-### 6.4 JARI-operaation kulku
+### 6.4 LOAD-operaation kulku
 
 1. Lue lohko 1, tarkista tunniste (0xBA5C).
 2. Jos tunniste on väärä: näytä "NO PROGRAM" ja keskeytä.
@@ -203,7 +203,7 @@ Lohkot 2–16 (0x0200–0x10FF):  Ohjelmapuskurin data
 | `display` | 0x0680 | Merkki/merkkijono näytölle, rullaus |
 | `program_buf` | 0x06C0 | Puskurin lisäys, poisto, haku |
 | `renum` | 0x0700 | RENUM-algoritmi |
-| `storage` | 0x0740 | SAVE/JARI (DREAD/DWRITE) |
+| `storage` | 0x0740 | SAVE/LOAD (DREAD/DWRITE) |
 | `line_index` | 0x0780 | Rivinumeroindeksin ylläpito |
 
 ---
@@ -252,5 +252,5 @@ Lohkot 2–16 (0x0200–0x10FF):  Ohjelmapuskurin data
 4. **Vaihe 4 – Lausekkeiden evaluointi:** Aritmeettiset lausekkeet (+, -, *, /), vertailut.
 5. **Vaihe 5 – Aliohjelmakutsut:** GOSUB/RETURN, FOR/NEXT.
 6. **Vaihe 6 – RENUM:** Uudelleennumerointi ja GOTO/GOSUB-viitteiden päivitys.
-7. **Vaihe 7 – SAVE/JARI:** Tallennuslaitteen käyttö ohjelman pysyväistallennukseen.
+7. **Vaihe 7 – SAVE/LOAD:** Tallennuslaitteen käyttö ohjelman pysyväistallennukseen.
 8. **Vaihe 8 – Testaus ja hienosäätö:** Muistinkäytön optimointi, virheviestit, reunatapaukset.
