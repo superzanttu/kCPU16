@@ -139,6 +139,16 @@ class Assembler:
         """Palattaa .diskblock-direktiivin blokkiindeksin tai None."""
         return self._disk_block
 
+    @property
+    def source_map(self) -> list[tuple[str, int]]:
+        """Palattaa listauksen (lahderivi, abs_osoite) assemble()-kutsun jalkeen."""
+        return self._source_map
+
+    @property
+    def labels(self) -> dict[str, int]:
+        """Palattaa label -> osoite -hakutaulukon assemble()-kutsun jalkeen."""
+        return self._labels
+
     def assemble(
         self, source: str, start_addr: int = BOOT_RAM_START
     ) -> list[tuple[int, list[int]]]:
@@ -161,12 +171,15 @@ class Assembler:
             [(512, [1, 0, 10, 68])]
         """
         self._disk_block: int | None = None
+        self._source_map: list[tuple[str, int]] = []  # (lahderivi, abs_osoite)
+        self._labels: dict[str, int] = {}
         # Pass 0: Makrojen ekspansointi, .origin ja .diskblock käsittely
         expanded_source, start_addr, user_constants = (
             self._pass0_expand_macros_and_origin(source, start_addr)
         )
         # Pass 1: Kerätään labelit (arkkitehtuurivakiot ja käyttäjän vakiot esitäytettynä)
         labels = self._pass1_collect_labels(expanded_source, start_addr, user_constants)
+        self._labels = labels
         # Pass 2: Tuotetaan konekieli segmentteina
         segments = self._pass2_emit(expanded_source, labels, start_addr)
         # Validoi koko jos .diskblock on maaratty
@@ -458,6 +471,7 @@ class Assembler:
         segments: list[tuple[int, list[int]]] = []
         current_start = start_addr
         current_words: list[int] = []
+        self._source_map = []
 
         for raw_line in source.splitlines():
             # Poista kommentit
@@ -486,11 +500,17 @@ class Assembler:
 
             # .db direktiivi: emittoi raakoja tavuja
             if line.lower().startswith(".db"):
+                self._source_map.append(
+                    (raw_line.strip(), current_start + len(current_words))
+                )
                 current_words.extend(self._parse_db_values(line))
                 continue
 
             # .dstr direktiivi: emittoi null-terminoitu merkkijono
             if line.lower().startswith(".dstr"):
+                self._source_map.append(
+                    (raw_line.strip(), current_start + len(current_words))
+                )
                 current_words.extend(self._parse_dstr_values(line))
                 continue
 
@@ -508,6 +528,9 @@ class Assembler:
 
             # LOAD reg, [expr]  → READ / READ_IND / READ_REL
             if mnemonic == "LOAD" and len(parts) >= 3 and parts[2].startswith("["):
+                self._source_map.append(
+                    (raw_line.strip(), current_start + len(current_words))
+                )
                 reg_dst = self._parse_operand(parts[1], labels)
                 mode = self._parse_bracket_expr(parts[2], labels)
                 if mode[0] == "abs":
@@ -521,6 +544,9 @@ class Assembler:
             # STORE [expr], src  → STORE / STOREI / STORE_IND / STOREI_IND /
             #                       STORE_REL / STOREI_REL
             if mnemonic == "STORE" and len(parts) >= 3 and parts[1].startswith("["):
+                self._source_map.append(
+                    (raw_line.strip(), current_start + len(current_words))
+                )
                 mode = self._parse_bracket_expr(parts[1], labels)
                 src_token = parts[2]
                 src_is_reg = src_token.upper() in REGISTER_TO_ID
@@ -581,6 +607,9 @@ class Assembler:
                 raise ValueError(f"Unknown mnemonic: {mnemonic}")
 
             # Lisaa opcode tulosteeseen
+            self._source_map.append(
+                (raw_line.strip(), current_start + len(current_words))
+            )
             current_words.append(opcode)
 
             # Parsi ja lisaa operandit
