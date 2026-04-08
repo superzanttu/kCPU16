@@ -23,16 +23,19 @@ label:                  ; Label (valinnainen, omalla rivillä tai käskyn edess�
 
 # 2. Operandien merkintätavat
 
-| Syntaksi     | Tyyppi                                  | Esimerkki              |
-| ------------ | --------------------------------------- | ---------------------- |
-| `R0`–`SP`    | Rekisteri (kirjainkoosta riippumaton)   | `ADD R0, R1`           |
-| `42`         | Desimaali-literaali                     | `LOAD R0, 42`          |
-| `0xFF`       | Heksadesimaali-literaali                | `LOAD R0, 0xFF`        |
-| `0b1010`     | Binääri-literaali                       | `LOAD R0, 0b1010`      |
-| `0o52`       | Oktaali-literaali                       | `LOAD R0, 0o52`        |
-| `label`      | Label-viittaus                          | `JUMP loop`            |
-| `VRAM_START` | Arkkitehtuurivakio (ks. kohta 4)        | `LOAD R0, VRAM_START`  |
-| `NIMI`       | Käyttäjän vakio (`.const`, ks. kohta 5) | `LOAD R0, BUFFER_SIZE` |
+| Syntaksi       | Tyyppi                                                 | Esimerkki              |
+| -------------- | ------------------------------------------------------ | ---------------------- |
+| `R0`–`SP`      | Rekisteri (kirjainkoosta riippumaton)                  | `ADD R0, R1`           |
+| `42`           | Desimaali-literaali                                    | `LOAD R0, 42`          |
+| `0xFF`         | Heksadesimaali-literaali                               | `LOAD R0, 0xFF`        |
+| `0b1010`       | Binääri-literaali                                      | `LOAD R0, 0b1010`      |
+| `0o52`         | Oktaali-literaali                                      | `LOAD R0, 0o52`        |
+| `label`        | Label-viittaus                                         | `JUMP loop`            |
+| `VRAM_START`   | Arkkitehtuurivakio (ks. kohta 4)                       | `LOAD R0, VRAM_START`  |
+| `NIMI`         | Käyttäjän vakio (`.const`, ks. kohta 5)                | `LOAD R0, BUFFER_SIZE` |
+| `[addr]`       | Absoluuttinen muistiosoite (ks. kohta 6)               | `LOAD R0, [0x3000]`    |
+| `[reg]`        | Epäsuora muistiosoite rekisterin kautta (ks. kohta 6)  | `LOAD R0, [R1]`        |
+| `[FP+offset]`  | FP-suhteellinen muistiosoite (ks. kohta 6)             | `LOAD R0, [FP+2]`      |
 
 Rekisterit: `R0`, `R1`, `R2`, `R3`, `FP`, `SP`. Kirjainkoosta riippumaton.
 
@@ -139,9 +142,84 @@ MY_CONST:                  ; VIRHE: nimi on jo .const-vakio
 
 ---
 
-# 6. Esimerkit
+# 6. Muistiosoitustavat ja LOAD/STORE-syntaksi
 
-## 6.1 Peruslaskelma
+Assembler tunnistaa kolme muistiosoitustapaa `LOAD`- ja `STORE`-käskyissä
+hakasulkunotaatiolla `[...]`. Syntaksimuodot yksinkertaistavat ohjelmoijan työtä:
+sen sijaan, että käytettäisiin erillisiä käskymnemoniikkoja (`READ`, `READ_IND`,
+`STORE_IND` jne.), riittää tuttu `LOAD`/`STORE`-notaatio oikean hakasulkumuodon
+kanssa.
+
+## 6.1 Osoitusmoodit
+
+| Syntaksi      | Osoitusmooodi | Selitys                                       |
+| ------------- | ------------- | --------------------------------------------- |
+| `[addr]`      | Absoluuttinen | Muistiosoite `addr` suoraan                   |
+| `[reg]`       | Epäsuora      | Osoite on rekisterin arvo                     |
+| `[FP+offset]` | Suhteellinen  | Osoite on `FP + offset` (aliohjelman kehys)   |
+
+## 6.2 LOAD reg, \[...\]
+
+`LOAD`-käsky hakasulkunotaatiolla lukee arvon muistista suoraan rekisteriin.
+
+| Syntaksi              | Kääntyy käskyksi | Toiminta            |
+| --------------------- | ---------------- | ------------------- |
+| `LOAD reg, [addr]`    | `READ`           | `reg ← [addr]`      |
+| `LOAD reg, [regS]`    | `READ_IND`       | `reg ← [regS]`      |
+| `LOAD reg, [FP+offs]` | `READ_REL`       | `reg ← [FP + offs]` |
+
+```asm
+LOAD R0, [0x3000]       ; Lue osoitteesta 0x3000 (absoluuttinen)
+LOAD R0, [R1]           ; Lue osoitteesta, jonka R1 sisältää (epäsuora)
+LOAD R0, [FP+2]         ; Lue aliohjelman paikallismuuttuja indeksillä 2 (suhteellinen)
+```
+
+## 6.3 STORE \[...\], lähde
+
+`STORE`-käsky hakasulkunotaatiolla kirjoittaa muistiin. Lähteeksi kelpaa rekisteri
+tai välitön arvo (immediate). Kun lähde on välitön arvo, assembler tuottaa
+automaattisesti `STOREI`-variantin.
+
+| Syntaksi               | Kääntyy käskyksi | Toiminta              |
+| ---------------------- | ---------------- | --------------------- |
+| `STORE [addr], reg`    | `STORE`          | `[addr] ← reg`        |
+| `STORE [addr], imm`    | `STOREI`         | `[addr] ← imm`        |
+| `STORE [regD], reg`    | `STORE_IND`      | `[regD] ← reg`        |
+| `STORE [regD], imm`    | `STOREI_IND`     | `[regD] ← imm`        |
+| `STORE [FP+offs], reg` | `STORE_REL`      | `[FP + offs] ← reg`   |
+| `STORE [FP+offs], imm` | `STOREI_REL`     | `[FP + offs] ← imm`   |
+
+```asm
+STORE [0x3000], R0      ; Kirjoita R0 osoitteeseen 0x3000 (absoluuttinen)
+STORE [0x3000], 42      ; Kirjoita vakioarvo 42 osoitteeseen 0x3000 (absoluuttinen, välitön)
+STORE [R1], R0          ; Kirjoita R0 osoitteeseen, jonka R1 sisältää (epäsuora)
+STORE [R1], 0xFF        ; Kirjoita vakio 0xFF epäsuoraan osoitteeseen (välitön)
+STORE [FP+2], R0        ; Tallenna R0 aliohjelman paikallismuuttujaan (suhteellinen)
+STORE [FP+2], 99        ; Kirjoita välitön arvo paikallismuuttujaan (suhteellinen, välitön)
+```
+
+## 6.4 Vanhat mnemonikat (poistettu käytöstä)
+
+Hakasulkunotaatio korvaa seuraavat erilliset käskymnemonikat, jotka on **poistettu
+käytöstä**. Niiden käyttö suoraan assembly-koodissa tuottaa assemblointivirheen.
+
+| Vanhentunut mnemoniikka   | Korvaava hakasulkunotaatio  |
+| ------------------------- | --------------------------- |
+| `READ reg, addr`          | `LOAD reg, [addr]`          |
+| `READ_IND regD, regS`     | `LOAD regD, [regS]`         |
+| `READ_REL reg, imm`       | `LOAD reg, [FP+imm]`        |
+| `STORE reg, addr`         | `STORE [addr], reg`         |
+| `STORE_IND regD, regS`    | `STORE [regD], regS`        |
+| `STORE_REL reg, imm`      | `STORE [FP+imm], reg`       |
+| `STOREI imm, addr`        | `STORE [addr], imm`         |
+| `STOREI_IND regD, imm`    | `STORE [regD], imm`         |
+| `STOREI_REL imm, offs`    | `STORE [FP+offs], imm`      |
+
+---
+
+# 7. Esimerkit
+
+## 7.1 Peruslaskelma
 
 ```asm
 .origin 0x0200
@@ -151,11 +229,11 @@ start:
     LOAD  R0, 10
     LOAD  R1, 20
     ADD   R0, R1        ; R0 = 30
-    STORE R0, 0x3000    ; [0x3000] = 30
+    STORE [0x3000], R0  ; [0x3000] = 30
     HALT
 ```
 
-## 6.2 Käyttäjän vakiot (.const)
+## 7.2 Käyttäjän vakiot (.const)
 
 ```asm
 .origin 0x0200
@@ -170,7 +248,7 @@ start:
     HALT
 ```
 
-## 6.3 Makrojen käyttö
+## 7.3 Makrojen käyttö
 
 ```asm
 .origin 0x0200
@@ -187,11 +265,11 @@ START:
     LOAD  R2, 0b1010
     LOAD  R3, VRAM_START  ; Arkkitehtuurivakio (= 0xF800)
     ADD   R0, R1
-    STORE R0, 0x0200
+    STORE [0x0200], R0
     JUMP  START
 ```
 
-## 6.4 Aliohjelma (CALL/RET)
+## 7.4 Aliohjelma (CALL/RET)
 
 ```asm
 .origin 0x0200
@@ -215,18 +293,45 @@ done:
     RET
 ```
 
-## 6.5 VRAM-kirjoitus
+## 7.5 VRAM-kirjoitus
 
 ```asm
 .origin 0x0200
 
     LOAD R0, VRAM_START     ; Näytön alkuosoite
     LOAD R1, 0x0741         ; 'A' (0x41) valkoisella värillä (0x07 << 8)
-    STORE R1, R0            ; Kirjoita ensimmäiselle ruudulle
+    STORE [R0], R1          ; Kirjoita ensimmäiselle ruudulle (epäsuora)
     HALT
 ```
 
-## 6.6 Testidirektiivit
+## 7.6 Muistiosoitustavat ([..]-syntaksi)
+
+```asm
+.origin 0x0200
+
+.const BUFFER, 0x0300
+
+start:
+    ; Absoluuttinen: lue/kirjoita kiinteään osoitteeseen
+    STORE [BUFFER], 42      ; Kirjoita välitön arvo vakion osoitteeseen
+    LOAD  R0, [BUFFER]      ; Lue sama osoite takaisin R0:aan
+
+    ; Epäsuora: osoite rekisterin arvona
+    LOAD  R1, BUFFER        ; R1 = osoite 0x0300
+    LOAD  R2, [R1]          ; Lue [R1] eli [0x0300] → R2 = 42
+    STORE [R1], R0          ; Kirjoita R0 rekisterin R1 osoittamaan paikkaan
+
+    ; Suhteellinen (FP-kehys): paikallismuuttujat aliohjelmassa
+    CALL  mysub
+    HALT
+
+mysub:
+    STORE [FP+1], R0        ; Tallenna R0 paikallismuuttujaan indeksillä 1
+    LOAD  R3, [FP+1]        ; Lue se takaisin R3:een
+    RET
+```
+
+## 7.7 Testidirektiivit
 
 ```asm
 .origin 0x0200
@@ -238,6 +343,79 @@ done:
 
 .expect_reg R0, 42      ; Tarkista että R0 = 42 ajon jälkeen
 .expect_flag Z, 0       ; Tarkista että Z-lippu = 0
+```
+
+## 7.8 FP-rekisterin käyttö (pinokehys)
+
+### Juurisyy
+
+SP (Stack Pointer) muuttuu jokaisen `PUSH`-, `POP`-, `CALL`- ja `RET`-käskyn
+yhteydessä. Jos aliohjelmassa yritettäisiin hakea pinoon tallennettuja
+paikallismuuttujia SP:n avulla, jokainen uusi pinooperaatio muuttaisi
+tarvittavan siirtymän — erityisesti sisäkkäisissä kutsuissa kirjanpito
+muuttuisi nopeasti virhealttiiksi.
+
+**FP (Frame Pointer) ratkaisee tämän:** se asetetaan kerran aliohjelman alussa
+(`CPY FP, SP`) kiinteäksi viittaukseksi pinokehyksen pohjalle, eikä sen arvo
+muutu koko aliohjelman suorituksen aikana. Näin `[FP+1]`, `[FP+2]` jne.
+osoittavat aina samoihin muistipaikkoihin riippumatta siitä, minne SP on
+sittemmin siirtynyt.
+
+### Pinokehyksen rakenne
+
+Kun aliohjelma kutsutaan ja se tallentaa argumentit pinoon ennen `CPY FP, SP`
+-käskyä, kehyksen rakenne on seuraava:
+
+```
+  osoite       sisältö
+  ──────────────────────
+  [FP+3]   paluuosoite  ← CALL tallentaa tämän
+  [FP+2]   argumentti a ← PUSH R0
+  [FP+1]   argumentti b ← PUSH R1
+  [FP]     SP:n huippu  ← CPY FP, SP (kehyksen pohja)
+```
+
+Koska FP on kiinnitetty, `[FP+2]` tarkoittaa aina argumenttia `a` — vaikka SP
+myöhemmin liikkuisi sisäkkäisten kutsujen tai muiden `PUSH`/`POP`-operaatioiden
+vuoksi.
+
+### Esimerkki
+
+```asm
+.origin 0x0200
+
+; Pääohjelma: laske 10 + 32
+main:
+    LOAD  R0, 10
+    LOAD  R1, 32
+    CALL  yhteenlasku       ; kutsu aliohjelma; paluuarvo R0:ssa
+    HALT                    ; R0 = 42
+
+; Aliohjelma yhteenlasku
+;   Sisääntulo : R0 = a, R1 = b
+;   Paluuarvo  : R0 = a + b
+;
+; Pinon tila CPY FP, SP -käskyn jälkeen:
+;   [FP+3] = paluuosoite    (CALL tallensi)
+;   [FP+2] = a = 10         (PUSH R0)
+;   [FP+1] = b = 32         (PUSH R1)
+;   [FP]   = kehyksen pohja (CPY FP, SP)
+;
+; SP voi myöhemmin muuttua (esim. sisäkkäisessä CALL:ssa),
+; mutta FP pysyy kiinteänä ja [FP+1]/[FP+2] toimivat aina.
+yhteenlasku:
+    PUSH  R0            ; tallenna a pinoon → [SP] = 10, SP--
+    PUSH  R1            ; tallenna b pinoon → [SP] = 32, SP--
+    CPY   FP, SP        ; kiinnitä FP kehyksen pohjalle
+
+    LOAD  R0, [FP+2]    ; R0 = a = 10  (vakio-offset, vaikka SP muuttuisi)
+    LOAD  R1, [FP+1]    ; R1 = b = 32
+    ADD   R0, R1        ; R0 = 42
+
+    POP   R1            ; palauta R1 (poistaa b:n tallennuksen)
+    POP   R3            ; pinosta poistetaan a:n tallenne; ei R0:aan,
+                        ; koska R0 sisältää jo tuloksen (42)
+    RET                 ; R0 = 42
 ```
 
 ---

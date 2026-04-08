@@ -27,7 +27,10 @@ kCPU16/
 │   ├── architecture.md          # CPU-arkkitehtuurispesifikaatio
 │   ├── assembler.md             # Assembly-kielen syntaksi ja direktiivit
 │   ├── tui.md                   # TUI-debuggerin käyttöohje
-│   └── PROJECT_STRUCTURE.md     # Tämä tiedosto
+│   ├── PROJECT_STRUCTURE.md     # Tämä tiedosto
+│   └── suunnitelmat/            # Selvitykset ja suunnitelmat (ei nykytila)
+│       ├── basic.md             # Suunnitelma BASIC-tulkin toteuttamiseksi
+│       └── grafiikkatila.md     # Selvitys grafiikkatilasta Textual-kirjaston rajoissa
 │
 ├── kcpu16/                      # Päämoduuli — kaikki logiikka
 │   ├── __init__.py              # Paketin alustus, vie KCPU16Machine-luokan
@@ -87,6 +90,16 @@ kCPU16/
 | `assembler.md`         | Assembly-kielen syntaksi, direktiivit, arkkitehtuurivakiot, esimerkit.       |
 | `tui.md`               | TUI-debuggerin käyttöohje: asettelu, näppäinsidonnaisuudet, komennot.        |
 | `PROJECT_STRUCTURE.md` | Tämä dokumentti — projektin rakenne.                                         |
+
+### docs/suunnitelmat/ — Selvitykset ja Suunnitelmat
+
+Tämä hakemisto sisältää dokumentit, jotka eivät kuvaa projektin nykytilaa vaan
+kartoittavat mahdollisia tulevia ominaisuuksia tai analysoivat toteutusvaihtoehtoja.
+
+| Tiedosto            | Tarkoitus                                                                    |
+| ------------------- | ---------------------------------------------------------------------------- |
+| `basic.md`          | Suunnitelma yksinkertaisen BASIC-tulkin toteuttamiseksi kCPU16-assemblerilla. |
+| `grafiikkatila.md`  | Selvitys grafiikkatilan mahdollisuuksista Textual-kirjaston rajoissa.         |
 
 ---
 
