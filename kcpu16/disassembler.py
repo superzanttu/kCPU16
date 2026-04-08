@@ -32,7 +32,13 @@ from .constants import WORD_MASK
 REVERSE_TABLE = {opcode: meta for opcode, meta in OPCODE_TABLE.items()}
 
 # Rekisteri-indeksi -> nimi muistikaskyjen formatointia varten
-_REG_NAMES: dict[int, str] = {0: "R0", 1: "R1", 2: "R2", 3: "R3", 4: "FP", 5: "SP"}
+_REG_NAMES: dict[int, str] = {
+    0: "R0", 1: "R1", 2: "R2", 3: "R3",
+    4: "R4", 5: "R5", 6: "R6", 7: "R7",
+    8: "R8", 9: "R9", 10: "R10", 11: "R11",
+    12: "R12", 13: "R13", 14: "R14", 15: "R15",
+    16: "FP", 17: "SP",
+}
 
 
 def _format_memory_instr(mnemonic: str, op_vals: list[int]) -> str | None:

@@ -25,7 +25,10 @@ from __future__ import annotations
 from .constants import (
     BOOT_RAM_END,
     BOOT_RAM_START,
+    CLOCK_MMIO_END,
+    CLOCK_MMIO_START,
     INT_BREAKPOINT,
+    INT_CLOCK,
     INT_DIV_ZERO,
     INT_INVALID_OPCODE,
     INT_KEYBOARD,
@@ -71,11 +74,16 @@ INTERRUPTS: list[tuple[int, int, str]] = [
         "Memory Access Fault",
     ),
     (INT_KEYBOARD, INT_VECTOR_BASE + INT_KEYBOARD, "Nappaimistokeskeytys"),
-    (INT_TIMER, INT_VECTOR_BASE + INT_TIMER, "Ajastinkeskeytys"),
+    (INT_TIMER, INT_VECTOR_BASE + INT_TIMER, "Ajastinkeskeytys (TMR-kasky-valein)"),
     (
         INT_PROCESS_EXIT,
         INT_VECTOR_BASE + INT_PROCESS_EXIT,
         "Prosessin hallittu lopetus (EXIT)",
+    ),
+    (
+        INT_CLOCK,
+        INT_VECTOR_BASE + INT_CLOCK,
+        "Kellokeskeytys (CTMR ms-valein, SCTMR-kasky)",
     ),
 ]
 
@@ -89,10 +97,15 @@ MEMORY_MAP: list[tuple[int, int, str]] = [
     (
         INT_VECTOR_BASE,
         INT_VECTOR_BASE + INT_VECTOR_COUNT - 1,
-        "Keskeytysvektoritaulukko",
+        "Keskeytysvektoritaulukko ($0000-$000F, 16 paikkaa)",
     ),
     (
-        INT_VECTOR_BASE + INT_VECTOR_COUNT,
+        CLOCK_MMIO_START,
+        CLOCK_MMIO_END,
+        "Kellokello MMIO ($0010-$001F, vain luettava lukuun ottamatta $001B)",
+    ),
+    (
+        CLOCK_MMIO_END + 1,
         BOOT_RAM_START - 1,
         "Varattu kayttojarjestelman sisaiselle kaytolle",
     ),

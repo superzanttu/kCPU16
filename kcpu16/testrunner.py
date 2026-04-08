@@ -74,7 +74,11 @@ _FLAG_NAME_TO_BIT: dict[str, int] = {
 }
 
 # Rekisterinimistä hakuavain
-_VALID_REGS = {"R0", "R1", "R2", "R3", "FP", "SP", "PC", "SR"}
+_VALID_REGS = {
+    "R0", "R1", "R2", "R3", "R4", "R5", "R6", "R7",
+    "R8", "R9", "R10", "R11", "R12", "R13", "R14", "R15",
+    "FP", "SP", "PC", "SR",
+}
 
 
 # =============================================================================
@@ -189,6 +193,18 @@ def _read_actual(machine: KCPU16Machine, exp: TestExpectation) -> int:
             "R1": machine.regs.r1,
             "R2": machine.regs.r2,
             "R3": machine.regs.r3,
+            "R4": machine.regs.r4,
+            "R5": machine.regs.r5,
+            "R6": machine.regs.r6,
+            "R7": machine.regs.r7,
+            "R8": machine.regs.r8,
+            "R9": machine.regs.r9,
+            "R10": machine.regs.r10,
+            "R11": machine.regs.r11,
+            "R12": machine.regs.r12,
+            "R13": machine.regs.r13,
+            "R14": machine.regs.r14,
+            "R15": machine.regs.r15,
             "FP": machine.regs.fp,
             "SP": machine.regs.sp,
             "PC": machine.regs.pc,

@@ -87,12 +87,24 @@ from .instruction import OPCODE_TABLE
 # =============================================================================
 
 REGISTER_TO_ID: dict[str, int] = {
-    "R0": 0,  # Yleiskayttoinen rekisteri 0
-    "R1": 1,  # Yleiskayttoinen rekisteri 1
-    "R2": 2,  # Yleiskayttoinen rekisteri 2
-    "R3": 3,  # Yleiskayttoinen rekisteri 3
-    "FP": 4,  # Frame Pointer (aliohjelmien pinokehys)
-    "SP": 5,  # Stack Pointer (pinon osoitin)
+    "R0": 0,   # Yleiskayttoinen rekisteri 0
+    "R1": 1,   # Yleiskayttoinen rekisteri 1
+    "R2": 2,   # Yleiskayttoinen rekisteri 2
+    "R3": 3,   # Yleiskayttoinen rekisteri 3
+    "R4": 4,   # Yleiskayttoinen rekisteri 4
+    "R5": 5,   # Yleiskayttoinen rekisteri 5
+    "R6": 6,   # Yleiskayttoinen rekisteri 6
+    "R7": 7,   # Yleiskayttoinen rekisteri 7
+    "R8": 8,   # Yleiskayttoinen rekisteri 8
+    "R9": 9,   # Yleiskayttoinen rekisteri 9
+    "R10": 10, # Yleiskayttoinen rekisteri 10
+    "R11": 11, # Yleiskayttoinen rekisteri 11
+    "R12": 12, # Yleiskayttoinen rekisteri 12
+    "R13": 13, # Yleiskayttoinen rekisteri 13
+    "R14": 14, # Yleiskayttoinen rekisteri 14
+    "R15": 15, # Yleiskayttoinen rekisteri 15
+    "FP": 16,  # Frame Pointer (indeksi 16)
+    "SP": 17,  # Stack Pointer (indeksi 17)
 }
 
 # Kaanteinen hakutaulukko: mnemonic -> opcode
