@@ -49,6 +49,7 @@ Layout:
 from __future__ import annotations
 
 import re
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -509,6 +510,13 @@ class KCPU16TUI(App[None]):
         width: 1;
         height: 3;
     }
+    #run-mode-label {
+        min-width: 14;
+        height: 3;
+        padding: 0 1;
+        content-align: center middle;
+        color: $text-muted;
+    }
 
     /* ---- Content area ---- */
     #content-area {
@@ -599,7 +607,9 @@ class KCPU16TUI(App[None]):
     BINDINGS = [
         Binding("ctrl+q", "quit", "Quit", priority=True),
         Binding("f2", "toggle_breakpoint", "BP F2", priority=True),
-        Binding("f5", "run_program", "Run F5", priority=True),
+        Binding("f5", "run_full_speed", "Full F5", priority=True),
+        Binding("f6", "run_slow_speed", "Slow F6", priority=True),
+        Binding("f8", "stop_program", "Stop F8", priority=True),
         Binding("f7", "step_once", "Step F7", priority=True),
         Binding("f10", "step_once", "Step", priority=True),
         Binding("ctrl+r", "reset_machine", "Reset", priority=True),
@@ -645,6 +655,7 @@ class KCPU16TUI(App[None]):
         self._output_buffer: list[str] = []
         self._disk_dirty: bool = False
         self._watched_mtime: int | None = None  # st_mtime_ns (kokonaisluku)
+        self._exec_mode: str = "stopped"  # "stopped" | "full" | "slow"
 
     # ------------------------------------------------------------------
     # Layout
@@ -673,12 +684,15 @@ class KCPU16TUI(App[None]):
             yield Button("Assemble ^B", id="btn-asm", variant="primary")
             yield Static(" ", classes="sep")
             yield Button("Step F7", id="btn-step", variant="warning")
-            yield Button("Run F5", id="btn-run", variant="success")
+            yield Button("Full F5", id="btn-run-full", variant="success")
+            yield Button("Slow F6", id="btn-run-slow", variant="primary")
+            yield Button("Stop F8", id="btn-stop", variant="default")
             yield Button("Reset ^R", id="btn-reset", variant="error")
             yield Static(" ", classes="sep")
             yield Button("BP F2", id="btn-bp", variant="default")
             yield Button("Clear F9", id="btn-clear", variant="default")
             yield Button("Help F1", id="btn-help", variant="default")
+            yield Static("\u25a0 STOPPED", id="run-mode-label")
 
         # Content area: left panel (full width)
         with Horizontal(id="content-area"):
@@ -782,7 +796,9 @@ class KCPU16TUI(App[None]):
             "btn-open": self.action_open_file,
             "btn-asm": self.action_assemble_code,
             "btn-step": self.action_step_once,
-            "btn-run": self.action_run_program,
+            "btn-run-full": self.action_run_full_speed,
+            "btn-run-slow": self.action_run_slow_speed,
+            "btn-stop": self.action_stop_program,
             "btn-reset": self.action_reset_machine,
             "btn-bp": self.action_toggle_breakpoint,
             "btn-clear": self.action_clear_screen,
@@ -818,8 +834,8 @@ class KCPU16TUI(App[None]):
 
         # VAIN step/run komennot päivittävät näkymän
         cmd_verb = cmd.split()[0].lower()
-        if cmd_verb in {"step", "run", "restart", "asm", "reset", "stop"}:
-            self._refresh_all()
+        if cmd_verb in {"step", "run", "slow", "restart", "asm", "reset", "stop"}:
+            self._refresh_all(include_screen=True)
 
     # ------------------------------------------------------------------
     # Actions (näppäinsidonnaisuudet)
@@ -833,23 +849,55 @@ class KCPU16TUI(App[None]):
         """
         if self.machine.cpu.halted or self.machine.process_exited:
             self._log("[yellow]CPU stopped. Reset to continue.[/yellow]")
-            self._refresh_all()
+            self._refresh_all(include_screen=True)
             return
         self.machine.step()
         self._log_step_info()
-        self._refresh_all()
+        self._refresh_all(include_screen=True)
 
-    def action_run_program(self) -> None:
-        """Käynnistä CPU loputon suoritus taustassäkteessä (F5).
+    def action_run_full_speed(self) -> None:
+        """Käynnistä CPU täydellä nopeudella (F5). Toinen painalus pysäyttää.
 
-        Ajo päättyy vasta HALT-, EXIT-käskyyn tai breakpointiin.
-        Käyttöliittymä pysyy reagoivana ajon aikana. Estopainike: 'stop'.
+        Ajo päättyy HALT-, EXIT-käskyyn, breakpointiin tai Stop-komentoon.
+        Käyttöliittymä päivittyy noin 5 kertaa sekunnissa ajon aikana.
         """
+        if self._exec_mode == "full":
+            self.action_stop_program()
+            return
         if self.machine.cpu.halted or self.machine.process_exited:
             self._log("[yellow]CPU stopped. Reset to continue.[/yellow]")
             return
-        self._log("[green]Running... (stop with 'stop' command or Reset)[/green]")
-        self._cpu_run_worker()
+        self.workers.cancel_all()
+        self._exec_mode = "full"
+        self._update_run_mode_ui()
+        self._log("[green]Running full speed... (F5/F8 to stop)[/green]")
+        self._cpu_run_worker("full")
+
+    def action_run_slow_speed(self) -> None:
+        """Käynnistä CPU hidas suoritus (F6): ~10 IPS. Toinen painalus pysäyttää.
+
+        Joka käskyn jälkeen kaikki paneelit päivittyvät (rekisterit, liput,
+        disassembly, näyttö) joten prosessori "elää" ruudulla.
+        """
+        if self._exec_mode == "slow":
+            self.action_stop_program()
+            return
+        if self.machine.cpu.halted or self.machine.process_exited:
+            self._log("[yellow]CPU stopped. Reset to continue.[/yellow]")
+            return
+        self.workers.cancel_all()
+        self._exec_mode = "slow"
+        self._update_run_mode_ui()
+        self._log("[cyan]Running slow (10 IPS)... (F6/F8 to stop)[/cyan]")
+        self._cpu_run_worker("slow")
+
+    def action_stop_program(self) -> None:
+        """Pysäytä CPU:n suoritus (F8 tai Stop-painike)."""
+        self.workers.cancel_all()
+        self._exec_mode = "stopped"
+        self._update_run_mode_ui()
+        self._log("[yellow]Stopped.[/yellow]")
+        self._refresh_all(include_screen=True)
 
     def action_reset_machine(self) -> None:
         """Resetoi kone alkutilaan (Ctrl+R tai Reset-painike).
@@ -858,12 +906,14 @@ class KCPU16TUI(App[None]):
         sitten cold reset nollaa CPU:n, muistin ja laitteet.
         """
         self.workers.cancel_all()
+        self._exec_mode = "stopped"
         self.machine.cold_reset()
         self.is_assembled = False
         self.addr_to_line = {}
         self.dbg.snapshot_registers(self.machine.dump_registers())
+        self._update_run_mode_ui()
         self._log("[green]Machine reset.[/green]")
-        self._refresh_all()
+        self._refresh_all(include_screen=True)
 
     def action_toggle_breakpoint(self) -> None:
         """Aseta tai poista breakpoint nykyiseen PC-osoitteeseen (F2).
@@ -961,7 +1011,8 @@ class KCPU16TUI(App[None]):
         self._log("")
         self._log("[bold]Keyboard shortcuts:[/bold]")
         self._log("  Ctrl+O  Load file       Ctrl+B  Assemble code")
-        self._log("  F7/F10  Step 1 instr    F5      Run (stops at BP)")
+        self._log("  F7/F10  Step 1 instr    F5      Full Speed run")
+        self._log("  F6      Slow run (10 IPS)  F8      Stop execution")
         self._log("  Ctrl+R  Reset machine   F9      Clear VRAM")
         self._log("  F2      Toggle BP       F1      This help")
         self._log("  Ctrl+Q  Quit")
@@ -974,8 +1025,13 @@ class KCPU16TUI(App[None]):
         self._log("  check                        Syntax check loaded file (no load)")
         self._log("[bold cyan]CPU Control:[/bold cyan]")
         self._log("  step [n]                     Step n instructions (default 1)")
-        self._log("  run  [n]                     Run to BP/halt (max n cycles)")
-        self._log("  stop                         Halt CPU immediately")
+        self._log(
+            "  run  [n]                     Full speed run to BP/halt (max n cycles)"
+        )
+        self._log(
+            "  slow                         Slow run (~10 IPS), all panels update each instr"
+        )
+        self._log("  stop                         Stop running CPU")
         self._log("  restart                      Reassemble and restart from 0x0100")
         self._log("[bold cyan]Breakpoints:[/bold cyan]")
         self._log("  bp <addr>                    Toggle breakpoint at address")
@@ -1178,71 +1234,146 @@ class KCPU16TUI(App[None]):
                 )
         return f"Ran {cycles} cycles. PC=0x{self.machine.regs.pc:04X}"
 
+    def _update_run_mode_ui(self) -> None:
+        """Päivitä toolbar heijastamaan nykyistä suoritustilaa.
+
+        Päivittää #run-mode-label tekstin ja suorituspainikkeiden variantit.
+        Turvallinen kutsua pääsäikeessä tai call_from_thread():n kautta.
+        """
+        try:
+            label_text = {
+                "stopped": "\u25a0 STOPPED",
+                "full": "\u25b6 FULL",
+                "slow": "\u25b6 SLOW",
+            }.get(self._exec_mode, "\u25a0 STOPPED")
+            self.query_one("#run-mode-label", Static).update(label_text)
+            btn_full = self.query_one("#btn-run-full", Button)
+            btn_slow = self.query_one("#btn-run-slow", Button)
+            btn_stop = self.query_one("#btn-stop", Button)
+            if self._exec_mode == "full":
+                btn_full.variant = "warning"
+                btn_slow.variant = "default"
+                btn_stop.variant = "error"
+            elif self._exec_mode == "slow":
+                btn_full.variant = "default"
+                btn_slow.variant = "warning"
+                btn_stop.variant = "error"
+            else:  # stopped
+                btn_full.variant = "success"
+                btn_slow.variant = "primary"
+                btn_stop.variant = "default"
+        except Exception:
+            pass
+
     @work(thread=True, exclusive=True)
-    def _cpu_run_worker(self) -> None:
-        """Aja CPU:ta taustasäikeessä loputtomasti (F5 / run ilman N-argumenttia).
+    def _cpu_run_worker(self, mode: str = "full") -> None:
+        """Aja CPU:ta taustasäikeessä (F5=Full Speed, F6=Slow Speed).
 
-        Suoritus päättyy vain kun:
-        - HALT-käsky suoritetaan
-        - EXIT-käsky suoritetaan
+        Parametrit:
+            mode: "full" = max nopeus, UI päivittyy ~200ms välein.
+                  "slow" = ~10 IPS, UI päivittyy jokaisen käskyn jälkeen.
+
+        Suoritus päättyy kun:
+        - HALT- tai EXIT-käsky suoritetaan
         - Breakpoint osutaan
-        - Worker peruutetaan (Reset tai 'stop'-komento)
-
-        Käyttöliittymä pysyy reagoivana ajon aikana (taustasäie).
-        Näytön päivitys tapahtuu 1s timerillä kuten normaalistikin.
-        Lopputulos ja CPU-tila päivitetään suorituksen päätyttyä.
+        - Worker peruutetaan (Stop/Reset)
         """
         worker = get_current_worker()
         cpu = self.machine.cpu
         total_cycles = 0
-        BATCH = 5000  # käskyjä per erä ennen peruutustarkistusta
 
-        while not worker.is_cancelled:
-            for _ in range(BATCH):
+        def _done(msg: str) -> None:
+            """Kutsutaan pääsäikeessä suorituksen päättyessä."""
+            self._exec_mode = "stopped"
+            self._update_run_mode_ui()
+            if msg:
+                self._log(msg)
+            self._refresh_all(include_screen=True)
+
+        if mode == "slow":
+            # Hidas suoritus: yksi käsky kerrallaan, UI-päivitys joka käskyn jälkeen
+            SLOW_DELAY = 0.1  # sekuntia per käsky (10 IPS)
+            while not worker.is_cancelled:
                 if cpu.halted or cpu.process_exit_requested:
                     break
                 self.machine.step()
                 total_cycles += 1
+                if cpu.halted:
+                    self.call_from_thread(
+                        _done, f"[red]HALTED after {total_cycles} cycles.[/red]"
+                    )
+                    return
+                if cpu.process_exit_requested:
+                    self.call_from_thread(
+                        _done, f"[yellow]EXIT after {total_cycles} cycles.[/yellow]"
+                    )
+                    return
                 if self.dbg.has_breakpoint(self.machine.regs.pc):
                     addr = self.machine.regs.pc
                     self.call_from_thread(
-                        self._log,
-                        f"[red]Breakpoint at 0x{addr:04X} "
-                        f"after {total_cycles} cycles.[/red]",
+                        _done,
+                        f"[red]Breakpoint at 0x{addr:04X} after {total_cycles} cycles.[/red]",
                     )
-                    self.call_from_thread(self._refresh_all)
                     return
-            if cpu.halted:
-                self.call_from_thread(
-                    self._log, f"[red]HALTED after {total_cycles} cycles.[/red]"
-                )
-                self.call_from_thread(self._refresh_all)
-                return
-            if cpu.process_exit_requested:
-                self.call_from_thread(
-                    self._log, f"[yellow]EXIT after {total_cycles} cycles.[/yellow]"
-                )
-                self.call_from_thread(self._refresh_all)
-                return
-        # Worker peruutettu (Reset / stop)
-        self.call_from_thread(self._refresh_all)
+                self.call_from_thread(self._refresh_all, True)
+                time.sleep(SLOW_DELAY)
+        else:
+            # Täysi nopeus: eräsuoritus, UI päivittyy ~200ms välein
+            BATCH = 5000
+            REFRESH_INTERVAL = 0.2  # sekuntia
+            last_refresh = time.monotonic()
+            while not worker.is_cancelled:
+                for _ in range(BATCH):
+                    if cpu.halted or cpu.process_exit_requested:
+                        break
+                    self.machine.step()
+                    total_cycles += 1
+                    if self.dbg.has_breakpoint(self.machine.regs.pc):
+                        addr = self.machine.regs.pc
+                        self.call_from_thread(
+                            _done,
+                            f"[red]Breakpoint at 0x{addr:04X} after {total_cycles} cycles.[/red]",
+                        )
+                        return
+                # Päivitä UI ~200ms välein
+                now = time.monotonic()
+                if now - last_refresh >= REFRESH_INTERVAL:
+                    last_refresh = now
+                    self.call_from_thread(self._refresh_all, True)
+                if cpu.halted:
+                    self.call_from_thread(
+                        _done, f"[red]HALTED after {total_cycles} cycles.[/red]"
+                    )
+                    return
+                if cpu.process_exit_requested:
+                    self.call_from_thread(
+                        _done, f"[yellow]EXIT after {total_cycles} cycles.[/yellow]"
+                    )
+                    return
+
+        # Worker peruutettu (Stop / Reset)
+        self.call_from_thread(_done, "")
 
     # ------------------------------------------------------------------
     # Näkymien päivitys
     # ------------------------------------------------------------------
 
-    def _refresh_all(self) -> None:
-        """Päivitä kaikki näkymäpaneelit kerralla (paitsi Screen).
+    def _refresh_all(self, include_screen: bool = False) -> None:
+        """Päivitä kaikki näkymäpaneelit kerralla.
 
         Kutsutaan jokaisen tilan muutoksen jälkeen (step, run, reset,
-        assemble, komentosyöte). Screen-näyttö päivittyy omalla 1s timerilla
-        eikä tässä, jotta komentojen suoritus pysyy ketteränä.
+        assemble, komentosyöte).
+
+        Parametrit:
+            include_screen: Jos True, päivittää myös VRAM-näytön (Screen-tab).
+                            Käytä True stepissä ja suoritustilan vaihtuessa.
         """
         self._refresh_disassembly()
         self._refresh_registers()
         self._refresh_flags()
         self._refresh_cpu_status()
-        # self._refresh_screen_tab()  # Käytetään vain 1s timeria
+        if include_screen:
+            self._refresh_screen_tab()
         self._refresh_memory()
         self._refresh_stack()
 
@@ -1718,9 +1849,8 @@ class KCPU16TUI(App[None]):
                     return CommandResult(True, "")
 
             if op == "stop":
-                self.workers.cancel_all()
-                self.machine.cpu.halted = True
-                return CommandResult(True, "[red]CPU halted.[/red]")
+                self.action_stop_program()
+                return CommandResult(True, "")
 
             if op == "restart":
                 self._do_assemble()
