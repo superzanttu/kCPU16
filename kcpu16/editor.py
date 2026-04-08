@@ -42,7 +42,7 @@ class AssemblySyntaxHighlighter:
     ----------
     MNEMONICS : set[str]
         kCPU16-käskykantaan kuuluvat mnemonicit isoilla kirjaimilla.
-        Sisältää muistikäskyt (LOAD, STORE, ...), aritmetiikan
+        Sisältää muistikäskyt (JARI, STORE, ...), aritmetiikan
         (ADD, SUB, ...), logiikan (AND, OR, ...), hyppykäskyt
         (JUMP, JZ, ...), pinokäskyt (PUSH, POP), keskeytykset
         (INT, IRET, ...) ja erikoiskäskyt (HALT, EXIT, DREAD, ...).
@@ -58,7 +58,7 @@ class AssemblySyntaxHighlighter:
     """
 
     MNEMONICS = {
-        "LOAD", "CPY", "READ", "STORE", "READ_IND", "STORE_IND",
+        "JARI", "CPY", "READ", "STORE", "READ_IND", "STORE_IND",
         "ADD", "SUB", "MUL", "DIV", "CMP",
         "AND", "OR", "XOR", "NOT", "SHL", "SHR",
         "PUSH", "POP",
@@ -227,7 +227,7 @@ class SimpleEditor:
         -------
         str
             Moniriviset Rich-merkintämerkkijono, jossa jokainen
-            rivi on muotoa ``"  42 LOAD R0, #10"`` Rich-tageilla
+            rivi on muotoa ``"  42 JARI R0, #10"`` Rich-tageilla
             väritettynä.
         """
         lines = self.content.split("\n")

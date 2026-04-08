@@ -40,28 +40,28 @@
         ; -----------------------------------------------
         ; Alusta Fibonacci-muuttujat
         ; -----------------------------------------------
-        LOAD  R0, 0       ; a = F(0) = 0
-        LOAD  R1, 1       ; b = F(1) = 1
-        LOAD  R2, 8       ; 8 kierrosta tuottaa F(2)..F(9)
-        LOAD  R3, 1       ; vakio +1 (dekrementti ja osoittimen siirto)
-        LOAD  FP, 0xF820  ; näyttöpointteri (rivi 0, sarake 32)
+        JARI  R0, 0       ; a = F(0) = 0
+        JARI  R1, 1       ; b = F(1) = 1
+        JARI  R2, 8       ; 8 kierrosta tuottaa F(2)..F(9)
+        JARI  R3, 1       ; vakio +1 (dekrementti ja osoittimen siirto)
+        JARI  FP, 0xF820  ; näyttöpointteri (rivi 0, sarake 32)
 
         ; -----------------------------------------------
         ; Tulosta F(0) ja F(1): "0 1 "
         ; -----------------------------------------------
-        LOAD  SP, 0xE030  ; '0'
+        JARI  SP, 0xE030  ; '0'
         STORE [FP], SP  ; Tulosta '0'
         ADD   FP, R3      ; Seuraava paikka
 
-        LOAD  SP, 0xE020  ; ' ' (välilyönti)
+        JARI  SP, 0xE020  ; ' ' (välilyönti)
         STORE [FP], SP
         ADD   FP, R3
 
-        LOAD  SP, 0xE031  ; '1'
+        JARI  SP, 0xE031  ; '1'
         STORE [FP], SP
         ADD   FP, R3
 
-        LOAD  SP, 0xE020  ; ' '
+        JARI  SP, 0xE020  ; ' '
         STORE [FP], SP
         ADD   FP, R3
 
@@ -80,7 +80,7 @@ fib_loop:
         ; -----------------------------------------------
         STORE [0x0210], R1  ; Tallenna b muistiin (väliaikainen)
         ADD   R1, R0      ; b = a + b (uusi Fibonacci-luku)
-        LOAD R0, [0x0210]  ; a = vanha b
+        JARI R0, [0x0210]  ; a = vanha b
 
         ; -----------------------------------------------
         ; Tulosta nykyinen Fibonacci-luku (R1)
@@ -88,17 +88,17 @@ fib_loop:
         ; -----------------------------------------------
 
         ; Tarkista onko 13
-        LOAD  SP, 13
+        JARI  SP, 13
         CMP   R1, SP
         JZ    print_13
 
         ; Tarkista onko 21
-        LOAD  SP, 21
+        JARI  SP, 21
         CMP   R1, SP
         JZ    print_21
 
         ; Tarkista onko 34
-        LOAD  SP, 34
+        JARI  SP, 34
         CMP   R1, SP
         JZ    print_34
 
@@ -108,9 +108,9 @@ fib_loop:
         ; -----------------------------------------------
         STORE [0x0211], R0  ; Tallenna a (koska tarvitsemme R0:aa)
         CPY   SP, R1      ; SP = Fibonacci-luku
-        LOAD  R0, 0xE030  ; R0 = valkoinen '0' -pohja
+        JARI  R0, 0xE030  ; R0 = valkoinen '0' -pohja
         ADD   SP, R0      ; SP = '0' + luku = merkki
-        LOAD R0, [0x0211]  ; Palauta a
+        JARI R0, [0x0211]  ; Palauta a
         STORE [FP], SP  ; Tulosta merkki
         ADD   FP, R3
         JUMP  print_space
@@ -119,28 +119,28 @@ fib_loop:
 ; Kaksinumeroisten tulostus
 ; -----------------------------------------------
 print_13:
-        LOAD  SP, 0xE031  ; '1'
+        JARI  SP, 0xE031  ; '1'
         STORE [FP], SP
         ADD   FP, R3
-        LOAD  SP, 0xE033  ; '3'
+        JARI  SP, 0xE033  ; '3'
         STORE [FP], SP
         ADD   FP, R3
         JUMP  print_space
 
 print_21:
-        LOAD  SP, 0xE032  ; '2'
+        JARI  SP, 0xE032  ; '2'
         STORE [FP], SP
         ADD   FP, R3
-        LOAD  SP, 0xE031  ; '1'
+        JARI  SP, 0xE031  ; '1'
         STORE [FP], SP
         ADD   FP, R3
         JUMP  print_space
 
 print_34:
-        LOAD  SP, 0xE033  ; '3'
+        JARI  SP, 0xE033  ; '3'
         STORE [FP], SP
         ADD   FP, R3
-        LOAD  SP, 0xE034  ; '4'
+        JARI  SP, 0xE034  ; '4'
         STORE [FP], SP
         ADD   FP, R3
 
@@ -148,7 +148,7 @@ print_34:
 ; Tulosta välilyönti ja jatka silmukkaa
 ; -----------------------------------------------
 print_space:
-        LOAD  SP, 0xE020  ; ' '
+        JARI  SP, 0xE020  ; ' '
         STORE [FP], SP
         ADD   FP, R3
 

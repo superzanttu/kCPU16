@@ -10,7 +10,7 @@ Jokainen kasky tulostetaan muodossa:
     OSOITE: MNEMONIC OPERANDIT
 
 Esimerkki:
-    0100: LOAD 0x0000, 0x000A     ; LOAD R0, 10
+    0100: JARI 0x0000, 0x000A     ; JARI R0, 10
     0103: ADD 0x0000, 0x0001      ; ADD R0, R1
     0106: HALT
 
@@ -46,11 +46,11 @@ def _format_memory_instr(mnemonic: str, op_vals: list[int]) -> str | None:
         return _REG_NAMES.get(idx, f"?{idx}")
 
     if mnemonic == "READ" and len(op_vals) >= 2:
-        return f"LOAD {r(op_vals[0])}, [0x{op_vals[1]:04X}]"
+        return f"JARI {r(op_vals[0])}, [0x{op_vals[1]:04X}]"
     if mnemonic == "READ_IND" and len(op_vals) >= 2:
-        return f"LOAD {r(op_vals[0])}, [{r(op_vals[1])}]"
+        return f"JARI {r(op_vals[0])}, [{r(op_vals[1])}]"
     if mnemonic == "READ_REL" and len(op_vals) >= 2:
-        return f"LOAD {r(op_vals[0])}, [FP+{op_vals[1]}]"
+        return f"JARI {r(op_vals[0])}, [FP+{op_vals[1]}]"
     if mnemonic == "STORE" and len(op_vals) >= 2:
         return f"STORE [0x{op_vals[1]:04X}], {r(op_vals[0])}"
     if mnemonic == "STOREI" and len(op_vals) >= 2:
@@ -77,7 +77,7 @@ class Disassembler:
         >>> dis = Disassembler()
         >>> words = [0x1080, 0x0000, 0x002A, 0xF000]
         >>> print(dis.disassemble(words))
-        0000: LOAD 0x0000, 0x002A
+        0000: JARI 0x0000, 0x002A
         0003: HALT
     """
 

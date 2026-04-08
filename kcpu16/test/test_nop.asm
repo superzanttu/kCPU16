@@ -6,15 +6,15 @@
 .origin 0x0200
 
 ; Aseta C=1, V=1, Z=1, N=0 ADD:lla (0x8000 + 0x8000)
-LOAD  R0, 0x8000
-LOAD  R1, 0x8000
+JARI  R0, 0x8000
+JARI  R1, 0x8000
 ADD   R0, R1          ; C=1, V=1, Z=1, N=0
 
 ; Aseta rekisteriarvot
-LOAD  R0, 42
-LOAD  R1, 99
-LOAD  R2, 0x1234
-LOAD  R3, 0xABCD
+JARI  R0, 42
+JARI  R1, 99
+JARI  R2, 0x1234
+JARI  R3, 0xABCD
 
 NOP                   ; ei tee mitään
 NOP                   ; kaksi peräkkäistä NOPia

@@ -8,7 +8,7 @@ Kayttajat voivat importata paaluokan suoraan:
 
     machine = KCPU16Machine()
     machine.cold_reset()
-    machine.load_program([0x0001, 0x0000, 0x002A, 0x0044])  # LOAD R0, 42; HALT
+    machine.load_program([0x0001, 0x0000, 0x002A, 0x0044])  # JARI R0, 42; HALT
     machine.run()
     print(machine.dump_registers())
 

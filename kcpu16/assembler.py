@@ -21,7 +21,7 @@ SYNTAKSI:
     - Binääri:         0b1010, 0b11001100
     - Oktaali:         0o52
 - Label-viittaukset suoraan operandina: "JUMP loop"
-- Arkkitehtuurivakiot suoraan operandina: "LOAD R0, VRAM_START"
+- Arkkitehtuurivakiot suoraan operandina: "JARI R0, VRAM_START"
 - Kommentit alkavat puolipisteella: "; tama on kommentti"
 - Direktiivit:
   - .origin OSOITE (esim. .origin 0x0200)
@@ -51,9 +51,9 @@ ESIMERKKI:
     .origin 0x0200       ; Koodi alkaa osoitteesta 0x0200
 
     .macro LOAD_MANY
-        LOAD  R0, 10
-        LOAD  R1, 20
-        LOAD  R2, 30
+        JARI  R0, 10
+        JARI  R1, 20
+        JARI  R2, 30
     .endmacro
 
     MSG:
@@ -63,7 +63,7 @@ ESIMERKKI:
 
     START:
         LOAD_MANY        ; Ekspandoi makroksi
-        LOAD  R0, MSG    ; R0 = datan aloitusosoite
+        JARI  R0, MSG    ; R0 = datan aloitusosoite
         JUMP  START
         HALT
 
@@ -126,12 +126,12 @@ class Assembler:
     Example:
         >>> asm = Assembler()
         >>> code = '''
-        ...     LOAD R0, 42
+        ...     JARI R0, 42
         ...     HALT
         ... '''
         >>> segments = asm.assemble(code)
         >>> segments
-        [(256, [1, 0, 42, 68])]  # [(start_addr, [LOAD, R0=0, 42, HALT])]
+        [(256, [1, 0, 42, 68])]  # [(start_addr, [JARI, R0=0, 42, HALT])]
     """
 
     @property
@@ -157,7 +157,7 @@ class Assembler:
             ValueError: Jos mnemonic on tuntematon tai label on duplikaatti
 
         Example:
-            >>> asm.assemble("LOAD R0, 10\\nHALT", start_addr=0x0200)
+            >>> asm.assemble("JARI R0, 10\\nHALT", start_addr=0x0200)
             [(512, [1, 0, 10, 68])]
         """
         self._disk_block: int | None = None
@@ -419,7 +419,7 @@ class Assembler:
             if mnemonic in _DEPRECATED_MNEMONICS:
                 raise ValueError(
                     f"Vanhentunut mnemoniikka '{mnemonic}' — käytä [..] syntaksia: "
-                    f"LOAD reg, [osoite]  tai  STORE [osoite], reg/arvo"
+                    f"JARI reg, [osoite]  tai  STORE [osoite], reg/arvo"
                 )
             if mnemonic == "STORE" and len(parts) >= 2 and not parts[1].startswith("["):
                 raise ValueError(
@@ -503,11 +503,11 @@ class Assembler:
             mnemonic = parts[0].upper()
 
             # ---------------------------------------------------------------
-            # [..] syntaksi: LOAD reg, [expr]  ja  STORE [expr], src
+            # [..] syntaksi: JARI reg, [expr]  ja  STORE [expr], src
             # ---------------------------------------------------------------
 
-            # LOAD reg, [expr]  → READ / READ_IND / READ_REL
-            if mnemonic == "LOAD" and len(parts) >= 3 and parts[2].startswith("["):
+            # JARI reg, [expr]  → READ / READ_IND / READ_REL
+            if mnemonic == "JARI" and len(parts) >= 3 and parts[2].startswith("["):
                 reg_dst = self._parse_operand(parts[1], labels)
                 mode = self._parse_bracket_expr(parts[2], labels)
                 if mode[0] == "abs":
@@ -568,7 +568,7 @@ class Assembler:
             if mnemonic in _DEPRECATED_MNEMONICS:
                 raise ValueError(
                     f"Vanhentunut mnemoniikka '{mnemonic}' — käytä [..] syntaksia: "
-                    f"LOAD reg, [osoite]  tai  STORE [osoite], reg/arvo"
+                    f"JARI reg, [osoite]  tai  STORE [osoite], reg/arvo"
                 )
             if mnemonic == "STORE" and len(parts) >= 2 and not parts[1].startswith("["):
                 raise ValueError(

@@ -194,8 +194,8 @@ Pikselin värin asetus ylemmälle pikselille:
 ; Aseta piste (10, 4) punaiseksi (värikoodi 1 = punainen)
 ; Rivi 4 on ylempi pikseli merkkiruudussa (4//2 = 2)
 ; FG-bitit (8-10), punainen = 1 → siirrä 8 bittiä vasemmalle
-LOAD R0, #0x0100    ; FG = punainen (1 << 8)
-LOAD R1, #0xF80A    ; osoite = F800 + 2*80 + 10
+JARI R0, #0x0100    ; FG = punainen (1 << 8)
+JARI R1, #0xF80A    ; osoite = F800 + 2*80 + 10
 STORE R0, [R1]
 ```
 
@@ -211,8 +211,8 @@ esimerkiksi VRAM-alueen jälkeistä osoitetta:
 Assembly-esimerkki grafiikkatilan kytkemisestä:
 
 ```asm
-LOAD R0, #1
-LOAD R1, #0xFF80    ; näyttötilarekisteri
+JARI R0, #1
+JARI R1, #0xFF80    ; näyttötilarekisteri
 STORE R0, [R1]      ; kytke grafiikkatila päälle
 ```
 
@@ -426,7 +426,7 @@ Pankkikytkentärekisterin kirjoittaminen onnistuu uudella etuoikeutetulla käsky
 | `LGBANK Rx`    | rekisteri      | Lue GBANK → Rx                      |
 
 Vaihtoehtoisesti GBANK voidaan toteuttaa muistikartatun rekisterin avulla
-(`STORE R0, [$FF81]` / `LOAD R0, [$FF81]`), jolloin uusia käskyjä ei tarvita.
+(`STORE R0, [$FF81]` / `JARI R0, [$FF81]`), jolloin uusia käskyjä ei tarvita.
 Tämä on yksinkertaisempi ja suositeltava lähestymistapa.
 
 #### GMODE-rekisteri
@@ -435,9 +435,9 @@ Kirjoitetaan muistikartatusti, samoin kuin nykyinen näyttötilarekisteri:
 
 ```asm
 ; Kytke 640×480 grafiikkatila päälle
-LOAD R0, #1
+JARI R0, #1
 STORE R0, [$FF80]     ; GMODE = 1 (grafiikkatila)
-LOAD R0, #0
+JARI R0, #0
 STORE R0, [$FF81]     ; GBANK = 0 (ensimmäinen pankki)
 ```
 
@@ -471,14 +471,14 @@ arvo = (GVRAM[osoite] >> bitti-siirtymä) & 0x7
 ;        pankkisisäinen = 642 mod 8192 = 642
 ;        bitti-siirtymä = (10 mod 5) * 3 = 0
 
-LOAD R0, #0
+JARI R0, #0
 STORE R0, [$FF81]       ; GBANK = 0
 
-LOAD R1, #0x2000        ; GVRAM-ikkunan alku
-LOAD R2, #642           ; pankkisisäinen osoite
+JARI R1, #0x2000        ; GVRAM-ikkunan alku
+JARI R2, #642           ; pankkisisäinen osoite
 ADD R1, R2              ; R1 = $2000 + 642
 
-LOAD R3, [R1]           ; lue nykyinen sana
+JARI R3, [R1]           ; lue nykyinen sana
 AND R3, #0xFFF8         ; tyhjennä bitit 2-0 (pikseli 0:n paikka)
 OR  R3, #1              ; aseta väri = punainen (1)
 STORE R3, [R1]          ; kirjoita takaisin
@@ -555,7 +555,7 @@ Tuloksena koko 640 × 480 framebuffer esitetään 80 × 24 merkkiruudussa
 
 Yksikään muutos ei edellytä ISA:n laajentamista uusilla konekielen käskyillä —
 kaikki kontrolli tapahtuu muistikartattujen rekisterien (`$FF80`, `$FF81`)
-kautta, joihin voidaan kirjoittaa tavallisilla `LOAD`/`STORE`-käskyillä.
+kautta, joihin voidaan kirjoittaa tavallisilla `JARI`/`STORE`-käskyillä.
 
 ---
 

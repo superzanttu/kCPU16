@@ -6,13 +6,13 @@
         .origin 0x0200
 
         ; 1 << 3 = 8
-        LOAD  R0, 1
-        LOAD  R1, 3
+        JARI  R0, 1
+        JARI  R1, 3
         SHL   R0, R1
 
         ; 1 << 8 = 256 = 0x0100
-        LOAD  R2, 1
-        LOAD  R3, 8
+        JARI  R2, 1
+        JARI  R3, 8
         SHL   R2, R3
 
         HALT

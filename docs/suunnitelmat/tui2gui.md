@@ -29,7 +29,7 @@ Projektin ydintoiminnallisuus on jo hyvin eriytetty omiin moduuleihinsa:
 
 1. **`tui.py` on monoliitti** – tiedosto sisältää sekaisin UI-asettelun (Textual-widgetit), tapahtumasidonnaisuudet, komentotulkin logiikan (`_execute_command`) ja apufunktioita (`_build_addr_to_line`). Kaikki nämä ovat vahvasti sidottuja Textual-APIin.
 
-2. **`AssemblySyntaxHighlighter` tuottaa Rich-markup-merkkijonoja** – tulostusmuoto (`[bold yellow]LOAD[/bold yellow]`) on Rich-spesifinen eikä suoraan käytettävissä GUI-kirjastoissa, jotka odottavat esimerkiksi väriattribuutteja tai token-listoja.
+2. **`AssemblySyntaxHighlighter` tuottaa Rich-markup-merkkijonoja** – tulostusmuoto (`[bold yellow]JARI[/bold yellow]`) on Rich-spesifinen eikä suoraan käytettävissä GUI-kirjastoissa, jotka odottavat esimerkiksi väriattribuutteja tai token-listoja.
 
 3. **Ei erillistä sovelluslogiikkakerroksen (controller/presenter) abstraktiota** – UI:n tapahtumankäsittelijät kutsuvat suoraan `KCPU16Machine`-metodeja ja päivittävät widgettejä samassa metodissa. Testattavuus ja GUI-kirjaston vaihto ovat tämän takia vaikeita.
 
@@ -91,10 +91,10 @@ Nykyinen `highlight_line`-metodi palauttaa Rich-markup-merkkijonon. GUI-kirjasto
 
 ```python
 # Nykyinen (Rich-spesifinen):
-"[bold yellow]LOAD[/bold yellow] [cyan]R0[/cyan], [green]#42[/green]"
+"[bold yellow]JARI[/bold yellow] [cyan]R0[/cyan], [green]#42[/green]"
 
 # Uusi (kirjastoriippumaton):
-[("LOAD", "mnemonic"), (" R0", "register"), (", ", None), ("#42", "number")]
+[("JARI", "mnemonic"), (" R0", "register"), (", ", None), ("#42", "number")]
 ```
 
 Väriavaimen (`"mnemonic"`, `"register"`, `"number"`, `"comment"`, `"label"`, `"directive"`) kuvaus väriksi tapahtuu View-kerroksessa, jolloin jokainen GUI-toteutus voi käyttää omaa väriteemaansa. Vanha `highlight_line`-metodi voidaan säilyttää taaksepäin yhteensopivuuden vuoksi CLI-käyttöön.

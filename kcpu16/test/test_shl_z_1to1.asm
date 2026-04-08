@@ -7,13 +7,13 @@
         .origin 0x0200
 
         ; Vaihe 1: aseta Z=1, C=1 (0→1)
-        LOAD  R0, 0x8000
-        LOAD  R1, 1
+        JARI  R0, 0x8000
+        JARI  R1, 1
         SHL   R0, R1          ; 0x8000 << 1 = 0: Z=1, C=1
 
         ; Vaihe 2: SHL tuottaa Z=1, C=1 uudelleen → Z:1→1, C:1→1
-        LOAD  R0, 0x8000
-        LOAD  R1, 1
+        JARI  R0, 0x8000
+        JARI  R1, 1
         SHL   R0, R1          ; Z=1 (1→1), C=1 (1→1)
 
         HALT

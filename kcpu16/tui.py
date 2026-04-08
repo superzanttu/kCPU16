@@ -94,7 +94,7 @@ from . import __version__
 # Rekisteri-indeksi -> nimi
 #
 # Disassembler palauttaa operandit numeerisina arvoina (esim. "0, 42").
-# Ihmisen on vaikea lukea "LOAD 0, 42" - paljon selkeämpi on "LOAD R0, #42".
+# Ihmisen on vaikea lukea "JARI 0, 42" - paljon selkeämpi on "JARI R0, #42".
 # REG_NAMES muuntaa konekielen rekisteri-indeksit luettaviksi nimiksi.
 # _REG_FIRST ja _REG_SECOND kertovat, mitkä käskyt odottavat rekisteriä
 # missäkin operandipositiossa, jotta _fmt_operands() osaa päätellä
@@ -103,9 +103,9 @@ from . import __version__
 
 REG_NAMES = {0: "R0", 1: "R1", 2: "R2", 3: "R3", 4: "FP", 5: "SP"}
 
-# Käskyt joissa 1. operandi on rekisteri-indeksi (esim. LOAD R0, ...)
+# Käskyt joissa 1. operandi on rekisteri-indeksi (esim. JARI R0, ...)
 _REG_FIRST = {
-    "LOAD",
+    "JARI",
     "CPY",
     "ADD",
     "ADC",

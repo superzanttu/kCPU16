@@ -32,12 +32,12 @@
 .origin 0x0200
 
 ; Dummy: kernel-tilassa PUSH ei aiheuta stack overflow:ta
-LOAD  R0, 0x0300
+JARI  R0, 0x0300
 SMPR  R0              ; MPR = 0x0300
 
 ; Kernel-tilassa PUSH toimii normaalisti vaikka SP menisi alle MPR:n
-LOAD  R0, 111
-LOAD  R1, 222
+JARI  R0, 111
+JARI  R1, 222
 PUSH  R0
 PUSH  R1
 POP   R2              ; R2 = 222 (LIFO)

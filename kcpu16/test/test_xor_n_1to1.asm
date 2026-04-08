@@ -6,13 +6,13 @@
         .origin 0x0200
 
         ; Vaihe 1: aseta N=1 (0→1)
-        LOAD  R0, 0x8001
-        LOAD  R1, 0x0001
+        JARI  R0, 0x8001
+        JARI  R1, 0x0001
         XOR   R0, R1          ; 0x8001 ^ 0x0001 = 0x8000: N=1
 
         ; Vaihe 2: XOR tuottaa N=1 uudelleen → N:1→1
-        LOAD  R0, 0x8002
-        LOAD  R1, 0x0002
+        JARI  R0, 0x8002
+        JARI  R1, 0x0002
         XOR   R0, R1          ; 0x8002 ^ 0x0002 = 0x8000: N=1 (1→1)
 
         HALT

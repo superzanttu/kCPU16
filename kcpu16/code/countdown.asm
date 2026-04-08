@@ -32,22 +32,22 @@
         ; -----------------------------------------------
         ; Alusta rekisterit
         ; -----------------------------------------------
-        LOAD  R0, 10      ; R0 = laskuri, aloita arvosta 10
-        LOAD  R1, 1       ; R1 = askelkoko (vähennetään 1 kerrallaan)
-        LOAD  R2, 0xF810  ; R2 = näyttöpointteri (rivi 0, sarake 16)
+        JARI  R0, 10      ; R0 = laskuri, aloita arvosta 10
+        JARI  R1, 1       ; R1 = askelkoko (vähennetään 1 kerrallaan)
+        JARI  R2, 0xF810  ; R2 = näyttöpointteri (rivi 0, sarake 16)
 
         ; -----------------------------------------------
         ; Tulosta aloitusarvo "10 " (kaksinumeroinen erikoistapaus)
         ; -----------------------------------------------
-        LOAD  R3, 0xE031  ; R3 = '1' (valkoinen)
+        JARI  R3, 0xE031  ; R3 = '1' (valkoinen)
         STORE [R2], R3  ; [R2] = '1'
         ADD   R2, R1      ; R2++ (seuraava näyttöpaikka)
 
-        LOAD  R3, 0xE030  ; R3 = '0'
+        JARI  R3, 0xE030  ; R3 = '0'
         STORE [R2], R3  ; [R2] = '0'
         ADD   R2, R1      ; R2++
 
-        LOAD  R3, 0xE020  ; R3 = ' ' (välilyönti)
+        JARI  R3, 0xE020  ; R3 = ' ' (välilyönti)
         STORE [R2], R3  ; [R2] = ' '
         ADD   R2, R1      ; R2++
 
@@ -67,7 +67,7 @@ loop:
         ; Valkoinen väri: 0xE000, joten 0xE030 + numero
         ; -----------------------------------------------
         CPY   R3, R0      ; R3 = R0 (laskurin kopio)
-        LOAD  FP, 0xE030  ; FP = valkoinen '0' -pohja
+        JARI  FP, 0xE030  ; FP = valkoinen '0' -pohja
         ADD   R3, FP      ; R3 = 0xE030 + numero = merkki
         STORE [R2], R3  ; [R2] = merkki
         ADD   R2, R1      ; R2++ (seuraava näyttöpaikka)
@@ -75,7 +75,7 @@ loop:
         ; -----------------------------------------------
         ; Tulosta välilyönti erottimeksi
         ; -----------------------------------------------
-        LOAD  R3, 0xE020  ; R3 = ' ' (valkoinen välilyönti)
+        JARI  R3, 0xE020  ; R3 = ' ' (valkoinen välilyönti)
         STORE [R2], R3  ; [R2] = ' '
         ADD   R2, R1      ; R2++
 
@@ -84,7 +84,7 @@ loop:
         ; CMP asettaa Zero-lipun (Z) jos R0 == FP
         ; JNZ hyppää takaisin jos Z == 0 (ei ollut sama)
         ; -----------------------------------------------
-        LOAD  FP, 0       ; FP = 0 (vertailuarvo)
+        JARI  FP, 0       ; FP = 0 (vertailuarvo)
         CMP   R0, FP      ; Vertaa: R0 - 0, aseta liput
         JNZ   loop        ; Jos Z=0 (R0 != 0), hyppää loop
 

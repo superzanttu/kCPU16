@@ -7,13 +7,13 @@
         .origin 0x0200
 
         ; 0xFF00 & 0x0F0F = 0x0F00
-        LOAD  R0, 0xFF00
-        LOAD  R1, 0x0F0F
+        JARI  R0, 0xFF00
+        JARI  R1, 0x0F0F
         AND   R0, R1
 
         ; 0xFF00 & 0x00FF = 0x0000 → Z=1
-        LOAD  R2, 0xFF00
-        LOAD  R3, 0x00FF
+        JARI  R2, 0xFF00
+        JARI  R3, 0x00FF
         AND   R2, R3
 
         HALT

@@ -7,13 +7,13 @@
         .origin 0x0200
 
         ; Vaihe 1: aseta Z=1, C=1 (0→1)
-        LOAD  R0, 0x100
-        LOAD  R1, 0x100
+        JARI  R0, 0x100
+        JARI  R1, 0x100
         MUL   R0, R1          ; 256×256=65536→0: Z=1, C=1, V=0, N=0
 
         ; Vaihe 2: sama operaatio → Z:1→1, C:1→1
-        LOAD  R0, 0x100
-        LOAD  R1, 0x100
+        JARI  R0, 0x100
+        JARI  R1, 0x100
         MUL   R0, R1          ; Z=1, C=1 (1→1)
 
         HALT

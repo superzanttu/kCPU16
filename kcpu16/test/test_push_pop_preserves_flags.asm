@@ -6,14 +6,14 @@
 .origin 0x0200
 
 ; Aseta C=1, V=1, Z=1, N=0
-LOAD  R0, 0x8000
-LOAD  R1, 0x8000
+JARI  R0, 0x8000
+JARI  R1, 0x8000
 ADD   R0, R1          ; C=1, V=1, Z=1, N=0
 
 ; Pino-operaatiot eivät saa muuttaa lippuja
-LOAD  R0, 99
+JARI  R0, 99
 PUSH  R0              ; push 99 → liput säilyvät
-LOAD  R0, 42
+JARI  R0, 42
 PUSH  R0              ; push 42 → liput säilyvät
 POP   R1              ; pop → R1=42, liput säilyvät
 POP   R2              ; pop → R2=99, liput säilyvät

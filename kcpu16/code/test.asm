@@ -2,8 +2,8 @@
 
 .origin 0x100
 
-        LOAD      r0, vram_start
-        LOAD      r1, vram_end
+        JARI      r0, vram_start
+        JARI      r1, vram_end
 
 SILMU:
 

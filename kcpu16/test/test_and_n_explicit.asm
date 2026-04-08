@@ -5,8 +5,8 @@
 
         .origin 0x0200
 
-        LOAD  R0, 0x8001
-        LOAD  R1, 0xFFFF
+        JARI  R0, 0x8001
+        JARI  R1, 0xFFFF
         AND   R0, R1          ; R0 = 0x8001: N=1 (0→1)
 
         HALT

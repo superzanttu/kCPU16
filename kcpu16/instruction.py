@@ -32,14 +32,14 @@ OPCODE-BITTIKENTTAT (16 bittiä):
   OPS (Bit 7:6):   Operandien maara (2 bittiä)
                     00 = 0 operandia  (esim. HALT, RET, NOP)
                     01 = 1 operandi   (esim. PUSH reg, JUMP addr)
-                    10 = 2 operandia  (esim. LOAD reg, imm)
+                    10 = 2 operandia  (esim. JARI reg, imm)
 
   --- (Bit 5:0):   Varattu, pitaa olla 0
 
 KOODAUSKAAVA:
   opcode = (P << 15) | (GRP << 12) | (ID << 8) | (OPS << 6)
 
-ESIMERKKI: LOAD R0, 42  ->  P=0, GRP=1, ID=0, OPS=2
+ESIMERKKI: JARI R0, 42  ->  P=0, GRP=1, ID=0, OPS=2
   0b 0_001_0000_10_000000 = 0x1080
 
 OPCOODEALUEET RYHMITTAIN:
@@ -67,22 +67,22 @@ class DecodedInstruction:
     ennen suorittamista. Tama erottaa fetch/decode-vaiheen execute-vaiheesta.
 
     Attributes:
-        mnemonic: Kaskyn nimi tekstina (esim. "LOAD", "ADD", "JUMP")
+        mnemonic: Kaskyn nimi tekstina (esim. "JARI", "ADD", "JUMP")
         operands: Lista operandiarvoista (rekisteri-indeksit, osoitteet, vakiot)
         size_words: Kaskyn kokonaiskoko sanoina (1-3)
         privileged: True jos kasky vaatii Kernel-tilan
 
     Example:
-        LOAD R0, 42 dekoodautuu:
+        JARI R0, 42 dekoodautuu:
         DecodedInstruction(
-            mnemonic="LOAD",
+            mnemonic="JARI",
             operands=[0, 42],      # R0 = indeksi 0, arvo 42
             size_words=3,          # opcode + 2 operandia
             privileged=False       # sallittu User-tilassa
         )
     """
 
-    mnemonic: str  # Kaskyn nimi (esim. "LOAD")
+    mnemonic: str  # Kaskyn nimi (esim. "JARI")
     operands: list[int] = field(default_factory=list)  # Operandit listana
     size_words: int = 1  # Kokonaiskoko sanoina
     privileged: bool = False  # Vaatiiko Kernel-tilan?
@@ -154,7 +154,7 @@ OPCODE_TABLE: dict[int, tuple[str, int, bool]] = {
     # GRP 1: TIEDONSIIRTOKASKYT (Data Transfer)
     #   Opcoodet: 0x1080-0x1780  (P=0, GRP=1, OPS=2)
     # -------------------------------------------------------------------------
-    _op(0, 1, 0, 2): ("LOAD", 2, False),  # LOAD reg, imm       Lataa vakio rekisteriin
+    _op(0, 1, 0, 2): ("JARI", 2, False),  # JARI reg, imm       Lataa vakio rekisteriin
     _op(0, 1, 1, 2): (
         "CPY",
         2,

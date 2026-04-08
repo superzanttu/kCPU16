@@ -12,20 +12,20 @@
 ;   a < b → C=1 (borrow)
 ;   signed: +1 − (−32768) = +32769 ylittää +32767 → V=1
 ;   tulos = 1 − 0x8000 + 0x10000 = 0x8001 → N=1
-LOAD  R0, 1
-LOAD  R1, 0x8000
+JARI  R0, 1
+JARI  R1, 0x8000
 SUB   R0, R1          ; C=1, V=1, N=1, Z=0
 
 ; --- Vaihe 2: SUB joka tuottaa Z=1 ---
 ; C: 1→0, V: 1→0, N: 1→0, Z: 0→1
-LOAD  R0, 42
-LOAD  R1, 42
+JARI  R0, 42
+JARI  R1, 42
 SUB   R0, R1          ; 42 − 42 = 0: C=0, V=0, Z=1, N=0
 
 ; --- Vaihe 3: SUB joka nollaa Z ---
 ; Z: 1→0
-LOAD  R0, 10
-LOAD  R1, 3
+JARI  R0, 10
+JARI  R1, 3
 SUB   R0, R1          ; 10 − 3 = 7: C=0, V=0, Z=0, N=0
 
 HALT

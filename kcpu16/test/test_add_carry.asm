@@ -6,8 +6,8 @@
 
         .origin 0x0200
 
-        LOAD  R0, 0xFFFE
-        LOAD  R1, 3
+        JARI  R0, 0xFFFE
+        JARI  R1, 3
         ADD   R0, R1          ; 65534 + 3 = 65537 → R0=1, C=1
 
         HALT

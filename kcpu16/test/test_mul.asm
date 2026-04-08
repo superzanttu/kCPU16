@@ -6,12 +6,12 @@
 
         .origin 0x0200
 
-        LOAD  R0, 6
-        LOAD  R1, 7
+        JARI  R0, 6
+        JARI  R1, 7
         MUL   R0, R1          ; R0 = 6 × 7 = 42
 
-        LOAD  R2, 0
-        LOAD  R3, 100
+        JARI  R2, 0
+        JARI  R3, 100
         MUL   R2, R3          ; R2 = 0 × 100 = 0 → Z=1
 
         HALT

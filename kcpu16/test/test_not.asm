@@ -6,11 +6,11 @@
         .origin 0x0200
 
         ; ~0x0000 = 0xFFFF → N=1
-        LOAD  R0, 0x0000
+        JARI  R0, 0x0000
         NOT   R0
 
         ; ~0xFFFF = 0x0000 → Z=1
-        LOAD  R1, 0xFFFF
+        JARI  R1, 0xFFFF
         NOT   R1
 
         HALT

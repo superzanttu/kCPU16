@@ -346,8 +346,8 @@ class CPU:
         # TIEDONSIIRTOKASKYT
         # ======================================================================
 
-        if ins.mnemonic == "LOAD":
-            # LOAD reg, imm - Lataa vakioarvo rekisteriin
+        if ins.mnemonic == "JARI":
+            # JARI reg, imm - Lataa vakioarvo rekisteriin
             reg_idx, imm = ins.operands
             self._set_reg(reg_idx, imm)
 

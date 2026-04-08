@@ -45,41 +45,41 @@
         ;
         ; Merkkiformat: 0xE0XX = valkoinen väri + ASCII
         ; -----------------------------------------------
-        LOAD  R0, 0xE048      ; 'H' (ASCII 0x48)
+        JARI  R0, 0xE048      ; 'H' (ASCII 0x48)
         STORE [0x0200], R0  ; [0x0200] = 'H'
 
-        LOAD  R0, 0xE045      ; 'E' (ASCII 0x45)
+        JARI  R0, 0xE045      ; 'E' (ASCII 0x45)
         STORE [0x0201], R0
 
-        LOAD  R0, 0xE04C      ; 'L' (ASCII 0x4C)
+        JARI  R0, 0xE04C      ; 'L' (ASCII 0x4C)
         STORE [0x0202], R0
 
-        LOAD  R0, 0xE04C      ; 'L'
+        JARI  R0, 0xE04C      ; 'L'
         STORE [0x0203], R0
 
-        LOAD  R0, 0xE04F      ; 'O' (ASCII 0x4F)
+        JARI  R0, 0xE04F      ; 'O' (ASCII 0x4F)
         STORE [0x0204], R0
 
-        LOAD  R0, 0xE021      ; '!' (ASCII 0x21)
+        JARI  R0, 0xE021      ; '!' (ASCII 0x21)
         STORE [0x0205], R0
 
-        LOAD  R0, 0xE020      ; ' ' (välilyönti, ASCII 0x20)
+        JARI  R0, 0xE020      ; ' ' (välilyönti, ASCII 0x20)
         STORE [0x0206], R0
 
         ; -----------------------------------------------
         ; Vaihe 2: Alusta kirjoitussilmukka
         ; -----------------------------------------------
-        LOAD  R0, 0xF800      ; R0 = VRAM alku
-        LOAD  R1, 1920        ; R1 = 80 x 24 = 1920 paikkaa
-        LOAD  R2, 0x0200      ; R2 = pattern alku
-        LOAD  R3, 1           ; R3 = vakio 1
-        LOAD  SP, 0x0207      ; SP = pattern loppu (exclusive)
+        JARI  R0, 0xF800      ; R0 = VRAM alku
+        JARI  R1, 1920        ; R1 = 80 x 24 = 1920 paikkaa
+        JARI  R2, 0x0200      ; R2 = pattern alku
+        JARI  R3, 1           ; R3 = vakio 1
+        JARI  SP, 0x0207      ; SP = pattern loppu (exclusive)
 
         ; -----------------------------------------------
         ; Merkitse ajon aloitus kirjoittamalla 'S'
         ; (debug-tarkoituksiin)
         ; -----------------------------------------------
-        LOAD  FP, 0xE053      ; 'S' (Start)
+        JARI  FP, 0xE053      ; 'S' (Start)
         STORE [0xF8A0], FP  ; Kirjoita rivin 2 alkuun
 
 ; =============================================================================
@@ -89,7 +89,7 @@ fill_loop:
         ; -----------------------------------------------
         ; Lue merkki patternista ja kirjoita näytölle
         ; -----------------------------------------------
-        LOAD FP, [R2]  ; FP = [R2] (pattern-merkki)
+        JARI FP, [R2]  ; FP = [R2] (pattern-merkki)
         STORE [R0], FP  ; [R0] = FP (kirjoita näyttöön)
 
         ; -----------------------------------------------
@@ -104,7 +104,7 @@ fill_loop:
         ; -----------------------------------------------
         CMP   R2, SP
         JNZ   no_wrap         ; Jos ei lopussa, ohita wrap
-        LOAD  R2, 0x0200      ; Aloita pattern alusta
+        JARI  R2, 0x0200      ; Aloita pattern alusta
 
 no_wrap:
         ; -----------------------------------------------
@@ -116,7 +116,7 @@ no_wrap:
         ; -----------------------------------------------
         ; Merkitse ajon lopetus kirjoittamalla 'D' (Done)
         ; -----------------------------------------------
-        LOAD  FP, 0xE044      ; 'D'
+        JARI  FP, 0xE044      ; 'D'
         STORE [0xF8A1], FP
 
         ; -----------------------------------------------

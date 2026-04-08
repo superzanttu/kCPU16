@@ -10,26 +10,26 @@
 
 ; --- SMPR testi ---
 ; Aseta MPR = 0x0400
-LOAD  R0, 0x0400
+JARI  R0, 0x0400
 SMPR  R0
 
 ; Aseta MPR = 0x0200 (muuta)
-LOAD  R0, 0x0200
+JARI  R0, 0x0200
 SMPR  R0
 
 ; --- STMR testi ---
 ; Aseta TMR = 100 (ajastinkeskeytys joka 100 käskyn välein)
-LOAD  R1, 100
+JARI  R1, 100
 STMR  R1
 
 ; Aseta TMR = 0 (pois päältä, jotta ei laukea tässä testissä)
-LOAD  R1, 0
+JARI  R1, 0
 STMR  R1
 
 ; Tarkista: MPR ja TMR eivät ole suoraan .expect_reg:llä
 ; luettavissa, mutta SMPR/STMR eivät aseta lippuja
-LOAD  R0, 42
-LOAD  R1, 43
+JARI  R0, 42
+JARI  R1, 43
 HALT
 
 .expect_reg   R0, 42         ; SMPR ei muuttanut R0:aa

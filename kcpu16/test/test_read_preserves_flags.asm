@@ -1,33 +1,33 @@
 ; =============================================================================
 ; test_read_preserves_flags.asm — READ-variantit säilyttävät liput (1→1)
 ; Testataan kaikki kolme READ-muotoa:
-;   LOAD reg, [addr]      (READ suora)
-;   LOAD reg, [regS]      (READ_IND epäsuora)
-;   LOAD reg, [FP+imm]    (READ_REL FP-suhteellinen)
-; Kun liput ovat 1 ennen LOAD-käskyä, ne pysyvät 1:nä sen jälkeen.
+;   JARI reg, [addr]      (READ suora)
+;   JARI reg, [regS]      (READ_IND epäsuora)
+;   JARI reg, [FP+imm]    (READ_REL FP-suhteellinen)
+; Kun liput ovat 1 ennen JARI-käskyä, ne pysyvät 1:nä sen jälkeen.
 ; =============================================================================
 
         .origin 0x0200
 
         ; Tallenna testidataa muistiin etukäteen
-        LOAD  R0, 0xABCD
+        JARI  R0, 0xABCD
         STORE [0x0300], R0    ; muisti[0x0300] = 0xABCD
 
         ; Aseta C=1, V=1, Z=1, N=0 ADD:lla
-        LOAD  R0, 0x8000
-        LOAD  R1, 0x8000
+        JARI  R0, 0x8000
+        JARI  R1, 0x8000
         ADD   R0, R1          ; C=1, V=1, Z=1, N=0
 
         ; --- READ (suora) ei saa muuttaa lippuja ---
-        LOAD  R0, [0x0300]    ; R0 = 0xABCD; liput pysyvät ennallaan
+        JARI  R0, [0x0300]    ; R0 = 0xABCD; liput pysyvät ennallaan
 
         ; --- READ_IND (epäsuora) ei saa muuttaa lippuja ---
-        LOAD  R1, 0x0300      ; R1 = osoite (LOAD ei muuta lippuja)
-        LOAD  R2, [R1]        ; R2 = muisti[0x0300] = 0xABCD; liput ennallaan
+        JARI  R1, 0x0300      ; R1 = osoite (JARI ei muuta lippuja)
+        JARI  R2, [R1]        ; R2 = muisti[0x0300] = 0xABCD; liput ennallaan
 
         ; --- READ_REL (FP-suhteellinen) ei saa muuttaa lippuja ---
-        LOAD  FP, 0x02FF      ; FP = 0x02FF (LOAD ei muuta lippuja)
-        LOAD  R3, [FP+1]      ; R3 = muisti[0x0300] = 0xABCD; liput ennallaan
+        JARI  FP, 0x02FF      ; FP = 0x02FF (JARI ei muuta lippuja)
+        JARI  R3, [FP+1]      ; R3 = muisti[0x0300] = 0xABCD; liput ennallaan
 
         HALT
 

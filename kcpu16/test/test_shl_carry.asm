@@ -6,8 +6,8 @@
 
         .origin 0x0200
 
-        LOAD  R0, 0x8001      ; bitti 15 ja bitti 0 asetettu
-        LOAD  R1, 1
+        JARI  R0, 0x8001      ; bitti 15 ja bitti 0 asetettu
+        JARI  R1, 1
         SHL   R0, R1          ; 0x8001 << 1 = 0x0002, C=1
 
         HALT

@@ -7,13 +7,13 @@
         .origin 0x0200
 
         ; Aseta V=1 ADD:lla
-        LOAD  R0, 0x7FFF
-        LOAD  R1, 1
+        JARI  R0, 0x7FFF
+        JARI  R1, 1
         ADD   R0, R1          ; 0x8000: V=1, N=1, C=0, Z=0
 
         ; SHL nollaa V
-        LOAD  R0, 0x0001
-        LOAD  R1, 1
+        JARI  R0, 0x0001
+        JARI  R1, 1
         SHL   R0, R1          ; 0x0002: V=0 (V:1→0), C=0, Z=0, N=0
 
         HALT

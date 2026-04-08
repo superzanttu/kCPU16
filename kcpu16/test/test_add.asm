@@ -6,8 +6,8 @@
 
         .origin 0x0200
 
-        LOAD  R0, 15
-        LOAD  R1, 27
+        JARI  R0, 15
+        JARI  R1, 27
         ADD   R0, R1          ; R0 = 15 + 27 = 42
 
         HALT

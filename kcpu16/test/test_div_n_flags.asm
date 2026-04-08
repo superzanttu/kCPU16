@@ -8,13 +8,13 @@
         .origin 0x0200
 
         ; Vaihe 1: DIV tuottaa N=1 (0→1)
-        LOAD  R0, 0xFFFF
-        LOAD  R1, 1
+        JARI  R0, 0xFFFF
+        JARI  R1, 1
         DIV   R0, R1          ; 65535 / 1 = 65535 = 0xFFFF: N=1, Z=0
 
         ; Vaihe 2: DIV tuottaa N=1 uudelleen → N:1→1
-        LOAD  R0, 0xFFFF
-        LOAD  R1, 1
+        JARI  R0, 0xFFFF
+        JARI  R1, 1
         DIV   R0, R1          ; N=1 (1→1)
 
         HALT

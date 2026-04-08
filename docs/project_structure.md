@@ -178,7 +178,7 @@ Lisäksi: keskeytysten käsittely (`_trigger_interrupt()`), pinooperaatiot (`_pu
 #### `disassembler.py` — Disassembler
 `Disassembler`-luokka:
 - `disassemble(words, start_addr)` — muuntaa konekielen luettavaksi
-- Tulosformaatti: `0100: LOAD 0x0000, 0x000A`
+- Tulosformaatti: `0100: JARI 0x0000, 0x000A`
 - Tuntemattomat opcodet: `.word 0x1234`
 - Lineaarinen skannaus (ei rekursiivinen)
 

@@ -11,37 +11,37 @@
 .origin 0x0200
 
 ; Aseta INT 3 -vektori
-LOAD  R0, int3_handler
+JARI  R0, int3_handler
 STORE [0x0003], R0
 
 ; Aseta INT 8 -vektori (EXIT)
-LOAD  R0, exit_handler
+JARI  R0, exit_handler
 STORE [0x0008], R0
 
 ; Kernel modessa alkuun: P=1
-LOAD  R0, 1           ; merkki: kernel-vaihe suoritettu
+JARI  R0, 1           ; merkki: kernel-vaihe suoritettu
 
 ; Siirry user modeen
-LOAD  R1, user_start
+JARI  R1, user_start
 PUSH  R1              ; PC
-LOAD  R1, 0           ; SR=0 (P=0, user mode)
+JARI  R1, 0           ; SR=0 (P=0, user mode)
 PUSH  R1              ; SR
 IRET                  ; -> user mode
 
 user_start:
 ; Ollaan user modessa (P=0)
-LOAD  R1, 2           ; merkki: user-vaihe suoritettu
+JARI  R1, 2           ; merkki: user-vaihe suoritettu
 
 ; Kutsu INT 3 -> siirtyy kernel modeen
 INT   3
 
 ; Paluu INT:stä -> ollaan taas user modessa
-LOAD  R2, 3           ; merkki: paluu-vaihe suoritettu
+JARI  R2, 3           ; merkki: paluu-vaihe suoritettu
 EXIT
 
 int3_handler:
     ; Handler ajetaan kernel modessa
-    LOAD  R3, 4       ; merkki: handler suoritettu kernel-tilassa
+    JARI  R3, 4       ; merkki: handler suoritettu kernel-tilassa
     IRET              ; palaa user-tilaan
 
 exit_handler:

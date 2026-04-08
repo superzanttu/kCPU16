@@ -6,13 +6,13 @@
 
         .origin 0x0200
 
-        LOAD  R0, 0           ; nollaa R0 ennen kutsua
+        JARI  R0, 0           ; nollaa R0 ennen kutsua
         CALL  myproc          ; kutsu aliohjelma
         HALT                  ; palataan tänne
 
 myproc:
-        LOAD  R0, 42          ; aliohjelma asettaa R0
-        LOAD  R1, 99
+        JARI  R0, 42          ; aliohjelma asettaa R0
+        JARI  R1, 99
         RET                   ; palaa kutsujalle
 
 .expect_reg   R0, 42

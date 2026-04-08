@@ -19,10 +19,10 @@
         STORE [0x0303], 0xFFFF  ; muisti[0x0303] = 0xFFFF
 
         ; Lue takaisin ja tarkista
-        LOAD R0, [0x0300]  ; R0 = 77
-        LOAD R1, [0x0301]  ; R1 = 0xABCD
-        LOAD R2, [0x0302]  ; R2 = 0
-        LOAD R3, [0x0303]  ; R3 = 0xFFFF
+        JARI R0, [0x0300]  ; R0 = 77
+        JARI R1, [0x0301]  ; R1 = 0xABCD
+        JARI R2, [0x0302]  ; R2 = 0
+        JARI R3, [0x0303]  ; R3 = 0xFFFF
 
         HALT
 

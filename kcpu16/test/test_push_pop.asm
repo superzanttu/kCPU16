@@ -6,8 +6,8 @@
 
         .origin 0x0200
 
-        LOAD  R0, 100
-        LOAD  R1, 200
+        JARI  R0, 100
+        JARI  R1, 200
 
         PUSH  R0              ; pino: [100]         SP=0xFFFE
         PUSH  R1              ; pino: [100, 200]    SP=0xFFFD

@@ -11,7 +11,7 @@ KAYTTOTAPA:
 
     machine = KCPU16Machine()
     machine.cold_reset()
-    machine.load_program([0x0001, 0x0000, 0x002A])  # LOAD R0, 42
+    machine.load_program([0x0001, 0x0000, 0x002A])  # JARI R0, 42
     machine.run()
     print(machine.dump_registers())
 
@@ -152,7 +152,7 @@ class KCPU16Machine:
             start_addr: Aloitusosoite muistissa (oletus: 0x0100)
 
         Example:
-            >>> machine.load_program([0x0001, 0x0000, 0x000A])  # LOAD R0, 10
+            >>> machine.load_program([0x0001, 0x0000, 0x000A])  # JARI R0, 10
             >>> machine.run()
             >>> machine.regs.r0
             10

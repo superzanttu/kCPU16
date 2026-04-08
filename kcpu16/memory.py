@@ -134,9 +134,9 @@ class Memory:
 
         Example:
             >>> mem = Memory()
-            >>> mem.load_words(0x0100, [0x0001, 0x0000, 0x000A])  # LOAD R0, 10
+            >>> mem.load_words(0x0100, [0x0001, 0x0000, 0x000A])  # JARI R0, 10
             >>> mem.read(0x0100)
-            1  # opcode: LOAD
+            1  # opcode: JARI
             >>> mem.read(0x0102)
             10  # operandi: 10
         """

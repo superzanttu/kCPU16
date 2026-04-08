@@ -6,13 +6,13 @@
         .origin 0x0200
 
         ; 32 >> 3 = 4
-        LOAD  R0, 32
-        LOAD  R1, 3
+        JARI  R0, 32
+        JARI  R1, 3
         SHR   R0, R1
 
         ; 0x0100 >> 4 = 0x0010 = 16
-        LOAD  R2, 0x0100
-        LOAD  R3, 4
+        JARI  R2, 0x0100
+        JARI  R3, 4
         SHR   R2, R3
 
         HALT

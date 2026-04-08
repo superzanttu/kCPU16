@@ -1,21 +1,21 @@
 ; =============================================================
-; TESTI: LOAD FP ja SP rekistereihin
+; TESTI: JARI FP ja SP rekistereihin
 ; =============================================================
-; Testaa LOAD-käskyn käyttöä FP- ja SP-rekistereille.
+; Testaa JARI-käskyn käyttöä FP- ja SP-rekistereille.
 ; =============================================================
 
 .origin 0x0200
 
-; LOAD FP:hen
-LOAD  FP, 0x0500
+; JARI FP:hen
+JARI  FP, 0x0500
 CPY   R0, FP          ; R0 = 0x0500
 
-; LOAD SP:hen (vaihda pinon sijainti)
-LOAD  SP, 0x0900
+; JARI SP:hen (vaihda pinon sijainti)
+JARI  SP, 0x0900
 CPY   R1, SP          ; R1 = 0x0900
 
 ; Testi: PUSH/POP uudessa pinosijainnissa
-LOAD  R2, 42
+JARI  R2, 42
 PUSH  R2              ; [0x0900] = 42, SP = 0x08FF
 POP   R3              ; R3 = 42, SP = 0x0900
 

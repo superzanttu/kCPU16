@@ -6,8 +6,8 @@
 
         .origin 0x0200
 
-        LOAD  R0, 0x7FFF      ; 32767 (suurin positiivinen 16-bittinen luku)
-        LOAD  R1, 1
+        JARI  R0, 0x7FFF      ; 32767 (suurin positiivinen 16-bittinen luku)
+        JARI  R1, 1
         ADD   R0, R1          ; 32767 + 1 → R0=0x8000, V=1
 
         HALT

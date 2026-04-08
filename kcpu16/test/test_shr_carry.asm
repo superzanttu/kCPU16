@@ -6,8 +6,8 @@
 
         .origin 0x0200
 
-        LOAD  R0, 0x0007      ; ...0111 — LSB on 1
-        LOAD  R1, 1
+        JARI  R0, 0x0007      ; ...0111 — LSB on 1
+        JARI  R1, 1
         SHR   R0, R1          ; 7 >> 1 = 3, C=1
 
         HALT

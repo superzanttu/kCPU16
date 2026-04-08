@@ -8,8 +8,8 @@
 
 .origin 0x0200
 
-LOAD  R0, 0x7FFF
-LOAD  R1, 0xFFFF
+JARI  R0, 0x7FFF
+JARI  R1, 0xFFFF
 SUB   R0, R1          ; 0x7FFF - 0xFFFF = 0x8000
 
 HALT

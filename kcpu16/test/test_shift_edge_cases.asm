@@ -10,27 +10,27 @@
 .origin 0x0200
 
 ; SHL 0: ei muutosta
-LOAD  R0, 0xAAAA
-LOAD  R1, 0
+JARI  R0, 0xAAAA
+JARI  R1, 0
 SHL   R0, R1          ; R0 = 0xAAAA, C=0
 
 CPY   R2, R0          ; tallenna: R2 = 0xAAAA
 
 ; SHL 16: kaikki bitit ulos
-LOAD  R0, 0xFFFF
-LOAD  R1, 16
+JARI  R0, 0xFFFF
+JARI  R1, 16
 SHL   R0, R1          ; R0 = 0, C = bit[0] of original (=1)
 
 CPY   R3, R0          ; tallenna: R3 = 0
 
 ; SHR 0: ei muutosta
-LOAD  R0, 0x5555
-LOAD  R1, 0
+JARI  R0, 0x5555
+JARI  R1, 0
 SHR   R0, R1          ; R0 = 0x5555, C=0
 
 ; SHR yli 16: kaikki ulos
-LOAD  R0, 0xFFFF
-LOAD  R1, 17
+JARI  R0, 0xFFFF
+JARI  R1, 17
 SHR   R0, R1          ; R0 = 0, C=0 (yli 16)
 
 HALT

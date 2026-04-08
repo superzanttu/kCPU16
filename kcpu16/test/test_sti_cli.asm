@@ -9,10 +9,10 @@
 
         ; Oletuksena I=0 käynnistyksessä
         STI                   ; I=1
-        LOAD  R0, 1           ; tarkistusarvo
+        JARI  R0, 1           ; tarkistusarvo
 
         CLI                   ; I=0
-        LOAD  R1, 2
+        JARI  R1, 2
 
         STI                   ; I=1 uudelleen
         HALT

@@ -11,24 +11,24 @@
 .origin 0x0200
 
 ; Aseta keskeytysvektori 0 (INT_DIV_ZERO)
-LOAD  R0, div_handler
+JARI  R0, div_handler
 STORE [0x0000], R0  ; vektori 0
 
 ; Yritä jakaa nollalla
-LOAD  R0, 100
-LOAD  R1, 0
+JARI  R0, 100
+JARI  R1, 0
 DIV   R0, R1          ; jakaja = 0 -> INT 0
 
 ; Tänne palataan handler:ista (DIV ohitettu)
-LOAD  R2, 88
+JARI  R2, 88
 HALT
 
 div_handler:
-    LOAD  R3, 0xDEAD  ; merkki: handler suoritettiin
+    JARI  R3, 0xDEAD  ; merkki: handler suoritettiin
     ; Ohita DIV-käsky: pop SR ja PC, lisää 3 (DIV koko), push takaisin
     POP   R0          ; old_SR
     POP   R1          ; old_PC (osoittaa DIV:iin)
-    LOAD  R2, 3
+    JARI  R2, 3
     ADD   R1, R2      ; old_PC + 3 = ohita DIV
     PUSH  R1          ; korjattu PC
     PUSH  R0          ; SR takaisin

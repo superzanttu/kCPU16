@@ -7,12 +7,12 @@
         .origin 0x0200
 
         ; 0xAAAA ^ 0x5555 = 0xFFFF (kaikki bitit vaihdettu)
-        LOAD  R0, 0xAAAA
-        LOAD  R1, 0x5555
+        JARI  R0, 0xAAAA
+        JARI  R1, 0x5555
         XOR   R0, R1
 
         ; X ^ X = 0 aina — Z=1
-        LOAD  R2, 0xFFFF
+        JARI  R2, 0xFFFF
         XOR   R2, R2
 
         HALT

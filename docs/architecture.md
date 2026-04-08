@@ -266,7 +266,7 @@ Käskyn koko sanoina on `1 + OPS` (opcode-sana + operandisanat).
 
 | Opcode | Käsky     | Operandit  | Tila | Liput | Kuvaus             |
 | ------ | --------- | ---------- | ---- | ----- | ------------------ |
-| 0x1080 | LOAD      | reg, imm   | U    | —     | `reg ← imm`        |
+| 0x1080 | JARI      | reg, imm   | U    | —     | `reg ← imm`        |
 | 0x1180 | CPY       | regD, regS | U    | —     | `regD ← regS`      |
 | 0x1280 | READ      | reg, addr  | U    | —     | `reg ← [addr]`     |
 | 0x1380 | STORE     | reg, addr  | U    | —     | `[addr] ← reg`     |
@@ -275,7 +275,7 @@ Käskyn koko sanoina on `1 + OPS` (opcode-sana + operandisanat).
 | 0x1680 | READ_REL  | reg, imm   | U    | —     | `reg ← [FP + imm]` |
 | 0x1780 | STORE_REL | reg, imm   | U    | —     | `[FP + imm] ← reg` |
 
-**LOAD** lataa 16-bittisen välittömän arvon (immediate) suoraan rekisteriin. Tämä on ainoa tapa saada vakioarvo rekisteriin. Käsky on 3 sanaa pitkä: opcode, rekisteri-indeksi ja 16-bittinen arvo.
+**JARI** lataa 16-bittisen välittömän arvon (immediate) suoraan rekisteriin. Tämä on ainoa tapa saada vakioarvo rekisteriin. Käsky on 3 sanaa pitkä: opcode, rekisteri-indeksi ja 16-bittinen arvo.
 
 **CPY** kopioi lähderekisterin arvon kohderekisteriin. Lähderekisterin sisältö säilyy muuttumattomana. Käytetään rekisterien väliseen tiedonsiirtoon, esimerkiksi pinon osoittimen kopiointiin yleisrekisteriin.
 
@@ -513,7 +513,7 @@ Assembly-kielen syntaksi, direktiivit, arkkitehtuurivakiot ja käyttöesimerkit 
 | 0x5340 | JZ        | 2     | Hyppy jos yhtä suuri (Z = 1), alias: JE            |
 | 0x5040 | JUMP      | 2     | Ehdoton hyppy (PC = addr)                          |
 | 0x7640 | KGET      | 2     | Lue näppäimistön puskurista                        |
-| 0x1080 | LOAD      | 3     | Lataa välitön arvo rekisteriin                     |
+| 0x1080 | JARI      | 3     | Lataa välitön arvo rekisteriin                     |
 | 0x2280 | MUL       | 3     | Kertolasku: regD = regD × regS                     |
 | 0x7F00 | NOP       | 1     | Ei tee mitään                                      |
 | 0x3340 | NOT       | 2     | Bittitason komplementti (käännä kaikki bitit)      |
@@ -543,7 +543,7 @@ Assembly-kielen syntaksi, direktiivit, arkkitehtuurivakiot ja käyttöesimerkit 
 
 | Käsky     | Opcode | Kuvaus                                                             |
 | --------- | ------ | ------------------------------------------------------------------ |
-| LOAD      | 0x1080 | Lataa välitön 16-bittinen arvo rekisteriin                         |
+| JARI      | 0x1080 | Lataa välitön 16-bittinen arvo rekisteriin                         |
 | CPY       | 0x1180 | Kopioi yhden rekisterin sisältö toiseen rekisteriin                |
 | READ      | 0x1280 | Lue yhden sanan muistista absoluuttisella osoitteella              |
 | STORE     | 0x1380 | Kirjoita yhden sanan muistiin absoluuttisella osoitteella          |

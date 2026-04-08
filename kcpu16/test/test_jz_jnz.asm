@@ -7,19 +7,19 @@
         .origin 0x0200
 
         ; --- JZ: yhtäsuuret → Z=1 → hyppy otetaan ---
-        LOAD  R0, 5
-        LOAD  R1, 5
+        JARI  R0, 5
+        JARI  R1, 5
         CMP   R0, R1          ; Z=1
         JZ    jnz_test
-        LOAD  R2, 99          ; ei suoriteta
+        JARI  R2, 99          ; ei suoriteta
 
 jnz_test:
         ; --- JNZ: eri suuret → Z=0 → hyppy otetaan ---
-        LOAD  R0, 3
-        LOAD  R1, 7
+        JARI  R0, 3
+        JARI  R1, 7
         CMP   R0, R1          ; Z=0
         JNZ   done
-        LOAD  R3, 99          ; ei suoriteta
+        JARI  R3, 99          ; ei suoriteta
 
 done:
         HALT

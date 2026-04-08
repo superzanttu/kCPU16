@@ -24,13 +24,13 @@ STR_DATA:
 
 start:
 ; Lue .db-data
-LOAD R0, [DATA_BYTES]  ; mem[DATA_BYTES] = 0x41 = 65
-LOAD R1, [DATA_NUMS]  ; mem[DATA_NUMS] = 0
+JARI R0, [DATA_BYTES]  ; mem[DATA_BYTES] = 0x41 = 65
+JARI R1, [DATA_NUMS]  ; mem[DATA_NUMS] = 0
 ; Lue .dstr-data
-LOAD R2, [STR_DATA]  ; mem[STR_DATA] = 72 ('H')
+JARI R2, [STR_DATA]  ; mem[STR_DATA] = 72 ('H')
 
 ; Lue .at-segmenttiin kirjoitettu data
-LOAD R3, [0x0400]  ; .at-segmentistä: 0xBE
+JARI R3, [0x0400]  ; .at-segmentistä: 0xBE
 
 HALT
 

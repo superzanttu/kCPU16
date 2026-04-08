@@ -4,10 +4,10 @@
 
         .origin 0x0200
 
-        LOAD  R0, 5         ; R0 = n = 5
-        LOAD  R1, 1         ; R1 = tulos = 1
-        LOAD  R3, 0         ; R3 = vakio 0 (vertailuun)
-        LOAD  R2, 1         ; R2 = vakio 1 (vähennykseen)
+        JARI  R0, 5         ; R0 = n = 5
+        JARI  R1, 1         ; R1 = tulos = 1
+        JARI  R3, 0         ; R3 = vakio 0 (vertailuun)
+        JARI  R2, 1         ; R2 = vakio 1 (vähennykseen)
 
 loop:
         CMP   R0, R3        ; vertaa laskuria nollaan

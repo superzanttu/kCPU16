@@ -8,7 +8,7 @@
         .origin 0x0200
 
         ; Alusta lukko vapaaaksi (0 = vapaa)
-        LOAD  R0, 0
+        JARI  R0, 0
         STORE [0x0300], R0
 
         ; Ensimmäinen TSL: lukko oli vapaa → R1 = 0, lukko lukittuu

@@ -6,8 +6,8 @@
 
         .origin 0x0200
 
-        LOAD  R0, 50
-        LOAD  R1, 30
+        JARI  R0, 50
+        JARI  R1, 30
         SUB   R0, R1          ; R0 = 50 − 30 = 20
 
         HALT

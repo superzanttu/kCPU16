@@ -6,8 +6,8 @@
 
         .origin 0x0200
 
-        LOAD  R0, 0x8000      ; −32768 etumerkillisessä tulkinnassa
-        LOAD  R1, 1
+        JARI  R0, 0x8000      ; −32768 etumerkillisessä tulkinnassa
+        JARI  R1, 1
         SUB   R0, R1          ; 0x8000 − 1 = 0x7FFF, V=1
 
         HALT

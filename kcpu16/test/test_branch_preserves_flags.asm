@@ -7,8 +7,8 @@
 .origin 0x0200
 
 ; Aseta C=1, V=1, Z=1, N=0
-LOAD  R0, 0x8000
-LOAD  R1, 0x8000
+JARI  R0, 0x8000
+JARI  R1, 0x8000
 ADD   R0, R1          ; C=1, V=1, Z=1, N=0
 
 ; --- JUMP (ehdoton) ---

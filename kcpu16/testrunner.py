@@ -19,7 +19,7 @@ Osoitteet:    desimaali, 0x-hex tai 0b-binääri
 
 ESIMERKKI:
 ----------
-    LOAD  R0, 5
+    JARI  R0, 5
     CALL  factorial
     HALT
 
