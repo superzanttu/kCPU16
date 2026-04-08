@@ -552,7 +552,7 @@ class KCPU16TUI(App[None]):
     #disasm-tabs {
         width: 1fr;
         height: 1fr;
-        border: solid $success-darken-1;
+        border: solid $primary-darken-2;
         border-title-color: $accent;
     }
     TabPane {
@@ -693,9 +693,9 @@ class KCPU16TUI(App[None]):
             yield Static(" ", classes="sep")
             yield Button("Assemble ^B", id="btn-asm", variant="primary")
             yield Static(" ", classes="sep")
-            yield Button("Step F7", id="btn-step", variant="warning")
+            yield Button("Step F7", id="btn-step", variant="primary")
             yield Button("Full F5", id="btn-run-full", variant="success")
-            yield Button("Slow F6", id="btn-run-slow", variant="primary")
+            yield Button("Slow F6", id="btn-run-slow", variant="success")
             yield Button("Stop F8", id="btn-stop", variant="default")
             yield Button("Reset ^R", id="btn-reset", variant="error")
             yield Static(" ", classes="sep")
@@ -898,7 +898,7 @@ class KCPU16TUI(App[None]):
         self.workers.cancel_all()
         self._exec_mode = "slow"
         self._update_run_mode_ui()
-        self._log("[cyan]Running slow (10 IPS)... (F6/F8 to stop)[/cyan]")
+        self._log("[green]Running slow (10 IPS)... (F6/F8 to stop)[/green]")
         self._cpu_run_worker("slow")
 
     def action_stop_program(self) -> None:
@@ -938,7 +938,7 @@ class KCPU16TUI(App[None]):
         addr = self.machine.regs.pc
         added = self.dbg.toggle_breakpoint(addr)
         if added:
-            self._log(f"[red]Breakpoint SET at 0x{addr:04X}[/red]")
+            self._log(f"[yellow]Breakpoint SET at 0x{addr:04X}[/yellow]")
         else:
             self._log(f"Breakpoint REMOVED at 0x{addr:04X}")
         self._refresh_all()
@@ -1030,13 +1030,13 @@ class KCPU16TUI(App[None]):
         self._log("  F2      Toggle BP       F1      This help")
         self._log("  Ctrl+Q  Quit")
         self._log("")
-        self._log("[bold cyan]File & Assembly:[/bold cyan]")
+        self._log("[bold]File & Assembly:[/bold]")
         self._log(
             "  load <filename>              Load .asm (watches for changes, auto-reassembles)"
         )
         self._log("  asm                          Manually reassemble loaded file")
         self._log("  check                        Syntax check loaded file (no load)")
-        self._log("[bold cyan]CPU Control:[/bold cyan]")
+        self._log("[bold]CPU Control:[/bold]")
         self._log("  step [n]                     Step n instructions (default 1)")
         self._log(
             "  run  [n]                     Full speed run to BP/halt (max n cycles)"
@@ -1046,15 +1046,15 @@ class KCPU16TUI(App[None]):
         )
         self._log("  stop                         Stop running CPU")
         self._log("  restart                      Reassemble and restart from 0x0100")
-        self._log("[bold cyan]Breakpoints:[/bold cyan]")
+        self._log("[bold]Breakpoints:[/bold]")
         self._log("  bp <addr>                    Toggle breakpoint at address")
         self._log("  bp list                      List all breakpoints")
         self._log("  bp clear                     Remove all breakpoints")
-        self._log("[bold cyan]Memory:[/bold cyan]")
+        self._log("[bold]Memory:[/bold]")
         self._log("  mem <addr> [count]           Show count words at addr (default 1)")
         self._log("  mset <addr> <value>          Write value to addr")
         self._log("  mfill <addr> <count> <value> Fill count words starting at addr")
-        self._log("[bold cyan]Disk (Storage):[/bold cyan]")
+        self._log("[bold]Disk (Storage):[/bold]")
         self._log("  disk <block>                 Show block as hex dump")
         self._log("  disk load <path>             Load .dsk file into storage")
         self._log(
@@ -1066,16 +1066,16 @@ class KCPU16TUI(App[None]):
             "  mem2disk <addr> <block>      Copy one block of words from mem to disk"
         )
         self._log("  disk2mem <block> <addr>      Copy disk block to memory")
-        self._log("[bold cyan]Reset:[/bold cyan]")
+        self._log("[bold]Reset:[/bold]")
         self._log("  reset                        Memory + CPU (storage intact)")
         self._log("  reset deep                   Memory + CPU + storage")
         self._log("  reset cpu                    CPU only (memory intact)")
-        self._log("[bold cyan]Other:[/bold cyan]")
+        self._log("[bold]Other:[/bold]")
         self._log("  cls                          Clear VRAM")
         self._log("  spec                         Show architecture spec")
         self._log("  help                         This help")
         self._log("")
-        self._log("[bold cyan]Parameter syntax:[/bold cyan]")
+        self._log("[bold]Parameter syntax:[/bold]")
         self._log("  <addr>    Memory address         0–0xFFFF (e.g. 256 or 0x0100)")
         self._log("  <value>   16-bit word            0–0xFFFF (e.g. 42 or 0x002A)")
         self._log("  <count>   Number of items        (e.g. 16 or 0x10)")
@@ -1085,7 +1085,7 @@ class KCPU16TUI(App[None]):
         self._log("  <filename> .asm file in code/     (e.g. hello.asm)")
         self._log("  [param]   Optional parameter     (can be omitted)")
         self._log("")
-        self._log("[bold cyan]Number formats:[/bold cyan]")
+        self._log("[bold]Number formats:[/bold]")
         self._log("  Decimal:  42, 256, 65535")
         self._log("  Hex:      0x2A, 0x0100, 0xFFFF")
         self._log("  Binary:   0b101010")
@@ -1318,7 +1318,7 @@ class KCPU16TUI(App[None]):
                 btn_stop.variant = "error"
             else:  # stopped
                 btn_full.variant = "success"
-                btn_slow.variant = "primary"
+                btn_slow.variant = "success"
                 btn_stop.variant = "default"
         except Exception:
             pass
@@ -1563,7 +1563,7 @@ class KCPU16TUI(App[None]):
         mnemonic = tokens[0]
         operands = tokens[1] if len(tokens) > 1 else ""
         fmt_ops = self._fmt_operands(mnemonic, operands)
-        return f"[yellow]{mnemonic:<10}[/] {fmt_ops}"
+        return f"[bold white]{mnemonic:<10}[/] {fmt_ops}"
 
     def _fmt_disasm_line(self, line: str) -> str:
         """Muotoile disassembly-rivi värikoodein (käytetään step-logissa)."""
@@ -1578,7 +1578,7 @@ class KCPU16TUI(App[None]):
         mnemonic = tokens[0]
         operands = tokens[1] if len(tokens) > 1 else ""
         fmt_ops = self._fmt_operands(mnemonic, operands)
-        return f"[cyan]{addr}[/]: [yellow]{mnemonic:<10}[/] {fmt_ops}"
+        return f"[cyan]{addr}[/]: [bold white]{mnemonic:<10}[/] {fmt_ops}"
 
     def _fmt_operands(self, mnemonic: str, ops_str: str) -> str:
         """Muunna operandit luettavaan muotoon (rekisterinimet, värit).
@@ -1679,7 +1679,7 @@ class KCPU16TUI(App[None]):
             h = f"0x{value:04X}"
             d = f"{value:>5}"
             if changed.get(name, False):
-                return f"[bold red]{name:>4} {h} {d}[/]"
+                return f"[bold yellow]{name:>4} {h} {d}[/]"
             else:
                 return f"[cyan]{name:>4}[/] {h} {d}"
 
@@ -1869,9 +1869,9 @@ class KCPU16TUI(App[None]):
             f"[dim]IC={ic}[/dim] PC=0x{pc:04X}: " f"[bold]{instr}[/bold]{line_info}"
         )
         if self.machine.cpu.halted:
-            self._log("[green]CPU halted (HALT).[/green]")
+            self._log("[bold red]CPU halted (HALT).[/bold red]")
         elif self.machine.process_exited:
-            self._log("[green]Process exited (EXIT).[/green]")
+            self._log("[bold yellow]Process exited (EXIT).[/bold yellow]")
 
     # ------------------------------------------------------------------
     # Komentotulkki
@@ -2045,7 +2045,9 @@ class KCPU16TUI(App[None]):
         addr = int(args[0], 0)
         added = self.dbg.toggle_breakpoint(addr)
         if added:
-            return CommandResult(True, f"[red]Breakpoint SET at 0x{addr:04X}[/red]")
+            return CommandResult(
+                True, f"[yellow]Breakpoint SET at 0x{addr:04X}[/yellow]"
+            )
         return CommandResult(True, f"Breakpoint REMOVED at 0x{addr:04X}")
 
     # ------------------------------------------------------------------

@@ -86,6 +86,16 @@
 .const COL_SEP,   0x0700       ; FG=7 (valkoinen)
 .const COL_STAT,  0x0300       ; FG=3 (keltainen)
 
+; Liukuvan keskiarvon historiataulukot (vapaa RAM 0x0800–0x081B, 7 × 4 sanaa = 28 sanaa)
+; Jokainen taulukko on 4 sanaa: [buf+0]=uusin … [buf+3]=vanhin
+.const BUF_CPU,    0x0800      ; CPU kIPS
+.const BUF_RAM_R,  0x0804      ; RAM luku  B/s
+.const BUF_RAM_W,  0x0808      ; RAM kirj. B/s
+.const BUF_DSK_RB, 0x080C      ; Levy luku  B/s
+.const BUF_DSK_RK, 0x0810      ; Levy luku  blk/s
+.const BUF_DSK_WB, 0x0814      ; Levy kirj. B/s
+.const BUF_DSK_WK, 0x0818      ; Levy kirj. blk/s
+
 ; =============================================================================
 ; MERKKIJONODATA (null-terminoitu, .dstr = yksi sana/merkki + nollatavuu)
 ; =============================================================================
@@ -377,6 +387,70 @@ dsk_w_chk:
         RET
 
 ; =============================================================================
+; ALIOHJELMA: update_avg
+; =============================================================================
+; Lisää uusi arvo 4-alkioisen liukuvan shift-rekisterin alkuun ja palauttaa
+; neljän viimeisimmän mittauksen kokonaislukukeskiarvon.
+;
+; Historiataulukko (4 perättäistä muistisanaa osoitteessa R0..R0+3):
+;   [R0+0] = uusin arvo
+;   [R0+1] = edellinen
+;   [R0+2] = toiseksi vanha
+;   [R0+3] = vanhin
+;
+; Aluksi kaikki paikat ovat 0 (boot-RAM), joten ensimmäiset 3 kierrosta
+; antavat hieman aliarvioituja tuloksia — neljännellä kierroksella kaikki
+; paikat ovat täytettyinä ja tulos on oikea.
+;
+; Sisään:  R0 = osoitin 4-sanan historiataulukkoon (vapaa RAM)
+;          R1 = uusi mittausarvo
+; Ulos:    R1 = 4-mittauksen liukuva kokonaislukukeskiarvo
+; Muuttaa: R6, R7, R8, R9, R10  (kaikki muut rekisterit, ml. R2, säilyvät)
+;
+; Huom. ylivuodon esto: Lasketaan avg = v0/4 + v1/4 + v2/4 + v3/4
+; eikä (v0+v1+v2+v3)/4. Maksimivirhe on 3 yksikköä, joka on merkityksetön.
+; =============================================================================
+update_avg:
+        ; Laske osoitteet: R6 = R0+1, R7 = R0+2, R8 = R0+3
+        CPY   R6, R0
+        ADD   R6, R3            ; R6 = R0+1  (R3 = globaali 1)
+        CPY   R7, R6
+        ADD   R7, R3            ; R7 = R0+2
+        CPY   R8, R7
+        ADD   R8, R3            ; R8 = R0+3
+
+        ; Shift vanhat arvot eteenpäin (vanhin tipahtaa pois)
+        LOAD  R9,  [R7]
+        STORE [R8], R9          ; [R0+3] = [R0+2]
+        LOAD  R9,  [R6]
+        STORE [R7], R9          ; [R0+2] = [R0+1]
+        LOAD  R9,  [R0]
+        STORE [R6], R9          ; [R0+1] = [R0+0]
+
+        ; Tallenna uusi arvo historiataulukon alkuun
+        STORE [R0], R1          ; [R0+0] = uusi arvo
+
+        ; Laske avg = v_new/4 + v1/4 + v2/4 + v3/4  (välttää 16-bit ylivuodon)
+        LOAD  R10, 4            ; R10 = jakaja 4
+        CPY   R9,  R1           ; R9 = uusi arvo (ei tarvitse lukea muistista uudelleen)
+        DIV   R9,  R10          ; R9 = v_new/4  (kertyyakumulaattori)
+
+        LOAD  R6,  [R6]         ; R6 = [R0+1] = edellinen arvo
+        DIV   R6,  R10          ; R6 = v1/4
+        ADD   R9,  R6
+
+        LOAD  R7,  [R7]         ; R7 = [R0+2] = toiseksi vanha
+        DIV   R7,  R10          ; R7 = v2/4
+        ADD   R9,  R7
+
+        LOAD  R8,  [R8]         ; R8 = [R0+3] = vanhin
+        DIV   R8,  R10          ; R8 = v3/4
+        ADD   R9,  R8
+
+        CPY   R1,  R9           ; R1 = avg (paluuarvo)
+        RET
+
+; =============================================================================
 ; PÄÄOHJELMA
 ; =============================================================================
 main:
@@ -427,13 +501,14 @@ main_loop:
         CPY   R1,  R13
         LOAD  R7,  100
         DIV   R1,  R7           ; R1 = kIPS (R13 / 100)
-cpu_kps_show:
-        ; Kirjoita rivi 3: "CPU  k/s:       NNNNN"
+        ; Päivitä 4-mittauksen liukuva keskiarvo
+        LOAD  R0,  BUF_CPU
+        CALL  update_avg        ; R1 = avg kIPS
+        ; Kirjoita rivi 3: "CPU kIPS:       NNNNN"
         LOAD  R8,  VRAM_R3
         LOAD  R9,  STR_CPU_LBL
-        LOAD  R10, COL_LABEL    ; syaani etiketti
-        CALL  write_str         ; R8 osoittaa nyt numeron kohdalle
-        ; R1 = k/s, R5 = 0x4230, R3 = 1, R4 = 10
+        LOAD  R10, COL_LABEL
+        CALL  write_str
         CALL  write5
 
         ; ============================================================
@@ -458,6 +533,8 @@ cpu_kps_show:
 rr_bps_sat:
         LOAD  R1,  65535
 rr_bps_show:
+        LOAD  R0,  BUF_RAM_R
+        CALL  update_avg        ; R1 = avg B/s
         ; Kirjoita rivi 5: "RAM  luku  B/s: NNNNN"
         LOAD  R8,  VRAM_R5
         LOAD  R9,  STR_RAM_R_LBL
@@ -486,6 +563,8 @@ rr_bps_show:
 rw_bps_sat:
         LOAD  R1,  65535
 rw_bps_show:
+        LOAD  R0,  BUF_RAM_W
+        CALL  update_avg        ; R1 = avg B/s
         ; Kirjoita rivi 6: "RAM  kirj. B/s: NNNNN"
         LOAD  R8,  VRAM_R6
         LOAD  R9,  STR_RAM_W_LBL
@@ -520,17 +599,29 @@ dr_bps_done:
         CPY   R2,  R13
         DIV   R2,  R7           ; R2 = blk/s
 
+        ; Laske 4-mittauksen avg molemmille arvoille etukäteen (ennen write-kutsuja)
+        ; B/s avg: R1 (jo laskettu), R2 säilyy
+        LOAD  R0,  BUF_DSK_RB
+        CALL  update_avg        ; R1 = avg B/s  (R2 ei muutu)
+        PUSH  R1                ; pino ← avg B/s
+        ; blk/s avg: R1 = raw blk/s
+        LOAD  R0,  BUF_DSK_RK
+        CPY   R1,  R2
+        CALL  update_avg        ; R1 = avg blk/s
+        CPY   R2,  R1           ; R2 = avg blk/s
+        POP   R1                ; R1 = avg B/s
+
         ; Kirjoita rivi 8: "Levy luku  B/s: NNNNN  blk/s: NNNNN"
         LOAD  R8,  VRAM_R8
         LOAD  R9,  STR_DSK_R_LBL
         LOAD  R10, COL_LABEL
-        CALL  write_str         ; "Levy luku  B/s: "  → R8 on B/s-numerokohta
-        CALL  write5            ; kirjoita B/s (R1), R8 siirtyy eteenpäin
+        CALL  write_str
+        CALL  write5            ; kirjoita avg B/s
 
         LOAD  R9,  STR_BLKS_LBL
-        CALL  write_str         ; "  blk/s: "  → R8 on blk-numerokohta
-        CPY   R1,  R2           ; R1 = blk/s
-        CALL  write5            ; kirjoita blk/s
+        CALL  write_str
+        CPY   R1,  R2           ; R1 = avg blk/s
+        CALL  write5
 
         ; ============================================================
         ; MITTAUS 5: Tallennuslaitteen kirjoitusnopeus (B/s ja blk/s)
@@ -557,16 +648,26 @@ dw_bps_done:
         CPY   R2,  R13
         DIV   R2,  R7           ; R2 = blk/s
 
+        ; Laske 4-mittauksen avg molemmille arvoille
+        LOAD  R0,  BUF_DSK_WB
+        CALL  update_avg        ; R1 = avg B/s  (R2 ei muutu)
+        PUSH  R1                ; pino ← avg B/s
+        LOAD  R0,  BUF_DSK_WK
+        CPY   R1,  R2
+        CALL  update_avg        ; R1 = avg blk/s
+        CPY   R2,  R1           ; R2 = avg blk/s
+        POP   R1                ; R1 = avg B/s
+
         ; Kirjoita rivi 9: "Levy kirj. B/s: NNNNN  blk/s: NNNNN"
         LOAD  R8,  VRAM_R9
         LOAD  R9,  STR_DSK_W_LBL
         LOAD  R10, COL_LABEL
         CALL  write_str
-        CALL  write5
+        CALL  write5            ; kirjoita avg B/s
 
         LOAD  R9,  STR_BLKS_LBL
         CALL  write_str
-        CPY   R1,  R2
+        CPY   R1,  R2           ; R1 = avg blk/s
         CALL  write5
 
         ; ============================================================
