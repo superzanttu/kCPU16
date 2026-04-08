@@ -98,7 +98,7 @@ STR_SEP:
 
 ; Tulosten etiketit — kaikki tasan 16 merkkiä, jolloin numero alkaa heti perään
 STR_CPU_LBL:
-        .dstr "CPU  k/s:       "
+        .dstr "CPU kIPS:       "
 
 STR_RAM_R_LBL:
         .dstr "RAM  luku  B/s: "
@@ -418,28 +418,15 @@ main_loop:
         LOAD  R10, COL_STAT
         CALL  write_str
 
-        ; Suorita benchmark → R13 = kierrosta/sekuntti
+        ; Suorita benchmark → R13 = silmukkakierroksia/sekuntti (1 kierros ≈ 10 käskyä)
         CALL  bench_cpu
 
-        ; Laske k/s ≈ R13 × 10, saturoi 65535:ään
-        ; Vaihe 1: Jos R13 >= 32768 (bitti 15 ylhäällä) → × 10 ylivuotaa aina
-        ;          CMP R13, 0: N=1 jos bitti 15 ylhäällä (= R13 käsitellään neg. etumerkki.)
-        ;          JLT (N≠V): N=1,V=0 → ehto tosi → hyppy ylivuotoon
-        LOAD  R7,  0
-        CMP   R13, R7
-        JLT   cpu_kps_over      ; R13 >= 32768 → ylivuoto
-        ; Tässä: R13 on 0–32767 (ei ylivuotovaaraa bitti 15:stä)
-        ; Vaihe 2: tarkista ettei R13 × 10 ylitä 65535  (raja: 6553 × 10 = 65530)
-        LOAD  R7,  6553
-        CMP   R13, R7
-        JGT   cpu_kps_over      ; R13 > 6553 → R13 × 10 > 65535 → ylivuoto
-        ; Turvallinen kertolasku
+        ; Laske kIPS (= kiloinstruction/sec) = R13 × 10 / 1000 = R13 / 100
+        ; Emulaattori ajaa ~70 000 käskyä/s → R13 ≈ 7000 → kIPS ≈ 70
+        ; Tulos mahtuu aina 16-bittiin (max kIPS ≈ R13_max/100 = 655)
         CPY   R1,  R13
-        LOAD  R7,  10
-        MUL   R1,  R7           ; R1 = R13 × 10
-        JUMP  cpu_kps_show
-cpu_kps_over:
-        LOAD  R1,  65535
+        LOAD  R7,  100
+        DIV   R1,  R7           ; R1 = kIPS (R13 / 100)
 cpu_kps_show:
         ; Kirjoita rivi 3: "CPU  k/s:       NNNNN"
         LOAD  R8,  VRAM_R3
