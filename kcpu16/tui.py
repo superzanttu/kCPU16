@@ -102,11 +102,24 @@ from . import __version__
 # ---------------------------------------------------------------------------
 
 REG_NAMES = {
-    0: "R0",  1: "R1",  2: "R2",  3: "R3",
-    4: "R4",  5: "R5",  6: "R6",  7: "R7",
-    8: "R8",  9: "R9",  10: "R10", 11: "R11",
-    12: "R12", 13: "R13", 14: "R14", 15: "R15",
-    16: "FP", 17: "SP",
+    0: "R0",
+    1: "R1",
+    2: "R2",
+    3: "R3",
+    4: "R4",
+    5: "R5",
+    6: "R6",
+    7: "R7",
+    8: "R8",
+    9: "R9",
+    10: "R10",
+    11: "R11",
+    12: "R12",
+    13: "R13",
+    14: "R14",
+    15: "R15",
+    16: "FP",
+    17: "SP",
 }
 
 # Käskyt joissa 1. operandi on rekisteri-indeksi (esim. LOAD R0, ...)
@@ -543,6 +556,7 @@ class KCPU16TUI(App[None]):
         padding: 0 1;
     }
     #output-pane {
+        width: 1fr;
         height: 1fr;
         border: solid $primary-darken-2;
         border-title-color: $accent;
@@ -557,21 +571,24 @@ class KCPU16TUI(App[None]):
         width: 1fr;
     }
 
-    /* ---- Bottom bar: Flags+CPU | Registers ---- */
+    /* ---- Bottom bar: Flags | Registers | Output ---- */
     #bottom-bar {
-        height: auto;
-        max-height: 14;
+        height: 1fr;
     }
     #flags-pane {
         width: 30;
+        height: 1fr;
         border: solid $warning-darken-1;
         border-title-color: $accent;
         padding: 0 1;
     }
     #regs-pane {
+        width: 40;
+        height: 1fr;
         border: solid $warning-darken-1;
         border-title-color: $accent;
         padding: 0 1;
+        overflow-y: auto;
     }
     """
 
@@ -678,24 +695,24 @@ class KCPU16TUI(App[None]):
                         with TabPane("Stack", id="tab-stack"):
                             with VerticalScroll():
                                 yield Static(id="stack-view")
-                with Vertical(id="output-pane"):
-                    yield RichLog(
-                        id="output-view",
-                        wrap=True,
-                        highlight=False,
-                        markup=True,
-                        max_lines=500,
-                    )
-                    yield Input(
-                        placeholder="Command: help, step, run, bp, mem, mset, disk, reset ...",
-                        id="cmd-input",
-                    )
                 with Horizontal(id="bottom-bar"):
                     with Vertical(id="flags-pane"):
                         yield Static(id="flags-content")
                         yield Static(id="cpu-content")
                     with Vertical(id="regs-pane"):
                         yield Static(id="regs-content")
+                    with Vertical(id="output-pane"):
+                        yield RichLog(
+                            id="output-view",
+                            wrap=True,
+                            highlight=False,
+                            markup=True,
+                            max_lines=500,
+                        )
+                        yield Input(
+                            placeholder="Command: help, step, run, bp, mem, mset, disk, reset ...",
+                            id="cmd-input",
+                        )
 
     # ------------------------------------------------------------------
     # Alustus
@@ -948,7 +965,9 @@ class KCPU16TUI(App[None]):
         self._log("  Ctrl+Q  Quit")
         self._log("")
         self._log("[bold cyan]File & Assembly:[/bold cyan]")
-        self._log("  load <filename>              Load .asm (watches for changes, auto-reassembles)")
+        self._log(
+            "  load <filename>              Load .asm (watches for changes, auto-reassembles)"
+        )
         self._log("  asm                          Manually reassemble loaded file")
         self._log("  check                        Syntax check loaded file (no load)")
         self._log("[bold cyan]CPU Control:[/bold cyan]")
@@ -1345,23 +1364,37 @@ class KCPU16TUI(App[None]):
         return ", ".join(result)
 
     def _refresh_registers(self) -> None:
-        """Päivitä rekisteripaneeli.
+        """Päivitä rekisteripaneeli kahdessa sarakkeessa.
 
-        Näyttää kaikki rekisterit (R0-R3, FP, SP, PC, SR) sekä hex- että
-        desimaaliarvoina. Käyttää dbg.snapshot_registers()-metodia vertaamaan
-        edelliseen tilaan - muuttuneet rekisterit korostetaan punaisella
-        boldilla, muuttumattomat näytetään syaanilla.
+        Näyttää kaikki rekisterit (R0–R15, FP, SP, PC, SR, MPR, TMR, CTMR)
+        kahdessa vierekkäisessä sarakkeessa. Käyttää dbg.snapshot_registers()
+        -metodia vertaamaan edelliseen tilaan - muuttuneet rekisterit
+        korostetaan punaisella boldilla, muuttumattomat näytetään syaanilla.
         """
         regs = self.machine.dump_registers()
         changed = self.dbg.snapshot_registers(regs)
-        lines: list[str] = []
-        for name, value in regs.items():
+
+        names = list(regs.keys())
+        half = (len(names) + 1) // 2
+
+        def fmt_cell(name: str) -> str:
+            value = regs[name]
             h = f"0x{value:04X}"
             d = f"{value:>5}"
             if changed.get(name, False):
-                lines.append(f"[bold red]{name:>3}  {h}  {d}[/]")
+                return f"[bold red]{name:>4} {h} {d}[/]"
             else:
-                lines.append(f"[cyan]{name:>3}[/]  {h}  {d}")
+                return f"[cyan]{name:>4}[/] {h} {d}"
+
+        lines: list[str] = []
+        for i in range(half):
+            left = fmt_cell(names[i])
+            if i + half < len(names):
+                right = fmt_cell(names[i + half])
+                lines.append(f"{left}  {right}")
+            else:
+                lines.append(left)
+
         self.query_one("#regs-content", Static).update("\n".join(lines))
 
     def _refresh_flags(self) -> None:
@@ -1372,10 +1405,12 @@ class KCPU16TUI(App[None]):
           P (Privilege)
         - Asetettu lippu (1): vihreä bold
         - Nollattu lippu (0): himmennetty (dim)
-        - Moodi: KERNEL (vihreä) tai USER (keltainen), riippuen
-          privilege-bitistä (SR_FLAG_P / in_kernel_mode)
+        - Moodi: KERNEL (vihreä) tai USER (keltainen)
+        - Uptime: 32-bitin sekuntilaskuri HH:MM:SS -muodossa
+        - TMR/CTMR: säädettävissä olevien keskeytysten tila
         """
         r = self.machine.regs
+        cpu = self.machine.cpu
         flags = [
             ("Z", r.get_flag(SR_FLAG_Z)),
             ("N", r.get_flag(SR_FLAG_N)),
@@ -1392,9 +1427,26 @@ class KCPU16TUI(App[None]):
             else:
                 parts.append(f"[dim]{name}:0[/]")
         mode = "[bold green]KERNEL[/]" if r.in_kernel_mode else "[yellow]USER[/]"
-        self.query_one("#flags-content", Static).update(
-            f"{' '.join(parts)}\nMode: {mode}"
+
+        # Uptime (32-bit seconds)
+        uptime = cpu._uptime_counter & 0xFFFFFFFF
+        hours = uptime // 3600
+        mins = (uptime % 3600) // 60
+        secs = uptime % 60
+        uptime_str = f"{hours:02d}:{mins:02d}:{secs:02d}"
+
+        # Configurable interrupt states
+        tmr_str = f"[green]{r.tmr}[/] cyc" if r.tmr > 0 else "[dim]off[/]"
+        ctmr_str = f"[green]{r.ctmr}[/] ms" if r.ctmr > 0 else "[dim]off[/]"
+
+        content = (
+            f"{' '.join(parts)}\n"
+            f"Mode: {mode}\n"
+            f"Uptime: {uptime_str}\n"
+            f"TMR:  {tmr_str}\n"
+            f"CTMR: {ctmr_str}"
         )
+        self.query_one("#flags-content", Static).update(content)
 
     def _refresh_cpu_status(self) -> None:
         """Päivitä CPU-tilapaneeli.

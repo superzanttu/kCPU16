@@ -146,10 +146,10 @@ Lukeminen palauttaa reaaliaikaisen järjestelmäkellon arvon.
 | $0014       | CLOCK_MINUTE       | Minuutti (0–59)                                            |
 | $0015       | CLOCK_SECOND       | Sekunti (0–59)                                             |
 | $0016       | CLOCK_MILLIS       | Millisekunti (0–999)                                       |
-| $0017       | UPTIME_W3          | 64-bit sekuntilaskuri bitit 48–63 (korkein)                |
-| $0018       | UPTIME_W2          | 64-bit sekuntilaskuri bitit 32–47                          |
-| $0019       | UPTIME_W1          | 64-bit sekuntilaskuri bitit 16–31                          |
-| $001A       | UPTIME_W0          | 64-bit sekuntilaskuri bitit 0–15 (matalin)                 |
+| $0017       | UPTIME_W3          | Varattu (aina 0, 32-bit uptime ei käytä)                   |
+| $0018       | UPTIME_W2          | Varattu (aina 0, 32-bit uptime ei käytä)                   |
+| $0019       | UPTIME_W1          | 32-bit sekuntilaskuri bitit 16–31 (korkea)                 |
+| $001A       | UPTIME_W0          | 32-bit sekuntilaskuri bitit 0–15 (matala)                  |
 | $001B       | CLOCK_INT_INTERVAL | CTMR: kellokeskeytyksen väli ms (0 = pois, luku/kirjoitus) |
 | $001C–$001F | —                  | Varattu                                                    |
 
@@ -245,7 +245,7 @@ Jokainen `step()` suorittaa yhden käskyn seuraavassa järjestyksessä:
 | 4     | EXECUTE   | Suorita käsky, päivitä rekisterit ja liput                       |
 | 5     | PC UPDATE | PC ← PC + käskyn sanamäärä                                       |
 | 6     | TIMER     | Tarkista ja laukaise ajastinkeskeytys (TMR) tarvittaessa       |
-| 7     | UPTIME    | Kasvata 64-bittista sekuntilaskuria tarvittaessa               |
+| 7     | UPTIME    | Kasvata 32-bittista sekuntilaskuria tarvittaessa               |
 | 8     | CLOCK INT | Tarkista ja laukaise kellokeskeytys (CTMR) tarvittaessa        |
 
 Jos vaiheissa 2–3 tapahtuu virhe, suoritetaan vastaava keskeytys eikä vaiheita 4–6 tehdä.

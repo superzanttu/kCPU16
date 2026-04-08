@@ -857,12 +857,12 @@ class CPU:
             self._trigger_interrupt(INT_TIMER)
 
     def _update_uptime_if_needed(self) -> None:
-        """Kasvata 64-bittista sekuntilaskuria kun sekunti on kulunut."""
+        """Kasvata 32-bittista sekuntilaskuria kun sekunti on kulunut."""
         now = time.monotonic()
         elapsed = now - self._last_uptime_update
         if elapsed >= 1.0:
             seconds = int(elapsed)
-            self._uptime_counter = (self._uptime_counter + seconds) % (2**64)
+            self._uptime_counter = (self._uptime_counter + seconds) % (2**32)
             self._last_uptime_update += seconds  # siirrä tarkasti, ei ajaudu
 
     def _handle_clock_interrupt_if_needed(self) -> None:
@@ -927,9 +927,9 @@ class CPU:
         # Uptime-laskuri: paivita ensin
         self._update_uptime_if_needed()
         if addr == UPTIME_W3:
-            return (self._uptime_counter >> 48) & WORD_MASK
+            return 0  # 32-bit uptime: upper 32 bits always 0
         if addr == UPTIME_W2:
-            return (self._uptime_counter >> 32) & WORD_MASK
+            return 0  # 32-bit uptime: upper 32 bits always 0
         if addr == UPTIME_W1:
             return (self._uptime_counter >> 16) & WORD_MASK
         if addr == UPTIME_W0:
