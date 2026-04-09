@@ -239,7 +239,7 @@ def main() -> int:
         source = asm_path.read_text(encoding="utf-8")
         asm = Assembler()
         try:
-            segments = asm.assemble(source)
+            segments = asm.assemble(source, source_path=asm_path)
         except Exception as exc:
             all_errors.append((asm_path.name, [f"  Assemblointivirhe: {exc}"]))
             failed += 1
