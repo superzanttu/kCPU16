@@ -24,39 +24,14 @@ User-tilassa (P=0) muistikaytto on rajoitettu:
 - Luku/kirjoitus sallittu vain osoitteisiin >= MPR
 - POIKKEUS: VRAM ($F800-$FF7F) on aina kirjoitettavissa
   (mahdollistaa kayttajan ohjelman paivittavan nayton)
-
-KIRJOITUSSUOJATUT ALUEET:
---------------------------
-Tietyt muistiosoitteet ovat kirjoitussuojattuja riippumatta suoritustilasta.
-Naihin kuuluvat luku-vain MMIO-rekisterit ja tulevaisuudessa ROM-alueet.
-Kirjoitusyritys laukaisee INT 10 (WriteProtectedError).
-Kirjoitussuojatut alueet on lueteltu WRITE_PROTECTED_REGIONS-vakiossa.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from .constants import KBD_MMIO_END, KBD_MMIO_START, MEMORY_WORDS, VRAM_END, VRAM_START, WORD_MASK
-from .exceptions import MemoryAccessFaultError, WriteProtectedError
-
-
-# =============================================================================
-# KIRJOITUSSUOJATUT MUISTIALUEET (WRITE-PROTECTED REGIONS)
-# Jokainen alkio on (alkuosoite, loppuosoite, kuvaus) — rajat mukaan lukien.
-#
-# Naihin osoitteisiin kirjoittaminen laukaisee INT 10 (WriteProtectedError)
-# riippumatta suoritustilasta (kernel tai user).
-#
-# Tarkoitus:
-#   - Luku-vain MMIO-rekisterit (nappaimisto, tulevat laitteet)
-#   - Varautuminen ROM-tyyppisen muistin emulointia varten
-#     (lisaa ROM-alue lisaamalla alkio tahan listaan)
-# =============================================================================
-
-WRITE_PROTECTED_REGIONS: list[tuple[int, int, str]] = [
-    (KBD_MMIO_START, KBD_MMIO_END, "Näppäimistö-MMIO ($0020-$0021, luku vain)"),
-]
+from .constants import MEMORY_WORDS, VRAM_END, VRAM_START, WORD_MASK
+from .exceptions import MemoryAccessFaultError
 
 
 @dataclass
@@ -67,23 +42,12 @@ class Memory:
     Muisti on yksinkertainen lista 16-bittisia arvoja. Osoitteet
     kierrautyvat automaattisesti (0xFFFF + 1 = 0x0000).
 
-    Kirjoitussuojatut alueet on listattu write_protected_regions-
-    attribuutissa. Oletusarvo on kopio moduulitason WRITE_PROTECTED_REGIONS-
-    vakiosta. Kirjoitussuojaukseen voi lisata alueita liittamalla
-    (alkuosoite, loppuosoite, kuvaus) -alkioita listaan.
-
     Attributes:
         words: Lista 65536 sanaa, kukin 16-bittinen (0-0xFFFF)
-        write_protected_regions: Lista kirjoitussuojatuista muistialueista
     """
 
     # Muistitaulukko: 65536 sanaa, alustetaan nollilla
     words: list[int] = field(default_factory=lambda: [0] * MEMORY_WORDS)
-
-    # Kirjoitussuojatut alueet: lista (alkuosoite, loppuosoite, kuvaus) -alkioita
-    write_protected_regions: list[tuple[int, int, str]] = field(
-        default_factory=lambda: list(WRITE_PROTECTED_REGIONS)
-    )
 
     def reset(self) -> None:
         """
@@ -121,43 +85,8 @@ class Memory:
         Note:
             Seka osoite etta arvo maskataan automaattisesti,
             joten ylivuodot kierrataan.
-
-        Raises:
-            WriteProtectedError: Jos osoite on kirjoitussuojatulla alueella
         """
-        addr_masked = addr & WORD_MASK
-        self.check_write_protection(addr_masked)
-        self.words[addr_masked] = value & WORD_MASK
-
-    def check_write_protection(self, addr: int) -> None:
-        """
-        Tarkista onko osoite kirjoitussuojattu.
-
-        Kaytetaan ennen muistiin kirjoittamista. Jos osoite osuu
-        johonkin write_protected_regions-listan alueeseen, heitetaan
-        WriteProtectedError, joka muuntuu CPU:ssa INT 10 -keskeytykseksi.
-
-        Tata metodia voi kutsua myos suoraan ennen kirjoitusoperaatiota
-        tarkistamaan etukäteen onko alue suojattu.
-
-        Args:
-            addr: Tarkistettava muistiosoite (0x0000 - 0xFFFF)
-
-        Raises:
-            WriteProtectedError: Jos osoite on kirjoitussuojatulla alueella
-
-        Example:
-            >>> mem = Memory()
-            >>> mem.check_write_protection(0x0300)  # OK (vapaa RAM)
-            >>> mem.check_write_protection(0x0020)  # heittaa WriteProtectedError
-        """
-        addr &= WORD_MASK
-        for start, end, description in self.write_protected_regions:
-            if start <= addr <= end:
-                raise WriteProtectedError(
-                    f"Kirjoitus kirjoitussuojatulle osoitteelle {addr:04X}"
-                    f" ({description})"
-                )
+        self.words[addr & WORD_MASK] = value & WORD_MASK
 
     @staticmethod
     def check_user_access(addr: int, mpr: int) -> None:
@@ -197,9 +126,7 @@ class Memory:
         Lataa sanalista muistiin perakkaisiin osoitteisiin.
 
         Kaytetaan tyypillisesti ohjelman lataamiseen muistiin
-        (esim. assembler-tuloste tai bootloaderin data). Kirjoitus
-        ohittaa kirjoitussuojauksen — tama on tarkoituksellinen
-        konetason operaatio, ei assembly-ohjelman kirjoitus.
+        (esim. assembler-tuloste tai bootloaderin data).
 
         Args:
             start_addr: Ensimmaisen sanan osoite
@@ -215,7 +142,5 @@ class Memory:
         """
         addr = start_addr & WORD_MASK
         for word in data:
-            # Kirjoita suoraan taulukkoon — ohita kirjoitussuojaus
-            # (loader on konetason operaatio, ei assembly-ohjelman kirjoitus)
-            self.words[addr] = word & WORD_MASK
+            self.write(addr, word)
             addr = (addr + 1) & WORD_MASK  # Kierratetaan osoite

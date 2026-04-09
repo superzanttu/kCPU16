@@ -46,12 +46,11 @@ INT_KEYBOARD = 6  # Nappaimiston laitteistokeskeytys
 INT_TIMER = 7  # Ajastinkeskeytys (TMR-rekisterin maarittama)
 INT_PROCESS_EXIT = 8  # Prosessin hallittu lopetus (EXIT-kasky)
 INT_CLOCK = 9  # Kellokeskeytys (CTMR-rekisterin ms-vali)
-INT_WRITE_PROTECTED = 10  # Kirjoitus kirjoitussuojatulle alueelle (MMIO/ROM)
 
 # Keskeytysvektorit alkavat muistin alusta
 INT_VECTOR_BASE = 0x0000
 # Varattu tila vektoritaulukolle (16 paikkaa, $0000-$000F)
-# Tällä hetkellä käytössä 10 (0-9), loput 6 varattuna tulevaisuutta varten
+# Tällä hetkellä käytössä 9 (0-8), loput 7 varattuna tulevaisuutta varten
 INT_VECTOR_COUNT = 16
 
 # =============================================================================
@@ -295,7 +294,6 @@ ARCH_SYMBOLS: dict[str, int] = {
     "INT_TIMER": INT_TIMER,  # Ajastinkeskeytys (7)
     "INT_PROCESS_EXIT": INT_PROCESS_EXIT,  # Prosessin lopetus (8)
     "INT_CLOCK": INT_CLOCK,  # Kellokeskeytys (9)
-    "INT_WRITE_PROTECTED": INT_WRITE_PROTECTED,  # Kirjoitus kirjoitussuojatulle alueelle (10)
     # ---- Kellon MMIO-osoitteet ($0010-$001F) -------------------------
     "CLOCK_MMIO_START": CLOCK_MMIO_START,  # MMIO-alueen alku  (0x0010)
     "CLOCK_MMIO_END": CLOCK_MMIO_END,  # MMIO-alueen loppu (0x001F)
