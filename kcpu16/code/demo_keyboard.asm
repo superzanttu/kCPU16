@@ -60,9 +60,9 @@ STR_CODELBL:
 STR_STATLBL:
         .dstr "Tila:   "
 STR_PRESS:
-        .dstr "PAINETTU  "
+        .dstr "PAINETTU    "   ; 12 merkkiä: peittää 12-merkkisen STR_IDLE
 STR_RELEASE:
-        .dstr "VAPAUTETTU"
+        .dstr "VAPAUTETTU  "   ; 12 merkkiä: peittää 12-merkkisen STR_IDLE
 STR_IDLE:
         .dstr "Odotetaan..."
 
@@ -208,9 +208,9 @@ main:
         LOAD  R10, 0x4300     ; bold keltainen
         CALL  write_str
 
-        ; --- Kehote: rivi 2, sarake 27 = 0xF8CB ---
-        ; 27 = (80-26)/2, STR_PROMPT = 25 merkkiä
-        LOAD  R8, 0xF8CB
+        ; --- Kehote: rivi 2, sarake 27 = 0xF8BB ---
+        ; (80-25)/2 = 27, STR_PROMPT = 25 merkkiä
+        LOAD  R8, 0xF8BB
         LOAD  R9, STR_PROMPT
         LOAD  R10, 0x0700     ; valkoinen
         CALL  write_str

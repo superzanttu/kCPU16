@@ -1092,6 +1092,37 @@ class KCPU16TUI(App[None]):
         self._log("---")
 
     # ------------------------------------------------------------------
+    # Näppäimistönvälitys emulaattorille
+    # ------------------------------------------------------------------
+
+    def on_key(self, event) -> None:
+        """Välitä tulostettavat merkit emulaattorin näppäimistölaitteelle.
+
+        Kutsutaan jokaisesta näppäinpainalluksesta. Kun CPU on käynnissä ja
+        näppäimistölaite on olemassa, tulostettavat ASCII-merkit (32–126)
+        välitetään emulaattorin KeyboardDevice-jonoon – ellei käyttäjä
+        kirjoita komentokenttään (#cmd-input).
+
+        Terminaali ei tue näppäimennostotapahtumia, joten painallus ja
+        vapautus lähetetään peräkkäin samasta tapahtumasta.
+        """
+        if self._exec_mode == "stopped":
+            return
+        if self.machine.keyboard is None:
+            return
+        # Älä välitä jos käyttäjä kirjoittaa komentokenttään
+        cmd_input = self.query_one("#cmd-input", Input)
+        if cmd_input is self.focused:
+            return
+        char = event.character
+        if char is None or len(char) != 1:
+            return
+        code = ord(char)
+        if 32 <= code <= 126:  # tulostettava ASCII
+            self.machine.keyboard.push_key(code)
+            self.machine.keyboard.push_key_release(code)
+
+    # ------------------------------------------------------------------
     # Perusoperaatiot
     # ------------------------------------------------------------------
 
