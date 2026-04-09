@@ -223,12 +223,14 @@ def parse_key_injections(source: str) -> list[KeyInjection]:
 
         if low.startswith(".inject_key_release"):
             rest = line[len(".inject_key_release") :].strip()
-            code = _parse_int(rest.split()[0] if rest.split() else "", line_no)
+            parts = rest.split()
+            code = _parse_int(parts[0] if parts else "", line_no)
             injections.append(KeyInjection(code & 0x7F, True, line_no))
 
         elif low.startswith(".inject_key"):
             rest = line[len(".inject_key") :].strip()
-            code = _parse_int(rest.split()[0] if rest.split() else "", line_no)
+            parts = rest.split()
+            code = _parse_int(parts[0] if parts else "", line_no)
             injections.append(KeyInjection(code & 0x7F, False, line_no))
 
     return injections

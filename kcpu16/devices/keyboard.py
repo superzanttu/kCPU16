@@ -44,7 +44,7 @@ Note:
 
 from collections import deque
 
-from ..constants import KBD_RELEASE_BIT, VRAM_CHAR_MASK
+from ..constants import KBD_KEY_CODE_MASK, KBD_RELEASE_BIT
 
 
 class KeyboardDevice:
@@ -88,7 +88,7 @@ class KeyboardDevice:
         Args:
             key_code: Nappainkoodi (ASCII-arvo tms., 0-127)
         """
-        code = key_code & (VRAM_CHAR_MASK >> 1)  # Maski 7 bittiin (0-127)
+        code = key_code & KBD_KEY_CODE_MASK  # Maski 7 bittiin (0-127)
         self._queue.append(code)
         self._pending_interrupts += 1
 
@@ -102,7 +102,7 @@ class KeyboardDevice:
         Args:
             key_code: Nappainkoodi (sama kuin push_key():ssa kaytettiin)
         """
-        code = (key_code & (VRAM_CHAR_MASK >> 1)) | KBD_RELEASE_BIT
+        code = (key_code & KBD_KEY_CODE_MASK) | KBD_RELEASE_BIT
         self._queue.append(code)
         self._pending_interrupts += 1
 

@@ -112,6 +112,9 @@ KBD_STATUS = 0x0021       # Lue: tapahtumien määrä puskurissa (0 = tyhjä)
 # Bitti 7 KBD_DATA:ssa: asetettu = vapautus, nolla = painallus
 KBD_RELEASE_BIT = 0x80
 
+# 7-bittinen nappainkoodi maski (bitit 6-0)
+KBD_KEY_CODE_MASK = 0x7F
+
 # Boot-alue: Bootloader kopioidaan tallennuslaitteelta tanne kaynnistyksessa
 BOOT_RAM_START = 0x0100  # Ensimmainen bootloaderin osoite RAM:ssa
 BOOT_RAM_END = 0x01FF  # Viimeinen bootloaderin osoite RAM:ssa
@@ -312,6 +315,7 @@ ARCH_SYMBOLS: dict[str, int] = {
     "KBD_DATA": KBD_DATA,              # Näppäintapahtuma MMIO (0x0020)
     "KBD_STATUS": KBD_STATUS,          # Puskurin koko MMIO   (0x0021)
     "KBD_RELEASE_BIT": KBD_RELEASE_BIT,  # Vapautusbitti (0x80)
+    "KBD_KEY_CODE_MASK": KBD_KEY_CODE_MASK,  # Nappainkoodi maski (0x7F)
     # ---- Tallennuslaite ----------------------------------------------
     "STORAGE_BLOCK_SIZE": STORAGE_BLOCK_SIZE,  # Blokin koko sanoina (256)
     "STORAGE_BLOCK_COUNT": STORAGE_BLOCK_COUNT,  # Blokkien lukumäärä (256)

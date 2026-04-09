@@ -47,7 +47,7 @@ kbd_handler:
     AND   R3, R0
     JZ    key_press
     ; Vapautus: tallenna koodi R2:een (ilman release-bittiä)
-    LOAD  R3, 0x7F
+    LOAD  R3, KBD_KEY_CODE_MASK
     AND   R0, R3
     CPY   R2, R0
     IRET
