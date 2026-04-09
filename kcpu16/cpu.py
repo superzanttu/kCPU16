@@ -49,6 +49,7 @@ from .constants import (
     INT_CLOCK,
     INT_DIV_ZERO,
     INT_INVALID_OPCODE,
+    INT_KEYBOARD,
     INT_MEMORY_ACCESS_FAULT,
     INT_PROCESS_EXIT,
     INT_PRIVILEGE_VIOLATION,
@@ -56,6 +57,10 @@ from .constants import (
     INT_TIMER,
     INT_VECTOR_COUNT,
     INT_VECTOR_BASE,
+    KBD_DATA,
+    KBD_MMIO_END,
+    KBD_MMIO_START,
+    KBD_STATUS,
     REG_IDX_MASK,
     SR_FLAG_C,
     SR_FLAG_I,
@@ -196,6 +201,7 @@ class CPU:
             # Paivita laskuri ja tarkista ajastinkeskeytys
             self.instruction_counter += 1
             self._handle_timer_interrupt_if_needed()
+            self._handle_keyboard_interrupt_if_needed()
             self._update_uptime_if_needed()
             self._handle_clock_interrupt_if_needed()
 
@@ -774,14 +780,6 @@ class CPU:
             storage_addr = self._get_reg(reg_addr)
             self.storage.write_word(storage_addr, self._get_reg(reg_src))
 
-        elif ins.mnemonic == "KGET":
-            # KGET reg - Lue viimeisin nappainpainallus rekisteriin
-            (reg_idx,) = ins.operands
-            if self.keyboard is None:
-                self._set_reg(reg_idx, 0)
-            else:
-                self._set_reg(reg_idx, self.keyboard.pop_key())
-
         elif ins.mnemonic == "TSL":
             # TSL reg, addr - Test and Set Lock (atominen)
             # reg = [addr]; [addr] = 1
@@ -866,6 +864,23 @@ class CPU:
             self._uptime_counter = (self._uptime_counter + seconds) % (2**32)
             self._last_uptime_update += seconds  # siirrä tarkasti, ei ajaudu
 
+    def _handle_keyboard_interrupt_if_needed(self) -> None:
+        """
+        Tarkista ja laukaise nappaimistokeskeytys tarvittaessa.
+
+        Nappaimistokeskeytys (INT 6) laukeaa kun:
+        - Nappaimistolaitteella on odottava keskeytys (take_interrupt() == True)
+        - I = 1 (keskeytykset ovat sallitut)
+
+        Keskeytysrutiini lukee tapahtuman KBD_DATA ($0020) MMIO-osoitteesta.
+        """
+        if self.keyboard is None:
+            return
+        if self.regs.get_flag(SR_FLAG_I) == 0:
+            return
+        if self.keyboard.take_interrupt():
+            self._trigger_interrupt(INT_KEYBOARD)
+
     def _handle_clock_interrupt_if_needed(self) -> None:
         """Laukaise kellokeskeytys (INT 9) jos CTMR > 0 ja aika on kulunut.
 
@@ -889,10 +904,12 @@ class CPU:
     # ==========================================================================
 
     def _read_word(self, addr: int) -> int:
-        """Lue sana muistista; palauttaa MMIO-arvon jos osoite on kellolohkossa."""
+        """Lue sana muistista; palauttaa MMIO-arvon jos osoite on kellolohkossa tai nappaimistolohkossa."""
         addr &= WORD_MASK
         if CLOCK_MMIO_START <= addr <= CLOCK_MMIO_END:
             return self._read_clock_mmio(addr)
+        if KBD_MMIO_START <= addr <= KBD_MMIO_END:
+            return self._read_kbd_mmio(addr)
         return self.memory.read(addr)
 
     def _write_word(self, addr: int, value: int) -> None:
@@ -905,6 +922,9 @@ class CPU:
             return
         # Muut kellolohkon osoitteet ovat vain luettavia — ohita hiljainen kirjoitus
         if CLOCK_MMIO_START <= addr <= CLOCK_MMIO_END:
+            return
+        # Nappaimisto-MMIO on vain luettava — ohita hiljainen kirjoitus
+        if KBD_MMIO_START <= addr <= KBD_MMIO_END:
             return
         self.memory.write(addr, value)
 
@@ -937,6 +957,31 @@ class CPU:
             return self._uptime_counter & WORD_MASK
         if addr == CLOCK_INT_INTERVAL:
             return self.regs.ctmr & WORD_MASK
+        return 0  # varattu osoite
+
+    def _read_kbd_mmio(self, addr: int) -> int:
+        """
+        Lue nappaimisto-MMIO-rekisteri.
+
+        KBD_DATA ($0020):   Pops ja palauttaa seuraavan nappaintapahtuman puskurista.
+                            Bitti 7 = 0: painallus, bitti 7 = 1: vapautus.
+                            Bitit 6-0: nappainkoodi.
+                            Palauttaa 0 jos puskuri on tyhja.
+        KBD_STATUS ($0021): Palauttaa puskurissa olevien tapahtumien maaran.
+                            0 = tyhja.
+
+        Args:
+            addr: MMIO-osoite (KBD_DATA tai KBD_STATUS)
+
+        Returns:
+            MMIO-rekisterin arvo
+        """
+        if self.keyboard is None:
+            return 0
+        if addr == KBD_DATA:
+            return self.keyboard.read_data()
+        if addr == KBD_STATUS:
+            return self.keyboard.read_status()
         return 0  # varattu osoite
 
     # ==========================================================================

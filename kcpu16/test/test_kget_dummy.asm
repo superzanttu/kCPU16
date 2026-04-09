@@ -1,30 +1,24 @@
 ; =============================================================
-; TESTI: KGET-käsky (näppäimistöpuskurin luku)
+; TESTI: Näppäimistö MMIO (KBD_DATA ja KBD_STATUS)
 ; =============================================================
-; EI TESTATTAVISSA AUTOMAATTISESTI.
+; Testaa näppäimistön MMIO-osoitteet kun puskuri on tyhjä.
 ;
-; Mitä pitäisi testata:
-; - KGET lukee keyboard-puskurista seuraavan näppäimen
-; - Jos puskuri on tyhjä, KGET palauttaa 0
-; - KGET ei muuta lippuja (Z, N, C, V)
-; - KGET toimii user modessa (ei privileged)
-; - Useamman näppäimen jonottaminen ja lukeminen FIFO-järjestyksessä
+; KBD_DATA   ($0020): lukeminen palauttaa 0 jos puskuri on tyhjä
+; KBD_STATUS ($0021): lukeminen palauttaa 0 jos puskuri on tyhjä
 ;
-; Miksi ei testattavissa:
-; Testrunner ei tue näppäimistösyötteen simulointia.
-; Tarvittaisiin .inject_key-direktiivi tai vastaava mekanismi,
-; jolla voidaan asettaa näppäimiä puskuriin ennen suoritusta.
-;
-; Manuaalinen testi:
-; 1. Käynnistä TUI-debuggeri
-; 2. Lataa ohjelma joka kutsuu KGET silmukassa
-; 3. Paina näppäimiä ja tarkista R-rekisterin arvo
+; Näppäimistön varsinainen toiminta (INT 6 -keskeytys) testataan
+; erikseen test_keyboard_interrupt.asm:ssä.
 ; =============================================================
 
 .origin 0x0200
 
-; Dummy: KGET ilman näppäimistöä palauttaa 0
-KGET  R0              ; R0 = 0 (ei näppäimistöä kytketty)
+; Lue KBD_DATA ($0020) kun puskuri tyhjä -> 0
+LOAD  R0, [KBD_DATA]     ; R0 = mem[$0020] = 0 (tyhjä puskuri)
+
+; Lue KBD_STATUS ($0021) kun puskuri tyhjä -> 0
+LOAD  R1, [KBD_STATUS]   ; R1 = mem[$0021] = 0 (tyhjä puskuri)
+
 HALT
 
-.expect_reg   R0, 0          ; ei näppäimistöä -> 0
+.expect_reg   R0, 0          ; KBD_DATA tyhjänä = 0
+.expect_reg   R1, 0          ; KBD_STATUS tyhjänä = 0
