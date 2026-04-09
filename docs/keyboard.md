@@ -20,12 +20,15 @@ Tapahtumavirta on seuraava:
 
 ## 2. MMIO-osoitteet
 
-| Osoite   | Vakionimi    | Lukeminen                                         |
-| -------- | ------------ | ------------------------------------------------- |
-| `$0020`  | `KBD_DATA`   | Pops seuraava tapahtuma puskurista; `0` jos tyhjä |
-| `$0021`  | `KBD_STATUS` | Puskurissa olevien tapahtumien määrä; `0` = tyhjä |
+| Osoite   | Vakionimi    | Lukeminen                                         | Kirjoittaminen           |
+| -------- | ------------ | ------------------------------------------------- | ------------------------ |
+| `$0020`  | `KBD_DATA`   | Pops seuraava tapahtuma puskurista; `0` jos tyhjä | **Kielletty — INT 10**   |
+| `$0021`  | `KBD_STATUS` | Puskurissa olevien tapahtumien määrä; `0` = tyhjä | **Kielletty — INT 10**   |
 
-> Kirjoittaminen näihin osoitteisiin ei ole määritelty — käytä niitä vain lukemiseen.
+Molemmat osoitteet ovat **luku vain**. Kirjoitusyritys laukaisee
+`INT_WRITE_PROTECTED` (INT 10) riippumatta suoritustilasta (kernel tai user).
+Tämä on toteutettu muistimallin (`memory.py`) kirjoitussuojauslistassa
+(`WRITE_PROTECTED_REGIONS`), joka kattaa osoitteet `$0020–$0021`.
 
 Vakiot `KBD_DATA`, `KBD_STATUS`, `KBD_RELEASE_BIT` ja `KBD_KEY_CODE_MASK` ovat käytettävissä suoraan assembly-koodissa arkkitehtuurivakioina.
 
@@ -53,7 +56,31 @@ Jokainen näppäintapahtuma koodataan yhteen 8-bittiseen arvoon:
 
 ---
 
-## 4. Keskeytyksen käyttöönotto
+## 4. Useamman tapahtuman lukeminen yhdessä keskeytyksessä
+
+Kyllä — `KBD_DATA`:sta voidaan lukea useampi tapahtuma saman INT 6 -käsittelijän aikana. Jokainen lukuoperaatio **pops** yhden tapahtuman FIFO-puskurista ja palauttaa sen. Seuraava luku palauttaa puskurin seuraavan arvon, tai `0` jos puskuri on tyhjä.
+
+Puskurin koon voi tarkistaa `KBD_STATUS`-rekisteristä. Tyypillinen patterneista:
+
+```asm
+; Käsittele kaikki odottavat tapahtumat yhdessä keskeytyksessä
+kbd_handler:
+drain_loop:
+        LOAD  R0, [KBD_STATUS]      ; kuinka monta tapahtumaa odottaa?
+        JZ    kbd_done              ; 0 = puskuri tyhjä, valmis
+        LOAD  R1, [KBD_DATA]        ; pops seuraava tapahtuma
+        ; ... käsittele R1 ...
+        JUMP  drain_loop            ; tarkista uudelleen
+
+kbd_done:
+        IRET
+```
+
+> **Huom:** Normaalisti INT 6 laukeaa kerran per tapahtuma, joten puskurissa on yleensä täsmälleen yksi tapahtuma saapuessa. Jos haluat varmistaa kaikkien tapahtumien käsittelyn (esim. bursttitilanteissa), käytä `KBD_STATUS`-silmukkaa yllä olevan esimerkin mukaan.
+
+---
+
+## 5. Keskeytyksen käyttöönotto
 
 Jotta näppäimistökeskeytys aktivoituu, ohjelma tarvitsee:
 
@@ -64,7 +91,7 @@ Kun ohjelmaa ei pitäisi enää vastaanottaa keskeytyksiä, käytä `CLI`-käsky
 
 ---
 
-## 5. Esimerkkiohjelma
+## 6. Esimerkkiohjelma
 
 Seuraava ohjelma lukee näppäimistöltä merkkejä ja kirjoittaa ne VRAM-näyttömuistiin vasemmasta yläkulmasta alkaen. Painallukset näkyvät näytöllä; vapautustapahtumia ei piirretä. Ohjelma jatkaa silmukassa kunnes se pysäytetään.
 
@@ -169,7 +196,7 @@ reset_cursor:
 
 ---
 
-## 6. Testidirektiiivit
+## 7. Testidirektiiivit
 
 Näppäimistöä voidaan simuloida testeissä `.inject_key`- ja `.inject_key_release`-direktiiveillä. Ne lisäävät tapahtumat puskuriin **ennen** ohjelman suorituksen alkamista.
 
@@ -205,9 +232,10 @@ kbd_handler:
 
 ---
 
-## 7. Viitteet
+## 8. Viitteet
 
 - [architecture.md](architecture.md) — Keskeytysmallin ja tilarekisterin kuvaus (STI, CLI, IRET, INT_KEYBOARD)
 - [assembler.md](assembler.md) — Arkkitehtuurivakiot ja testidirektiivit
 - `kcpu16/devices/keyboard.py` — Laitteen toteutus (Python)
-- `kcpu16/constants.py` — `KBD_DATA`, `KBD_STATUS`, `KBD_RELEASE_BIT`, `KBD_KEY_CODE_MASK`
+- `kcpu16/constants.py` — `KBD_DATA`, `KBD_STATUS`, `KBD_RELEASE_BIT`, `KBD_KEY_CODE_MASK`, `INT_WRITE_PROTECTED`
+- `kcpu16/memory.py` — `WRITE_PROTECTED_REGIONS` (kirjoitussuojatut alueet)

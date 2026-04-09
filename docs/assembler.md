@@ -77,9 +77,10 @@ Ne voidaan käyttää suoraan operandeina ilman erillistä määrittelyä.
 | `INT_DEBUG`      | 3      | Debug/breakpoint (vektori 3)        |
 | `INT_PRIVILEGE`  | 4      | Privilege violation (vektori 4)     |
 | `INT_MEM_FAULT`  | 5      | Muistisuojausrikkomus (vektori 5)   |
-| `INT_KEYBOARD`   | 6      | Näppäimistökeskeytys (vektori 6)    |
-| `INT_TIMER`      | 7      | Ajastinkeskeytys (vektori 7)        |
-| `INT_EXIT`       | 8      | Prosessin lopetus (vektori 8)       |
+| `INT_KEYBOARD`   | 6      | Näppäimistökeskeytys (vektori 6)          |
+| `INT_TIMER`      | 7      | Ajastinkeskeytys (vektori 7)              |
+| `INT_EXIT`       | 8      | Prosessin lopetus (vektori 8)             |
+| `INT_WRITE_PROTECTED` | 10 | Kirjoitus kirjoitussuojatulle alueelle (vektori 10) |
 | `COLOR_BLACK`    | 0      | Värikoodi: musta                    |
 | `COLOR_RED`      | 1      | Värikoodi: punainen                 |
 | `COLOR_GREEN`    | 2      | Värikoodi: vihreä                   |
