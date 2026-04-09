@@ -164,7 +164,7 @@ Tekstitilassa näyttötilarekisterin ($FF80) arvo on **0**.
 ### 5.1 Perusteet
 
 Puoliblokkipikseli-tila jakaa jokaisen merkkiruudun kahteen pikseliriviin
-käyttämällä Unicode-puoliblokkiruutuja (`▀`, `▄`, `█`, `·`). Moodi on
+käyttämällä Unicode-puoliblokkiruutuja (`▀`, `▄`, `█`, ` `). Moodi on
 **yksiväriinen**: jokainen pikseli on 1-bittinen (päällä tai pois).
 
 - **Resoluutio**: 80 × 48 pikseliä
@@ -385,7 +385,7 @@ tilaa vaihdettaessa — kaikki tilat käyttävät samaa VRAM-aluetta $F800–$FF
 
 Kaikki kolme tilaa käyttävät täsmälleen samaa 1 920 sanan VRAM-aluetta
 ($F800–$FF7F). Tilan valinta tapahtuu yksinomaan näyttötilarekisterin
-(`$FF80`) arvolla ilman muistikarttatmuutoksia tai uusia konekielen käskyjä.
+(`$FF80`) arvolla ilman muistikarttamuutoksia tai uusia konekielen käskyjä.
 Grafiikkatilat B ja C ovat **yksivärisisiä**: jokainen pikseli on 1-bittinen
 (päällä tai pois).
 
