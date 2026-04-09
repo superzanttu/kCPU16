@@ -299,7 +299,7 @@ def run_test(path: Path) -> int:
     # --- Assembloi ---
     asm = Assembler()
     try:
-        segments = asm.assemble(source)
+        segments = asm.assemble(source, source_path=path)
     except Exception as exc:
         print(f"VIRHE assembloinnissa: {exc}", file=sys.stderr)
         return 1

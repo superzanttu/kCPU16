@@ -36,6 +36,8 @@ SYNTAKSI:
   - .expect_mem OSOITE, ARVO (esim. .expect_mem 0x0300, 0xFF, testaukseen)
   - .expect_storage OSOITE, ARVO (tallennuslaiteen testaus)
   - .diskblock N (esim. .diskblock 0, tallenna konekieli levyblokkiin N)
+  - .include "TIEDOSTO" tai .include 'TIEDOSTO' (liitä toinen asm-tiedosto tähän
+              kohtaan; polku suhteessa nykyiseen tiedostoon; silmukkasuojaus)
 
 SYMBOLINIMIEN YKSILÖLLISYYS:
 -----------------------------
@@ -76,6 +78,8 @@ VRAM_DATA-symboli osoittaa 0xF800.
 """
 
 from __future__ import annotations
+
+from pathlib import Path
 
 from .constants import ARCH_SYMBOLS, BOOT_RAM_START, STORAGE_BLOCK_SIZE, WORD_MASK
 from .instruction import OPCODE_TABLE
@@ -162,7 +166,8 @@ class Assembler:
         return self._labels
 
     def assemble(
-        self, source: str, start_addr: int = BOOT_RAM_START
+        self, source: str, start_addr: int = BOOT_RAM_START,
+        source_path: Path | None = None,
     ) -> list[tuple[int, list[int]]]:
         """
         Assembloi lahdekoodi konekieleksi segmentteina.
@@ -170,6 +175,7 @@ class Assembler:
         Args:
             source: Assembly-lahdekoodi merkkijonona
             start_addr: Ohjelman aloitusosoite muistissa (oletus: 0x0100)
+            source_path: Lahdetiedoston polku (tarvitaan .include-direktiiville)
 
         Returns:
             Lista (aloitusosoite, sanat) -pareista. Yleensa yksi segmentti,
@@ -185,6 +191,9 @@ class Assembler:
         self._disk_block: int | None = None
         self._source_map: list[tuple[str, int]] = []  # (lahderivi, abs_osoite)
         self._labels: dict[str, int] = {}
+        # Esikäsittely: laajenna .include-direktiivit rekursiivisesti
+        base_dir = source_path.parent if source_path is not None else None
+        source = self._expand_includes(source, base_dir, frozenset())
         # Pass 0: Makrojen ekspansointi, .origin ja .diskblock käsittely
         expanded_source, start_addr, user_constants = (
             self._pass0_expand_macros_and_origin(source, start_addr)
@@ -202,7 +211,108 @@ class Assembler:
                     f".diskblock: koodi on liian suuri blokkiin "
                     f"({total} sanaa, max {STORAGE_BLOCK_SIZE})"
                 )
+        # Tarkista ettei segmentit mene päällekkäin
+        self._check_segment_overlaps(segments)
         return segments
+
+    @staticmethod
+    def _expand_includes(
+        source: str,
+        base_dir: Path | None,
+        include_stack: frozenset[Path],
+    ) -> str:
+        """
+        Laajenna .include-direktiivit rekursiivisesti ennen kaantamista.
+
+        Korvaa jokaisen '.include "tiedosto.asm"' -rivin tiedoston sisallolla.
+        Silmukkasuojaus: jos sama tiedosto on jo includeketjussa, heitetaan virhe.
+
+        Args:
+            source: Assembly-lahdekoodi
+            base_dir: Hakemisto josta includet haetaan (tai None jos ei tiedostopolkua)
+            include_stack: Nykyinen include-ketju (silmukoiden havaitsemiseen)
+
+        Returns:
+            Laajennettu lahdekoodi merkkijonona
+
+        Raises:
+            ValueError: Syklistä includea tai puuttuvaa tiedostoa havaitessa
+        """
+        result_lines: list[str] = []
+        for raw_line in source.splitlines():
+            stripped = raw_line.split(";", 1)[0].strip()
+            sl = stripped.lower()
+            if sl.startswith(".include"):
+                # Parsi tiedostonimi: .include "nimi.asm" tai .include 'nimi.asm'
+                rest = stripped[len(".include"):].strip()
+                if len(rest) < 2 or rest[0] not in ('"', "'"):
+                    raise ValueError(
+                        f".include: puuttuvat lainausmerkit tai nimi: {stripped!r}"
+                    )
+                quote = rest[0]
+                end = rest.find(quote, 1)
+                if end == -1:
+                    raise ValueError(
+                        f".include: sulkematon lainausmerkki: {stripped!r}"
+                    )
+                filename = rest[1:end]
+                if not filename:
+                    raise ValueError(f".include: tiedostonimi on tyhjä: {stripped!r}")
+
+                # Muodosta absoluuttinen polku
+                if base_dir is not None:
+                    inc_path = (base_dir / filename).resolve()
+                else:
+                    inc_path = Path(filename).resolve()
+
+                # Silmukkasuojaus
+                if inc_path in include_stack:
+                    raise ValueError(
+                        f".include: syklinen include havaittu: '{inc_path}' "
+                        f"on jo includeketjussa"
+                    )
+
+                # Lue tiedosto
+                if not inc_path.exists():
+                    raise ValueError(
+                        f".include: tiedostoa ei löydy: '{inc_path}'"
+                    )
+                inc_source = inc_path.read_text(encoding="utf-8")
+
+                # Rekursiivinen laajennus
+                new_stack = include_stack | {inc_path}
+                inc_expanded = Assembler._expand_includes(
+                    inc_source, inc_path.parent, new_stack
+                )
+                result_lines.extend(inc_expanded.splitlines())
+            else:
+                result_lines.append(raw_line)
+        return "\n".join(result_lines)
+
+    @staticmethod
+    def _check_segment_overlaps(segments: list[tuple[int, list[int]]]) -> None:
+        """
+        Tarkista ettei segmentit mene päällekkäin muistissa.
+
+        Args:
+            segments: Lista (aloitusosoite, sanat) -pareista
+
+        Raises:
+            ValueError: Jos kaksi segmenttia kayttaa samaa muistiosoitetta
+        """
+        ranges: list[tuple[int, int]] = [
+            (start, start + len(words) - 1)
+            for start, words in segments
+            if words
+        ]
+        for i, (a_start, a_end) in enumerate(ranges):
+            for b_start, b_end in ranges[i + 1:]:
+                if a_start <= b_end and b_start <= a_end:
+                    raise ValueError(
+                        f"Segmentit menevät päällekkäin muistissa: "
+                        f"0x{a_start:04X}–0x{a_end:04X} ja "
+                        f"0x{b_start:04X}–0x{b_end:04X}"
+                    )
 
     def _pass0_expand_macros_and_origin(
         self, source: str, start_addr: int

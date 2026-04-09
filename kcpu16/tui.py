@@ -1153,7 +1153,7 @@ class KCPU16TUI(App[None]):
             if not source.strip():
                 self._log("[yellow]File is empty.[/yellow]")
                 return
-            segments = self.assembler.assemble(source)
+            segments = self.assembler.assemble(source, source_path=self.current_file)
             self.machine.cold_reset()
             self.machine.load_segments(segments)
             self.is_assembled = True
@@ -2064,7 +2064,7 @@ class KCPU16TUI(App[None]):
             source = self.current_file.read_text(encoding="utf-8").strip()
             if not source:
                 return CommandResult(False, "[yellow]File is empty.[/yellow]")
-            segments = self.assembler.assemble(source)
+            segments = self.assembler.assemble(source, source_path=self.current_file)
             total_words = sum(len(w) for _, w in segments)
             return CommandResult(
                 True,
