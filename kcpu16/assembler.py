@@ -636,8 +636,14 @@ class Assembler:
                 raise ValueError(f"Unknown mnemonic: {mnemonic}")
 
             _, operand_count, _ = OPCODE_TABLE[opcode]
-            # Kaskyn koko = 1 (opcode) + operandien maara
-            addr += 1 + operand_count
+            # Erityiskasky: JMPI/CALLI — muuttuvanmittainen
+            # Rakenne: opcode + reg + count + kohteet
+            if mnemonic in ("JMPI", "CALLI"):
+                n_targets = len(parts) - 2  # kaikki osat paitsi mnemoniikka ja rekisteri
+                addr += 3 + n_targets
+            else:
+                # Kaskyn koko = 1 (opcode) + operandien maara
+                addr += 1 + operand_count
 
         return symbols
 
@@ -800,6 +806,21 @@ class Assembler:
             opcode = MNEMONIC_TO_OPCODE.get(mnemonic)
             if opcode is None:
                 raise ValueError(f"Unknown mnemonic: {mnemonic}")
+
+            # Erityiskasky: JMPI/CALLI — muuttuvanmittainen indeksoitu hyppy/kutsu
+            # Syntaksi:  JMPI reg, kohde0, kohde1, ...
+            # Koodaus:   opcode | reg_id | count | addr[0] | ... | addr[count-1]
+            if mnemonic in ("JMPI", "CALLI"):
+                self._source_map.append(
+                    (raw_line.strip(), current_start + len(current_words))
+                )
+                reg_id = self._parse_operand(parts[1], labels)
+                targets = [self._parse_operand(t, labels) for t in parts[2:]]
+                current_words.append(opcode)
+                current_words.append(reg_id)
+                current_words.append(len(targets))
+                current_words.extend(targets)
+                continue
 
             # Lisaa opcode tulosteeseen
             self._source_map.append(

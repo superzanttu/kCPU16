@@ -65,23 +65,23 @@ INT_VECTOR_COUNT = 16
 # Kirjoittaminen $001B:hen (CLOCK_INT_INTERVAL) säätää kellokeskeytyksen välin.
 # =============================================================================
 
-CLOCK_MMIO_START = 0x0010    # MMIO-alueen alku
-CLOCK_MMIO_END = 0x001F      # MMIO-alueen loppu
+CLOCK_MMIO_START = 0x0010  # MMIO-alueen alku
+CLOCK_MMIO_END = 0x001F  # MMIO-alueen loppu
 
-CLOCK_YEAR = 0x0010          # Vuosi (esim. 2026)
-CLOCK_MONTH = 0x0011         # Kuukausi (1-12)
-CLOCK_DAY = 0x0012           # Päivä (1-31)
-CLOCK_HOUR = 0x0013          # Tunti (0-23)
-CLOCK_MINUTE = 0x0014        # Minuutti (0-59)
-CLOCK_SECOND = 0x0015        # Sekunti (0-59)
-CLOCK_MILLIS = 0x0016        # Millisekunti (0-999)
+CLOCK_YEAR = 0x0010  # Vuosi (esim. 2026)
+CLOCK_MONTH = 0x0011  # Kuukausi (1-12)
+CLOCK_DAY = 0x0012  # Päivä (1-31)
+CLOCK_HOUR = 0x0013  # Tunti (0-23)
+CLOCK_MINUTE = 0x0014  # Minuutti (0-59)
+CLOCK_SECOND = 0x0015  # Sekunti (0-59)
+CLOCK_MILLIS = 0x0016  # Millisekunti (0-999)
 
 # 64-bittinen sekuntilaskuri (nousee yhden kerran sekunnissa, pyörähtää 2^64:ssä)
 # Tallennettu neljään 16-bittiseen sanaan, MSW ensin
-UPTIME_W3 = 0x0017           # Laskurin bitit 48-63 (korkein)
-UPTIME_W2 = 0x0018           # Laskurin bitit 32-47
-UPTIME_W1 = 0x0019           # Laskurin bitit 16-31
-UPTIME_W0 = 0x001A           # Laskurin bitit  0-15 (matalin)
+UPTIME_W3 = 0x0017  # Laskurin bitit 48-63 (korkein)
+UPTIME_W2 = 0x0018  # Laskurin bitit 32-47
+UPTIME_W1 = 0x0019  # Laskurin bitit 16-31
+UPTIME_W0 = 0x001A  # Laskurin bitit  0-15 (matalin)
 
 # Kellokeskeytyksen väli millisekunteina (0 = pois päältä)
 # Asetetaan SCTMR-käskyllä; INT_CLOCK (9) laukeaa kun I=1 ja aika täyttynyt
@@ -103,17 +103,28 @@ DEFAULT_CLOCK_INT_INTERVAL = 0
 # Esimerkki: 'A' painetaan -> KBD_DATA = 0x41, 'A' vapautetaan -> 0xC1
 # =============================================================================
 
-KBD_MMIO_START = 0x0020   # Näppäimistö-MMIO-alueen alku
-KBD_MMIO_END = 0x0021     # Näppäimistö-MMIO-alueen loppu
+KBD_MMIO_START = 0x0020  # Näppäimistö-MMIO-alueen alku
+KBD_MMIO_END = 0x0021  # Näppäimistö-MMIO-alueen loppu
 
-KBD_DATA = 0x0020         # Lue: pops seuraava näppäintapahtuma puskurista (0 jos tyhjä)
-KBD_STATUS = 0x0021       # Lue: tapahtumien määrä puskurissa (0 = tyhjä)
+KBD_DATA = 0x0020  # Lue: pops seuraava näppäintapahtuma puskurista (0 jos tyhjä)
+KBD_STATUS = 0x0021  # Lue: tapahtumien määrä puskurissa (0 = tyhjä)
 
 # Bitti 7 KBD_DATA:ssa: asetettu = vapautus, nolla = painallus
 KBD_RELEASE_BIT = 0x80
 
 # 7-bittinen nappainkoodi maski (bitit 6-0)
 KBD_KEY_CODE_MASK = 0x7F
+
+# =============================================================================
+# SATUNNAISLUKUGENERAATTORI-MMIO (RANDOM MMIO)
+# Osoite $0022: lukeminen palauttaa seuraavan 16-bittisen LFSR-arvon.
+# Kirjoittaminen asettaa siemenen (arvo 0 nollataan arvoon 1).
+# Toteutus: 16-bittinen Galois LFSR, polynomi x^16+x^15+x^13+x^4+1 (0xB400).
+# =============================================================================
+
+RAND_MMIO = 0x0022  # Lue: seuraava pseudosatunnaisluku; kirjoitus: aseta siemen
+RAND_LFSR_MASK = 0xB400  # Galois LFSR feedback-maski (max-length, jakso 65535)
+RAND_LFSR_SEED = 0xACE1  # Oletussiemen (nollasta poikkeava)
 
 # Boot-alue: Bootloader kopioidaan tallennuslaitteelta tanne kaynnistyksessa
 BOOT_RAM_START = 0x0100  # Ensimmainen bootloaderin osoite RAM:ssa
@@ -311,11 +322,14 @@ ARCH_SYMBOLS: dict[str, int] = {
     "CLOCK_INT_INTERVAL": CLOCK_INT_INTERVAL,  # CTMR MMIO (0x001B)
     # ---- Näppäimistö-MMIO ($0020-$0021) -----------------------------
     "KBD_MMIO_START": KBD_MMIO_START,  # Näppäimistö-MMIO alku (0x0020)
-    "KBD_MMIO_END": KBD_MMIO_END,      # Näppäimistö-MMIO loppu (0x0021)
-    "KBD_DATA": KBD_DATA,              # Näppäintapahtuma MMIO (0x0020)
-    "KBD_STATUS": KBD_STATUS,          # Puskurin koko MMIO   (0x0021)
+    "KBD_MMIO_END": KBD_MMIO_END,  # Näppäimistö-MMIO loppu (0x0021)
+    "KBD_DATA": KBD_DATA,  # Näppäintapahtuma MMIO (0x0020)
+    "KBD_STATUS": KBD_STATUS,  # Puskurin koko MMIO   (0x0021)
     "KBD_RELEASE_BIT": KBD_RELEASE_BIT,  # Vapautusbitti (0x80)
     "KBD_KEY_CODE_MASK": KBD_KEY_CODE_MASK,  # Nappainkoodi maski (0x7F)
+    # ---- Satunnaislukugeneraattori MMIO ($0022) ----------------------
+    "RAND_MMIO": RAND_MMIO,  # Satunnaisluku MMIO (0x0022)
+    "RAND_LFSR_SEED": RAND_LFSR_SEED,  # LFSR-oletussiemen (0xACE1)
     # ---- Tallennuslaite ----------------------------------------------
     "STORAGE_BLOCK_SIZE": STORAGE_BLOCK_SIZE,  # Blokin koko sanoina (256)
     "STORAGE_BLOCK_COUNT": STORAGE_BLOCK_COUNT,  # Blokkien lukumäärä (256)

@@ -61,6 +61,9 @@ from .constants import (
     KBD_MMIO_END,
     KBD_MMIO_START,
     KBD_STATUS,
+    RAND_MMIO,
+    RAND_LFSR_MASK,
+    RAND_LFSR_SEED,
     REG_IDX_MASK,
     SR_FLAG_C,
     SR_FLAG_I,
@@ -131,6 +134,9 @@ class CPU:
     _last_uptime_update: float = field(default_factory=time.monotonic, init=False)
     _last_clock_int_time: float = field(default_factory=time.monotonic, init=False)
 
+    # 16-bittinen Galois LFSR satunnaislukugeneraattorille ($0022)
+    _lfsr: int = field(default=RAND_LFSR_SEED, init=False)
+
     def reset(self) -> None:
         """
         Nollaa CPU alkutilaan.
@@ -144,6 +150,7 @@ class CPU:
         self.instruction_counter = 0
         self.process_exit_requested = False
         self._uptime_counter = 0
+        self._lfsr = RAND_LFSR_SEED
         now = time.monotonic()
         self._clock_start = now
         self._last_uptime_update = now
@@ -276,6 +283,19 @@ class CPU:
             raise InvalidOpcodeError(f"Unknown opcode: 0x{opcode:04X}")
 
         mnemonic, operand_count, _ = OPCODE_TABLE[opcode]
+
+        # Erityistapaus: JMPI/CALLI — muuttuvanmittainen indeksoitu hyppy/kutsu
+        # Rakenne muistissa: opcode | reg_id | count | addr[0] | ... | addr[count-1]
+        if mnemonic in ("JMPI", "CALLI"):
+            reg_id = self.memory.read(pc + 1)
+            count = self.memory.read(pc + 2)
+            targets = [self.memory.read(pc + 3 + i) for i in range(count)]
+            return DecodedInstruction(
+                mnemonic=mnemonic,
+                operands=[reg_id, count] + targets,
+                size_words=3 + count,
+                privileged=False,
+            )
 
         # Johda operandien maara ja privilege suoraan opcode-biteista
         # (OPS-kentta bits 7:6, P-bitti bit 15)
@@ -629,11 +649,36 @@ class CPU:
             (addr,) = ins.operands
             self.regs.pc = (addr - ins.size_words) & WORD_MASK
 
+        elif ins.mnemonic == "JMPI":
+            # JMPI reg, addr... - Indeksoitu epäsuora hyppy
+            # reg sisältää indeksin; hypätään osoitteeseen targets[index]
+            reg_id, count, *targets = ins.operands
+            index = self._get_reg(reg_id)
+            if index >= count:
+                raise InvalidOpcodeError(
+                    f"JMPI: indeksi {index} sallitun alueen ulkopuolella (määrä={count})"
+                )
+            addr = targets[index]
+            self.regs.pc = (addr - ins.size_words) & WORD_MASK
+
         elif ins.mnemonic == "CALL":
             # CALL addr - Aliohjelmakutsu
             # PUSH (paluuosoite), JUMP addr
             (addr,) = ins.operands
             # Paluuosoite = seuraava kasky = PC + size_words
+            self._push((self.regs.pc + ins.size_words) & WORD_MASK)
+            self.regs.pc = (addr - ins.size_words) & WORD_MASK
+
+        elif ins.mnemonic == "CALLI":
+            # CALLI reg, addr... - Indeksoitu epäsuora aliohjelmakutsu
+            # Kuten CALL mutta kohde valitaan reg:n sisältämällä indeksillä
+            reg_id, count, *targets = ins.operands
+            index = self._get_reg(reg_id)
+            if index >= count:
+                raise InvalidOpcodeError(
+                    f"CALLI: indeksi {index} sallitun alueen ulkopuolella (määrä={count})"
+                )
+            addr = targets[index]
             self._push((self.regs.pc + ins.size_words) & WORD_MASK)
             self.regs.pc = (addr - ins.size_words) & WORD_MASK
 
@@ -914,6 +959,11 @@ class CPU:
             return self._read_clock_mmio(addr)
         if KBD_MMIO_START <= addr <= KBD_MMIO_END:
             return self._read_kbd_mmio(addr)
+        if addr == RAND_MMIO:
+            # Galois LFSR: jos alin bitti on 1, shift right ja XOR maskilla
+            lsb = self._lfsr & 1
+            self._lfsr = (self._lfsr >> 1) ^ ((-lsb) & RAND_LFSR_MASK)
+            return self._lfsr
         return self.memory.read(addr)
 
     def _write_word(self, addr: int, value: int) -> None:
@@ -929,6 +979,10 @@ class CPU:
             return
         # Nappaimisto-MMIO on vain luettava — ohita hiljainen kirjoitus
         if KBD_MMIO_START <= addr <= KBD_MMIO_END:
+            return
+        # Satunnaislukugeneraattori: kirjoitus asettaa LFSR-siemenen (0 -> 1)
+        if addr == RAND_MMIO:
+            self._lfsr = value if value != 0 else 1
             return
         self.memory.write(addr, value)
 

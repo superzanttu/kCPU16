@@ -249,6 +249,8 @@ OPCODE_TABLE: dict[int, tuple[str, int, bool]] = {
     _op(0, 5, 6, 1): ("JGT", 1, False),  # JGT  addr   Hyppa jos Z=0 ja N=V
     _op(0, 5, 7, 1): ("JLE", 1, False),  # JLE  addr   Hyppa jos Z=1 tai N!=V
     _op(0, 5, 8, 1): ("JGE", 1, False),  # JGE  addr   Hyppa jos N=V
+    _op(0, 5, 9, 0): ("JMPI", 0, False),  # JMPI reg, addr...  Indeksoitu epäsuora hyppy
+    _op(0, 5, 10, 0): ("CALLI", 0, False),  # CALLI reg, addr... Indeksoitu epäsuora kutsu
     # -------------------------------------------------------------------------
     # GRP 6: KESKEYTYKSET (Interrupts)
     #   User-kaskyt:   INT  0x6040  (P=0, GRP=6)

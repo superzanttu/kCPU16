@@ -126,6 +126,26 @@ class Disassembler:
             # Pura kaskyn metatiedot
             mnemonic, operand_count, _ = meta
 
+            # Erityistapaus: JMPI/CALLI — muuttuvanmittainen indeksoitu hyppy/kutsu
+            if mnemonic in ("JMPI", "CALLI"):
+                if i + 2 < len(words):
+                    reg_id = words[i + 1] & WORD_MASK
+                    count = words[i + 2] & WORD_MASK
+                    targets = []
+                    for j in range(count):
+                        if i + 3 + j < len(words):
+                            targets.append(words[i + 3 + j] & WORD_MASK)
+                    reg_name = _REG_NAMES.get(reg_id, f"?{reg_id}")
+                    target_str = ", ".join(f"0x{t:04X}" for t in targets)
+                    lines.append(f"{pc:04X}: {mnemonic} {reg_name}, {target_str}")
+                    size = 3 + count
+                else:
+                    lines.append(f"{pc:04X}: .word 0x{opcode:04X}")
+                    size = 1
+                i += size
+                pc += size
+                continue
+
             # Kerae operandit seuraavista sanoista
             op_vals = []
             for j in range(operand_count):

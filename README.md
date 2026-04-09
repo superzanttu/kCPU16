@@ -86,17 +86,50 @@ python main.py --check ohjelma.asm
 
 ## Esimerkkiohjelmat
 
-| Tiedosto                 | Kuvaus                                                     |
-| ------------------------ | ---------------------------------------------------------- |
-| `hello_regs.asm`         | Peruslaskutoimitukset: (10+5)×3−3 = 42, kirjoitus VRAM:iin |
-| `fibonacci.asm`          | Fibonacci-lukujen laskenta iteratiivisesti                 |
-| `factorial.asm`          | Kertoman laskenta aliohjelmalla (CALL/RET)                 |
-| `countdown.asm`          | Laskulaskuri silmukalla                                    |
-| `stack_demo.asm`         | Pinokäskyjen demonstraatio (PUSH/POP/CALL/RET)             |
-| `screen_hello_fill.asm`  | Tekstin kirjoitus näytölle VRAM:n kautta                   |
-| `test_screen_colors.asm` | FG/BG-värien testaus näytöllä                              |
-| `test_macros.asm`        | Makrojen käyttöesimerkki                                   |
-| `exit_demo.asm`          | EXIT-käskyn demonstraatio                                  |
+| Tiedosto                   | Kuvaus                                                     |
+| -------------------------- | ---------------------------------------------------------- |
+| `tut_arithmetic.asm`       | Peruslaskutoimitukset: (10+5)×3−3 = 42, kirjoitus VRAM:iin |
+| `tut_loop_countdown.asm`   | Silmukka ja laskuri alaspäin                               |
+| `tut_stack.asm`            | Pinokäskyjen demonstraatio (PUSH/POP/CALL/RET)             |
+| `tut_macros.asm`           | Makrojen käyttöesimerkki                                   |
+| `tut_vram_write.asm`       | Suora VRAM-kirjoitus, värit ja attribuutit                 |
+| `tut_vram_fill.asm`        | Tekstin täyttö koko näytölle VRAM:n kautta                 |
+| `tut_conditionals.asm`     | Ehdolliset hypyt (JZ/JNZ/JLT/JGT/JLE/JGE)                  |
+| `tut_bitops.asm`           | Bittioperaatiot (AND/OR/XOR/NOT/SHL/SHR)                   |
+| `algo_factorial.asm`       | Kertoman laskenta aliohjelmalla (CALL/RET)                 |
+| `algo_fibonacci.asm`       | Fibonacci-lukujen laskenta iteratiivisesti                 |
+| `algo_gcd.asm`             | Eukleideen GCD-algoritmi                                   |
+| `demo_clock_text.asm`      | Päivämäärä + kellonaika tekstimuodossa                     |
+| `demo_clock_bigfont.asm`   | Iso pikselikello BIG-fontilla                              |
+| `demo_colors.asm`          | FG/BG-väriyhdistelmien visualisointi                       |
+| `demo_keyboard.asm`        | Interaktiivinen näppäimistödemo (INT 6)                    |
+| `demo_interrupt_timer.asm` | Ajastin- ja kellokeskeytysten demo (INT 7 + INT 9)         |
+| `demo_benchmark.asm`       | Suorituskykymittaus (CPU/RAM/levy)                         |
+| `lib_font_big.asm`         | BIG-fonttidata demoja varten                               |
+
+### Suositeltu opintopolku (ajettava)
+
+Suorita ohjelmat tässä järjestyksessä:
+
+1. `python main.py kcpu16/code/tut_arithmetic.asm`
+2. `python main.py kcpu16/code/tut_loop_countdown.asm`
+3. `python main.py kcpu16/code/tut_stack.asm`
+4. `python main.py kcpu16/code/tut_macros.asm`
+5. `python main.py kcpu16/code/tut_vram_write.asm`
+6. `python main.py kcpu16/code/tut_vram_fill.asm`
+7. `python main.py kcpu16/code/tut_conditionals.asm`
+8. `python main.py kcpu16/code/tut_bitops.asm`
+9. `python main.py kcpu16/code/algo_factorial.asm`
+10. `python main.py kcpu16/code/algo_fibonacci.asm`
+11. `python main.py kcpu16/code/algo_gcd.asm`
+12. `python main.py kcpu16/code/demo_colors.asm`
+13. `python main.py kcpu16/code/demo_clock_text.asm`
+14. `python main.py kcpu16/code/demo_clock_bigfont.asm`
+15. `python main.py kcpu16/code/demo_interrupt_timer.asm`
+16. `python main.py kcpu16/code/demo_keyboard.asm`
+17. `python main.py kcpu16/code/demo_benchmark.asm`
+
+Vinkki: voit tarkistaa syntaksin ilman ajoa komennolla `python main.py --check kcpu16/code/tiedosto.asm`.
 
 ## Lisenssi
 
