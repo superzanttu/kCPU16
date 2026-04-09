@@ -5,7 +5,7 @@
 ;
 ; INT 2 (stack overflow): ei testattavissa luotettavasti
 ;   automaattisesti (vaatisi erityisen pinon setup:in).
-; INT 6 (keyboard): ei testattavissa (ei näppäimistösimulaatiota).
+; INT 6 (keyboard): testattu erillisessä test_keyboard_interrupt.asm:ssä.
 ; INT 8 (process exit): EXIT lopettaa koneen ennen handlerin ajoa
 ;   (process_exit_requested=True poistuu run-silmukasta välittömästi)
 ;   -> testattu erikseen test_exit.asm:ssä.

@@ -63,6 +63,15 @@ class TestExpectation:
     line_no: int  # Lähdekoodirivi (virheraportointia varten)
 
 
+@dataclass
+class KeyInjection:
+    """Yksi näppäinsyöte joka lisätään puskuriin ennen testiä."""
+
+    key_code: int   # Nappainkoodi (0-127)
+    is_release: bool  # True = vapautus, False = painallus
+    line_no: int    # Lähdekoodirivi (virheraportointia varten)
+
+
 # SR-lipun nimestä bitti-indeksiin
 _FLAG_NAME_TO_BIT: dict[str, int] = {
     "Z": SR_FLAG_Z,
@@ -181,6 +190,52 @@ def parse_expectations(source: str) -> list[TestExpectation]:
     return expectations
 
 
+def parse_key_injections(source: str) -> list[KeyInjection]:
+    """
+    Parsii .inject_key- ja .inject_key_release-direktiivit lähdekoodista.
+
+    Direktiivit määrittävät näppäimet jotka lisätään näppäimistöpuskuriin
+    ennen ohjelman suoritusta, jolloin näppäimistökeskeytyksiä voidaan
+    testata automaattisesti.
+
+    Syntaksi:
+        .inject_key KEY_CODE         ; Simuloi näppäimen painallus
+        .inject_key_release KEY_CODE ; Simuloi näppäimen vapautus
+        KEY_CODE: desimaali, 0x-hex tai 0b-binääri (0-127)
+
+    Args:
+        source: Assembly-lähdekoodi merkkijonona.
+
+    Returns:
+        Lista KeyInjection-olioita järjestyksessä.
+
+    Raises:
+        ValueError: Jos direktiivin syntaksi on virheellinen.
+    """
+    injections: list[KeyInjection] = []
+
+    for line_no, raw_line in enumerate(source.splitlines(), 1):
+        line = raw_line.split(";", 1)[0].strip()
+        if not line:
+            continue
+
+        low = line.lower()
+
+        if low.startswith(".inject_key_release"):
+            rest = line[len(".inject_key_release") :].strip()
+            parts = rest.split()
+            code = _parse_int(parts[0] if parts else "", line_no)
+            injections.append(KeyInjection(code & 0x7F, True, line_no))
+
+        elif low.startswith(".inject_key"):
+            rest = line[len(".inject_key") :].strip()
+            parts = rest.split()
+            code = _parse_int(parts[0] if parts else "", line_no)
+            injections.append(KeyInjection(code & 0x7F, False, line_no))
+
+    return injections
+
+
 def _split_two(rest: str, line_no: int) -> tuple[str, str]:
     """Pilko 'TARGET, VALUE' kahdeksi osaksi."""
     parts = rest.replace(",", " ").split()
@@ -291,6 +346,13 @@ def run_test(path: Path) -> int:
         print(f"VIRHE odotuksissa: {exc}", file=sys.stderr)
         return 1
 
+    # --- Parsii näppäinsyötteet (.inject_key / .inject_key_release) ---
+    try:
+        key_injections = parse_key_injections(source)
+    except ValueError as exc:
+        print(f"VIRHE näppäinsyötteissä: {exc}", file=sys.stderr)
+        return 1
+
     if not expectations:
         print("HUOM: Ei .expect_*-direktiivejä — ei mitään tarkistettavaa.")
         print("═" * WIDTH)
@@ -308,6 +370,13 @@ def run_test(path: Path) -> int:
     machine = KCPU16Machine()
     machine.reset_for_test()
     machine.load_segments(segments)
+
+    # --- Lisää näppäimet puskuriin ennen suoritusta ---
+    for inj in key_injections:
+        if inj.is_release:
+            machine.keyboard.push_key_release(inj.key_code)
+        else:
+            machine.keyboard.push_key(inj.key_code)
     try:
         machine.run(max_cycles=1_000_000)  # turvaraja testien ikuisen silmukan varalle
     except Exception as exc:

@@ -90,6 +90,31 @@ CLOCK_INT_INTERVAL = 0x001B  # CTMR MMIO-osoite (kirjoitus asettaa välin)
 # Oletusarvo CTMR:lle (0 = kellokeskeytys pois)
 DEFAULT_CLOCK_INT_INTERVAL = 0
 
+# =============================================================================
+# NÄPPÄIMISTÖ-MMIO (KEYBOARD MMIO)
+# Osoitteet $0020-$0021 ovat näppäimistölaitteen MMIO-rekisterejä.
+# Näppäimistö generoi INT 6 -keskeytyksen jokaisesta näppäimen painalluksesta
+# ja vapautuksesta. Keskeytysrutiini lukee tapahtuman KBD_DATA-osoitteesta.
+#
+# SKANNIKOODI-RAKENNE (16 bittiä, alin tavu käytössä):
+#   Bitti 7 (KBD_RELEASE_BIT): 0 = painallus, 1 = vapautus
+#   Bitit 6-0: näppäimen koodi (ASCII-arvo tai scan code, 0-127)
+#
+# Esimerkki: 'A' painetaan -> KBD_DATA = 0x41, 'A' vapautetaan -> 0xC1
+# =============================================================================
+
+KBD_MMIO_START = 0x0020   # Näppäimistö-MMIO-alueen alku
+KBD_MMIO_END = 0x0021     # Näppäimistö-MMIO-alueen loppu
+
+KBD_DATA = 0x0020         # Lue: pops seuraava näppäintapahtuma puskurista (0 jos tyhjä)
+KBD_STATUS = 0x0021       # Lue: tapahtumien määrä puskurissa (0 = tyhjä)
+
+# Bitti 7 KBD_DATA:ssa: asetettu = vapautus, nolla = painallus
+KBD_RELEASE_BIT = 0x80
+
+# 7-bittinen nappainkoodi maski (bitit 6-0)
+KBD_KEY_CODE_MASK = 0x7F
+
 # Boot-alue: Bootloader kopioidaan tallennuslaitteelta tanne kaynnistyksessa
 BOOT_RAM_START = 0x0100  # Ensimmainen bootloaderin osoite RAM:ssa
 BOOT_RAM_END = 0x01FF  # Viimeinen bootloaderin osoite RAM:ssa
@@ -284,6 +309,13 @@ ARCH_SYMBOLS: dict[str, int] = {
     "UPTIME_W1": UPTIME_W1,  # Uptime bitit 16-31 (0x0019)
     "UPTIME_W0": UPTIME_W0,  # Uptime bitit  0-15 (0x001A)
     "CLOCK_INT_INTERVAL": CLOCK_INT_INTERVAL,  # CTMR MMIO (0x001B)
+    # ---- Näppäimistö-MMIO ($0020-$0021) -----------------------------
+    "KBD_MMIO_START": KBD_MMIO_START,  # Näppäimistö-MMIO alku (0x0020)
+    "KBD_MMIO_END": KBD_MMIO_END,      # Näppäimistö-MMIO loppu (0x0021)
+    "KBD_DATA": KBD_DATA,              # Näppäintapahtuma MMIO (0x0020)
+    "KBD_STATUS": KBD_STATUS,          # Puskurin koko MMIO   (0x0021)
+    "KBD_RELEASE_BIT": KBD_RELEASE_BIT,  # Vapautusbitti (0x80)
+    "KBD_KEY_CODE_MASK": KBD_KEY_CODE_MASK,  # Nappainkoodi maski (0x7F)
     # ---- Tallennuslaite ----------------------------------------------
     "STORAGE_BLOCK_SIZE": STORAGE_BLOCK_SIZE,  # Blokin koko sanoina (256)
     "STORAGE_BLOCK_COUNT": STORAGE_BLOCK_COUNT,  # Blokkien lukumäärä (256)

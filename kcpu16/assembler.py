@@ -35,6 +35,8 @@ SYNTAKSI:
   - .expect_flag LIPPU, ARVO (esim. .expect_flag Z, 0, testaukseen)
   - .expect_mem OSOITE, ARVO (esim. .expect_mem 0x0300, 0xFF, testaukseen)
   - .expect_storage OSOITE, ARVO (tallennuslaiteen testaus)
+  - .inject_key KOODI (esim. .inject_key 0x41, simuloi A-painallus; testaukseen)
+  - .inject_key_release KOODI (esim. .inject_key_release 0x41, simuloi A-vapautus; testaukseen)
   - .diskblock N (esim. .diskblock 0, tallenna konekieli levyblokkiin N)
   - .include "TIEDOSTO" tai .include 'TIEDOSTO' (liitä toinen asm-tiedosto tähän
               kohtaan; polku suhteessa nykyiseen tiedostoon; silmukkasuojaus)
@@ -546,6 +548,10 @@ class Assembler:
             if line.lower().startswith(".expect_"):
                 continue
 
+            # .inject_key*-direktiivit: testaukseen, ei tuota koodia
+            if line.lower().startswith(".inject_key"):
+                continue
+
             # Muuten tama on kasky - laske sen koko
             # "ADD R0, R1" -> ["ADD", "R0", "R1"]
             parts = line.replace(",", " ").split()
@@ -638,6 +644,10 @@ class Assembler:
 
             # .expect_*-direktiivit: testaukseen, ei tuota koodia
             if line.lower().startswith(".expect_"):
+                continue
+
+            # .inject_key*-direktiivit: testaukseen, ei tuota koodia
+            if line.lower().startswith(".inject_key"):
                 continue
 
             # Parsi kasky: "ADD R0, R1" -> ["ADD", "R0", "R1"]
