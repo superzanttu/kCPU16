@@ -149,7 +149,6 @@ _REG_FIRST = {
     "SCTMR",
     "DREAD",
     "DWRITE",
-    "KGET",
     "TSL",
 }
 # Käskyt joissa myös 2. operandi on rekisteri-indeksi (esim. ADD R0, R1)
