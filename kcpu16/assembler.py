@@ -93,22 +93,22 @@ from .instruction import OPCODE_TABLE
 # =============================================================================
 
 REGISTER_TO_ID: dict[str, int] = {
-    "R0": 0,   # Yleiskayttoinen rekisteri 0
-    "R1": 1,   # Yleiskayttoinen rekisteri 1
-    "R2": 2,   # Yleiskayttoinen rekisteri 2
-    "R3": 3,   # Yleiskayttoinen rekisteri 3
-    "R4": 4,   # Yleiskayttoinen rekisteri 4
-    "R5": 5,   # Yleiskayttoinen rekisteri 5
-    "R6": 6,   # Yleiskayttoinen rekisteri 6
-    "R7": 7,   # Yleiskayttoinen rekisteri 7
-    "R8": 8,   # Yleiskayttoinen rekisteri 8
-    "R9": 9,   # Yleiskayttoinen rekisteri 9
-    "R10": 10, # Yleiskayttoinen rekisteri 10
-    "R11": 11, # Yleiskayttoinen rekisteri 11
-    "R12": 12, # Yleiskayttoinen rekisteri 12
-    "R13": 13, # Yleiskayttoinen rekisteri 13
-    "R14": 14, # Yleiskayttoinen rekisteri 14
-    "R15": 15, # Yleiskayttoinen rekisteri 15
+    "R0": 0,  # Yleiskayttoinen rekisteri 0
+    "R1": 1,  # Yleiskayttoinen rekisteri 1
+    "R2": 2,  # Yleiskayttoinen rekisteri 2
+    "R3": 3,  # Yleiskayttoinen rekisteri 3
+    "R4": 4,  # Yleiskayttoinen rekisteri 4
+    "R5": 5,  # Yleiskayttoinen rekisteri 5
+    "R6": 6,  # Yleiskayttoinen rekisteri 6
+    "R7": 7,  # Yleiskayttoinen rekisteri 7
+    "R8": 8,  # Yleiskayttoinen rekisteri 8
+    "R9": 9,  # Yleiskayttoinen rekisteri 9
+    "R10": 10,  # Yleiskayttoinen rekisteri 10
+    "R11": 11,  # Yleiskayttoinen rekisteri 11
+    "R12": 12,  # Yleiskayttoinen rekisteri 12
+    "R13": 13,  # Yleiskayttoinen rekisteri 13
+    "R14": 14,  # Yleiskayttoinen rekisteri 14
+    "R15": 15,  # Yleiskayttoinen rekisteri 15
     "FP": 16,  # Frame Pointer (indeksi 16)
     "SP": 17,  # Stack Pointer (indeksi 17)
 }
@@ -168,7 +168,9 @@ class Assembler:
         return self._labels
 
     def assemble(
-        self, source: str, start_addr: int = BOOT_RAM_START,
+        self,
+        source: str,
+        start_addr: int = BOOT_RAM_START,
         source_path: Path | None = None,
     ) -> list[tuple[int, list[int]]]:
         """
@@ -218,35 +220,84 @@ class Assembler:
         return segments
 
     @staticmethod
+    def _collect_defined_symbols(source: str) -> set[str]:
+        """
+        Kerää lähdekoodi-merkkijonosta kaikki siinä määritellyt symbolit:
+        makrojen nimet (.macro), käyttäjän vakioiden nimet (.const) ja labelit.
+
+        Tätä käytetään .include-konfliktien ennakotarkistukseen: ennen kuin
+        liitettävä tiedosto lisätään, tarkistetaan etteivät sen symbolit
+        törmää jo tiedettyihin symboleihin.
+
+        Args:
+            source: Assembly-lähdekoodi merkkijonona
+
+        Returns:
+            Joukko (set) symboleita isokirjaimisina merkkijonoina
+        """
+        symbols: set[str] = set()
+        for raw_line in source.splitlines():
+            line = raw_line.split(";", 1)[0].strip()
+            if not line:
+                continue
+            sl = line.lower()
+            # Makron nimi
+            if sl.startswith(".macro"):
+                parts = line.split()
+                if len(parts) >= 2:
+                    symbols.add(parts[1].upper())
+            # .const-vakion nimi
+            elif sl.startswith(".const"):
+                rest = line[len(".const") :].strip().replace(",", " ")
+                parts = rest.split()
+                if parts:
+                    symbols.add(parts[0].upper())
+            # Label (päättyy kaksoispisteeseen)
+            elif line.endswith(":"):
+                label = line[:-1].strip()
+                if label:
+                    symbols.add(label.upper())
+        return symbols
+
+    @staticmethod
     def _expand_includes(
         source: str,
         base_dir: Path | None,
         include_stack: frozenset[Path],
+        known_symbols: set[str] | None = None,
     ) -> str:
         """
         Laajenna .include-direktiivit rekursiivisesti ennen kaantamista.
 
         Korvaa jokaisen '.include "tiedosto.asm"' -rivin tiedoston sisallolla.
         Silmukkasuojaus: jos sama tiedosto on jo includeketjussa, heitetaan virhe.
+        Symbolikonfliktisuojaus: jos liitettava tiedosto maarittaa jo tunnetun
+        symbolin (label, .const tai .macro), heitetaan virhe ja lopetetaan kaantaminen.
 
         Args:
             source: Assembly-lahdekoodi
             base_dir: Hakemisto josta includet haetaan (tai None jos ei tiedostopolkua)
             include_stack: Nykyinen include-ketju (silmukoiden havaitsemiseen)
+            known_symbols: Yhteinen mutaabeli joukko jo maaritellyista symboleista
+                           (None = luodaan tama kutsuvaiheessa)
 
         Returns:
             Laajennettu lahdekoodi merkkijonona
 
         Raises:
-            ValueError: Syklistä includea tai puuttuvaa tiedostoa havaitessa
+            ValueError: Syklistä includea, puuttuvaa tiedostoa tai symbolitormaysta havaitessa
         """
+        if known_symbols is None:
+            # Juuri-taso: keraa ensin paatiedoston omat symbolit
+            known_symbols = Assembler._collect_defined_symbols(source)
+
         result_lines: list[str] = []
         for raw_line in source.splitlines():
             stripped = raw_line.split(";", 1)[0].strip()
             sl = stripped.lower()
             if sl.startswith(".include"):
                 # Parsi tiedostonimi: .include "nimi.asm" tai .include 'nimi.asm'
-                rest = stripped[len(".include"):].strip()
+                rest = stripped[len(".include") :].strip()
                 if len(rest) < 2 or rest[0] not in ('"', "'"):
                     raise ValueError(
                         f".include: puuttuvat lainausmerkit tai nimi: {stripped!r}"
@@ -276,16 +327,30 @@ class Assembler:
 
                 # Lue tiedosto
                 if not inc_path.exists():
-                    raise ValueError(
-                        f".include: tiedostoa ei löydy: '{inc_path}'"
-                    )
+                    raise ValueError(f".include: tiedostoa ei löydy: '{inc_path}'")
                 inc_source = inc_path.read_text(encoding="utf-8")
 
-                # Rekursiivinen laajennus
+                # Rekursiivinen laajennus liitettavaan tiedostoon (kayttaa samaa
+                # known_symbols-joukkoa, joten myos sen alaincludet tarkistetaan)
                 new_stack = include_stack | {inc_path}
+                # Tarkista symbolitormays ennen laajennusta
+                # (laajennetaan ensin rekursiivisesti, jotta saadaan myos
+                # alaincludejen symbolit tarkistettua)
                 inc_expanded = Assembler._expand_includes(
-                    inc_source, inc_path.parent, new_stack
+                    inc_source, inc_path.parent, new_stack, known_symbols=None
                 )
+                # Keraa kaikki symbolit laajennetusta sisallosta (sis. alaincludet)
+                inc_symbols = Assembler._collect_defined_symbols(inc_expanded)
+                conflicts = inc_symbols & known_symbols
+                if conflicts:
+                    names = ", ".join(sorted(conflicts))
+                    raise ValueError(
+                        f".include '{inc_path.name}': tiedosto maarittaa jo "
+                        f"tunnetun symbolin: {names}"
+                    )
+                # Lisaa liitettavan tiedoston symbolit tunnettuihin
+                known_symbols.update(inc_symbols)
+
                 result_lines.extend(inc_expanded.splitlines())
             else:
                 result_lines.append(raw_line)
@@ -303,12 +368,10 @@ class Assembler:
             ValueError: Jos kaksi segmenttia kayttaa samaa muistiosoitetta
         """
         ranges: list[tuple[int, int]] = [
-            (start, start + len(words) - 1)
-            for start, words in segments
-            if words
+            (start, start + len(words) - 1) for start, words in segments if words
         ]
         for i, (a_start, a_end) in enumerate(ranges):
-            for b_start, b_end in ranges[i + 1:]:
+            for b_start, b_end in ranges[i + 1 :]:
                 if a_start <= b_end and b_start <= a_end:
                     raise ValueError(
                         f"Segmentit menevät päällekkäin muistissa: "

@@ -81,6 +81,7 @@ from .exceptions import (
     InvalidOpcodeError,
     MemoryAccessFaultError,
     PrivilegeViolationError,
+    ReadOnlyMemoryError,
     StackOverflowError,
 )
 from .instruction import (
@@ -213,6 +214,9 @@ class CPU:
             self._trigger_interrupt(INT_PRIVILEGE_VIOLATION)
         except MemoryAccessFaultError:
             # User yritti lukea/kirjoittaa suojattua muistia -> INT 5
+            self._trigger_interrupt(INT_MEMORY_ACCESS_FAULT)
+        except ReadOnlyMemoryError:
+            # Kirjoitus kirjoitussuojattuun osoitteeseen (MMIO/ROM) -> INT 5
             self._trigger_interrupt(INT_MEMORY_ACCESS_FAULT)
         except InvalidOpcodeError:
             # Tuntematon opcode -> INT 1

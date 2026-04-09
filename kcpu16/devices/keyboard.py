@@ -29,6 +29,16 @@ MMIO-OSOITTEET:
    KBD_DATA   = $0020  Lue: pops seuraava tapahtuma puskurista (0 jos tyhja)
    KBD_STATUS = $0021  Lue: tapahtumien maara puskurissa (0 = tyhja)
 
+   HUOM: Molemmat osoitteet ovat LUKU-VAIN. Kirjoittaminen naihin
+   osoitteisiin ei vaikuta laitteeseen ja laukaisee ReadOnlyMemoryError
+   -> INT 5 (Memory Access Fault). Tama on vahvistettu memory.py:n
+   read_only_regions-listassa.
+
+   Yhden keskeytyksen (INT 6) aikana voi lukea useamman tapahtuman:
+   jokainen LOAD Rx, [KBD_DATA] -operaatio poistaa yhden alkion puskurista.
+   Suositeltu tapa on loopata KBD_STATUS > 0 niin kauan kuin puskurissa
+   on dataa - nain kaikki odottavat tapahtumat kasitellaan kerralla.
+
 TODELLISTEN LAITTEIDEN VERTAILU:
 ----------------------------------
    PC (XT/AT): Generoi make-koodin painettaessa, break-koodi = make | 0x80
