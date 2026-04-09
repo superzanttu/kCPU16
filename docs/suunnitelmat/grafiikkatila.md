@@ -1,6 +1,6 @@
 # kCPU16 — Grafiikkatila Textual-kirjaston rajoissa
 
-Versio 1.0
+Versio 2.0
 
 ---
 
@@ -11,9 +11,15 @@ tekstipohjaisen terminaalikäyttöliittymän (TUI) rakennuskirjasto. Se perustuu
 Rich-kirjastoon ja toimii täysin terminaalissa — ei ikkunajärjestelmässä eikä
 graafisessa ympäristössä.
 
-Tässä selvityksessä kartoitetaan, millainen grafiikkatila on mahdollista
-toteuttaa Textual-kirjaston ominaisuuksien rajoissa, ja vertaillaan eri
-vaihtoehtojen resoluutiota, värisyvyyttä ja toteutettavuutta.
+Tässä suunnitelmassa määritellään kCPU16:n grafiikkatilat. Käytettävissä on
+**kolme tilaa**, joista kaikki ovat **yksiväriseen** (monochrome) pikselikoodaukseen
+perustuvia: jokaiseen pikseliin käytetään **yksi bitti** (päällä/pois).
+
+| Tunniste | Nimi                  | Resoluutio       | Pikseleitä/merkkiruutu |
+| -------- | --------------------- | ---------------- | ---------------------- |
+| **A**    | Tekstitila (nykytila) | 80 × 24 merkkiä  | 1 merkki               |
+| **B**    | Puoliblokkipikseli    | 80 × 48 pikseliä | 2 (1 bitti/pikseli)    |
+| **C**    | Braille               | 160 × 96 pikseliä| 8 (1 bitti/pikseli)    |
 
 ---
 
@@ -29,49 +35,36 @@ kCPU16:n nykyinen tekstinäyttö on 80×24 merkkiruutua.
 
 ### 2.2 Värituki
 
-| Taso            | Värimäärä       | Rich-syntaksi                          |
-| --------------- | --------------- | -------------------------------------- |
-| ANSI 8 väriä    | 8 edustus + 8 tausta = 16 | `[red on black]`             |
-| ANSI 256 väriä  | 256 (indeksoitu) | `[color(200)]`                        |
-| True color      | 16 777 216 (24-bit RGB) | `Style(color=Color.from_rgb(r,g,b))` |
+Kaikki kCPU16:n grafiikkatilat ovat **yksivärisisiä (monochrome)**: jokainen
+pikseli esitetään **yhdellä bitillä** (1 = päällä, 0 = pois). Värisyvyys on
+siis 1 bitti per pikseli — ei väripalettia, ei RGB-arvoja.
 
-Textual (ja Rich) tukevat kaikkia kolmea tasoa. Useimmat modernit
-terminaaliemulaattorit (Alacritty, Kitty, iTerm2, Windows Terminal, GNOME
-Terminal jne.) tukevat **true color** -tilaa.
+Renderöinnissä "päällä"-pikseli näytetään edustusvärinä (FG, esim. valkoinen)
+ja "pois"-pikseli taustavärinä (BG, esim. musta). Värit ovat Textualin ANSI-tasolla
+asetettavia vakioarvoja, eivät ohjelmoijan säädeltävissä olevia attribuutteja.
 
 ### 2.3 Pikseliemulointitekniikat
 
 Koska terminaali perustuu merkkeihin, "pikselit" emuloidaan erityisillä
 Unicode-merkeillä:
 
-#### A) Puoliblokkiruudut (half-block)
+#### B) Puoliblokkiruudut (half-block)
 
 | Merkki | Koodipiste | Kuvaus                   |
 | ------ | ---------- | ------------------------ |
 | `▀`    | U+2580     | Ylempi puolikas täynnä   |
 | `▄`    | U+2584     | Alempi puolikas täynnä   |
 | `█`    | U+2588     | Koko ruutu täynnä        |
-| `▌`    | U+258C     | Vasen puolikas täynnä    |
-| `▐`    | U+2590     | Oikea puolikas täynnä    |
+| ` `    | U+0020     | Tyhjä ruutu              |
 
-Käyttämällä `▀`-merkkiä edustusvärillä (FG) ylemmälle pikselille ja
-taustavärillä (BG) alemmalle pikselille saadaan **2 pikseliä per
-merkkiruutu pystysuunnassa**:
+Käyttämällä sopivaa puoliblokkimerkkiä edustusvärillä (FG) ja taustavärillä
+(BG) saadaan **2 pikseliä per merkkiruutu pystysuunnassa**:
 
 ```
 80 merkkiä × 24 riviä × 2 pikseliä/rivi = 80 × 48 pikseliä
 ```
 
-#### B) Neljäsosablokkiruudut (quarter-block)
-
-Merkit U+2596–U+259F koodaavat 2×2 pikselipiirteitä (16 yhdistelmää).
-Yksi väri per ruutu, mutta 4 pikseliä per merkkiruutu:
-
-```
-80 × 2 = 160 pikseliä leveyttä
-24 × 2 = 48 pikseliä korkeutta
-→ 160 × 48 pikseliä (yksi väri per 2×2 blokki)
-```
+Jokainen pikseli on 1-bittinen (päällä / pois).
 
 #### C) Braille-pisteet
 
@@ -81,17 +74,10 @@ vastaa 2×4 pikselipiirrettä (8 bittiä, kukin bitti = yksi piste):
 ```
 80 × 2 = 160 pikseliä leveyttä
 24 × 4 = 96 pikseliä korkeutta
-→ 160 × 96 pikseliä (1-bittinen; yksi väri per merkkiruutu)
+→ 160 × 96 pikseliä (1-bittinen; yksi päällä/pois-pikseli per piste)
 ```
 
-#### D) Yksittäiset merkkiruudut taustavärillä (true color)
-
-Välilyöntimerkeillä (`' '`) ja true-color taustavärillä saadaan **1 pikseliä
-per merkkiruutu**, mutta 24-bittisenä RGB-värinä:
-
-```
-80 × 24 = 1920 pikseliä (true color, 16 777 216 väriä)
-```
+Jokainen pikseli on 1-bittinen (päällä / pois).
 
 ### 2.4 Textualin renderöintimekanismi
 
@@ -104,19 +90,25 @@ from textual.widget import Widget
 from textual.strip import Strip
 from rich.segment import Segment
 from rich.style import Style
-from rich.color import Color
 
-class PixelScreen(Widget):
+_ON  = Style(color="white", bgcolor="black")
+_OFF = Style(color="black", bgcolor="black")
+
+_CHARS = {
+    (False, False): (" ", Style(bgcolor="black")),   # molemmat pois
+    (True,  False): ("▀", _ON),                      # ylempi päällä
+    (False, True ): ("▄", _ON),                      # alempi päällä
+    (True,  True ): ("█", _ON),                      # molemmat päällä
+}
+
+class HalfBlockScreen(Widget):
     def render_line(self, y: int) -> Strip:
         segments = []
         for x in range(self.size.width):
-            top_rgb = self._get_pixel(x, y * 2)      # ylempi pikseli
-            bot_rgb = self._get_pixel(x, y * 2 + 1)  # alempi pikseli
-            style = Style(
-                color=Color.from_rgb(*top_rgb),
-                bgcolor=Color.from_rgb(*bot_rgb),
-            )
-            segments.append(Segment("▀", style))
+            top = self._get_pixel(x, y * 2)      # ylempi pikseli (bool)
+            bot = self._get_pixel(x, y * 2 + 1)  # alempi pikseli (bool)
+            ch, style = _CHARS[(top, bot)]
+            segments.append(Segment(ch, style))
         return Strip(segments)
 ```
 
@@ -133,456 +125,267 @@ parhaiten viivakuvioihin (UI:n reunaviivat, kehykset).
 
 ---
 
-## 3. Vaihtoehtojen vertailu
+## 3. Grafiikkatilat — vertailu
 
-| Vaihtoehto               | Resoluutio  | Värisyvyys      | VRAM-tarve (sanat) | Soveltuvuus kCPU16:lle |
-| ------------------------ | ----------- | --------------- | ------------------ | ---------------------- |
-| **Tekstinäyttö** (nykytila) | 80 × 24 merkkiä | 8 FG + 8 BG   | 1 920              | Käytössä               |
-| **Puoliblokkipikseli (A)**  | 80 × 48     | 8 väriä/pikseli | 1 920 (sama VRAM)  | ★★★★★ Suositeltu       |
-| **Neljäsosablokkipikseli (B)** | 160 × 48 | 8 väriä/blokki | 1 920 (sama VRAM)  | ★★★☆☆                |
-| **Braille (C)**          | 160 × 96    | 8 väriä/merkki  | 1 920 (sama VRAM)  | ★★☆☆☆                 |
-| **True color (D)**       | 80 × 24     | 16 777 216/piks | 4 320 (RGB, 3 kpl) | ★★★☆☆                 |
+| Tila | Nimi                    | Resoluutio        | Värisyvyys         | VRAM-tarve (sanat) |
+| ---- | ----------------------- | ----------------- | ------------------ | ------------------ |
+| **A** | Tekstitila (nykytila)  | 80 × 24 merkkiä   | 8 FG + 8 BG        | 1 920              |
+| **B** | Puoliblokkipikseli     | 80 × 48 pikseliä  | 1 bitti/pikseli    | 1 920 (sama VRAM)  |
+| **C** | Braille                | 160 × 96 pikseliä | 1 bitti/pikseli    | 1 920 (sama VRAM)  |
+
+Kaikki grafiikkatilat (B ja C) käyttävät täsmälleen samaa VRAM-aluetta
+($F800–$FF7F = 1 920 sanaa) kuin tekstitila. Muistikartassa ei tapahdu
+muutoksia grafiikkatilaan siirryttäessä.
 
 ---
 
-## 4. Suositeltu toteutus: puoliblokkipikseli (80 × 48)
+## 4. Tila A — Tekstitila (nykytila)
 
-### 4.1 Perusteet
+Tekstitila on kCPU16:n oletustila. Se ei ole varsinainen pikseligrafiikkatila,
+mutta se toimii lähtökohtana muille tiloille ja käyttää samaa VRAM-aluetta.
 
-Puoliblokkipikseli-tila on optimaalisin vaihtoehto kCPU16:n rajoissa:
-
-1. **VRAM-yhteensopivuus**: Nykyinen 16-bittinen VRAM-sana sopii suoraan
-   grafiikkatilaan. FG-bitit (8–10) koodaavat ylemmän pikselin värin, BG-bitit
-   (11–13) koodaavat alemman pikselin värin. Merkkibittejä (0–7) ei grafiikkatilassa
-   käytetä.
-
-2. **Kaksinkertainen pystyresoluutio**: 80×48 pikseliä mahdollistaa
-   yksinkertaisten kuvioiden, pisteiden, viivojen ja täytettyjen alueiden
-   piirtämisen.
-
-3. **Tuttu värimalini**: 8 värin paletti (musta, punainen, vihreä, keltainen,
-   sininen, magenta, syaani, valkoinen) on jo tuettu tekstitilassa ja
-   assembly-ohjelman näkökulmasta ei tarvita uusia värimäärittelyjä.
-
-4. **Yksinkertainen toteutus**: Yksi VRAM-sana = yksi merkkiruutu =
-   kaksi pikseliä. Ei tarvita uutta VRAM-aluetta.
-
-### 4.2 VRAM-sanan rakenne grafiikkatilassa
+- **Resoluutio**: 80 × 24 merkkiä
+- **VRAM**: $F800–$FF7F (1 920 sanaa)
+- **VRAM-sanan rakenne**:
 
 ```
-Bitti 15–14: Attribuutit (sama kuin tekstinäytössä, ignoroidaan grafiikkatilassa)
-Bitti 13–11: Alempi pikseli – BG-väri (3 bittiä = 8 väriä)
-Bitti 10–8:  Ylempi pikseli – FG-väri (3 bittiä = 8 väriä)
-Bitti 7–0:   Ei käytetty grafiikkatilassa (merkki ignoroidaan)
+Bitti 15–14: Attribuutit (vilkkuminen ym.)
+Bitti 13–11: BG-väri (3 bittiä, 8 väriä)
+Bitti 10–8:  FG-väri (3 bittiä, 8 väriä)
+Bitti  7–0:  Merkki (ASCII/CP437)
 ```
 
-Osoitekaava (sama kuin tekstinäytössä):
+Tekstitilassa näyttötilarekisterin ($FF80) arvo on **0**.
+
+---
+
+## 5. Tila B — Puoliblokkipikseli (80 × 48)
+
+### 5.1 Perusteet
+
+Puoliblokkipikseli-tila jakaa jokaisen merkkiruudun kahteen pikseliriviin
+käyttämällä Unicode-puoliblokkiruutuja (`▀`, `▄`, `█`, `·`). Moodi on
+**yksiväriinen**: jokainen pikseli on 1-bittinen (päällä tai pois).
+
+- **Resoluutio**: 80 × 48 pikseliä
+- **Värisyvyys**: 1 bitti per pikseli
+- **VRAM-tarve**: 1 920 sanaa (sama alue $F800–$FF7F kuin tekstitilassa)
+
+### 5.2 VRAM-sanan rakenne (tila B)
+
+Jokainen VRAM-sana koodaa yhden merkkiruudun (yksi sarake, kaksi pikseliriviä):
 
 ```
-osoite = VRAM_START + (rivi // 2) * 80 + sarake
+Bitti 15–2:  Käyttämättä (ignoroidaan)
+Bitti 1:     Ylempi pikseli  (1 = päällä, 0 = pois)
+Bitti 0:     Alempi pikseli  (1 = päällä, 0 = pois)
 ```
 
-Esimerkki: pikseliä (kolumni=10, rivi=5) vastaava VRAM-osoite:
+Osoitekaava (sama kuin tekstitilassa):
 
 ```
-osoite = 0xF800 + (5 // 2) * 80 + 10 = 0xF800 + 2 * 80 + 10 = 0xF90A
+osoite = $F800 + (pikselirivi // 2) * 80 + sarake
 ```
 
-Pikselin värin asetus ylemmälle pikselille:
+Esimerkki: pikseli (sarake=10, pikselirivi=5) → ylemmässä puoliskossa:
+
+```
+osoite = $F800 + (5 // 2) * 80 + 10 = $F800 + 2 * 80 + 10 = $F90A
+bitti  = 1   (rivi 5 on pariton → alempi pikseli → bitti 0)
+```
+
+### 5.3 Assembly-esimerkki: pikselin asettaminen
 
 ```asm
-; Aseta piste (10, 4) punaiseksi (värikoodi 1 = punainen)
-; Rivi 4 on ylempi pikseli merkkiruudussa (4//2 = 2)
-; FG-bitit (8-10), punainen = 1 → siirrä 8 bittiä vasemmalle
-LOAD R0, #0x0100    ; FG = punainen (1 << 8)
-LOAD R1, #0xF80A    ; osoite = F800 + 2*80 + 10
-STORE R0, [R1]
+; Aseta piste (sarake=10, pikselirivi=4) päälle
+; Rivi 4 on parillinen → ylempi pikseli → bitti 1
+LOAD R1, #0xF90A    ; osoite = F800 + 2*80 + 10
+LOAD R2, [R1]       ; lue nykyinen sana
+OR   R2, #0x0002    ; aseta bitti 1 (ylempi pikseli)
+STORE R2, [R1]
+
+; Aseta piste (sarake=10, pikselirivi=5) päälle
+; Rivi 5 on pariton → alempi pikseli → bitti 0
+LOAD R1, #0xF90A    ; sama VRAM-sana
+LOAD R2, [R1]       ; lue nykyinen sana
+OR   R2, #0x0001    ; aseta bitti 0 (alempi pikseli)
+STORE R2, [R1]
 ```
 
-### 4.3 Tilakytkin: tekstitila vs. grafiikkatila
+### 5.4 Tilakytkin
 
-Tila voidaan kytkeä käyttämällä erillistä muistiosoitetta tilarekisterinä,
-esimerkiksi VRAM-alueen jälkeistä osoitetta:
-
-| Osoite  | Kuvaus                              |
-| ------- | ----------------------------------- |
-| `$FF80` | Näyttötilarekisteri: `0` = tekstitila, `1` = grafiikkatila |
-
-Assembly-esimerkki grafiikkatilan kytkemisestä:
+Näyttötilarekisteri `$FF80` asetetaan arvoon **1**:
 
 ```asm
 LOAD R0, #1
 LOAD R1, #0xFF80    ; näyttötilarekisteri
-STORE R0, [R1]      ; kytke grafiikkatila päälle
+STORE R0, [R1]      ; kytke puoliblokkipikseli-tila päälle
 ```
 
-Textual-widgetti tarkistaa tämän osoitteen `refresh()`-kutsun yhteydessä
-ja valitsee renderöintitavan sen mukaan.
+### 5.5 TUI-widgetin toiminta (tila B)
 
-### 4.4 TUI-widgetin toiminta
+`ScreenDevice`-widget lukee VRAM-sanoista bitit 1 ja 0 ja valitsee
+sopivan puoliblokkimerkin:
 
-`ScreenDevice`-widget muokataan tarkistamaan tilarekisteri ennen renderöintiä:
-
-- **Tekstitila** (0): Nykyinen `render_with_rich_colors()` — ASCII-merkit väreillä.
-- **Grafiikkatila** (1): Uusi `render_pixel_mode()` — `▀`-merkit, jossa
-  FG-väri = ylempi pikseli ja BG-väri = alempi pikseli.
+| Bitti 1 (ylempi) | Bitti 0 (alempi) | Merkki | Selitys              |
+| ---------------- | ---------------- | ------ | -------------------- |
+| 0                | 0                | ` `    | Molemmat pois        |
+| 1                | 0                | `▀`    | Vain ylempi päällä   |
+| 0                | 1                | `▄`    | Vain alempi päällä   |
+| 1                | 1                | `█`    | Molemmat päällä      |
 
 ---
 
-## 5. True-color-laajennus (vaihtoehto)
+## 6. Tila C — Braille (160 × 96)
 
-Jos väripalettia halutaan laajentaa 8 väristä true-coloriin (16 777 216 väriä),
-tarvitaan uusi GVRAM-alue (Graphics VRAM).
+### 6.1 Perusteet
 
-### 5.1 GVRAM-muistikartta (80 × 24 true-color pikseli)
+Braille-tila käyttää Unicode-braille-merkkejä (U+2800–U+28FF) koodaamaan
+2 × 4 pikselin ruudukon yhdeksi merkkiruuduksi. Jokainen piste on 1-bittinen
+(päällä tai pois), joten yhdessä VRAM-sanassa on 8 pikselibittiä.
 
-```
-Pikseli (x, y):
-    R-osoite = GVRAM_START + y * 80 * 3 + x * 3
-    G-osoite = GVRAM_START + y * 80 * 3 + x * 3 + 1
-    B-osoite = GVRAM_START + y * 80 * 3 + x * 3 + 2
-```
+- **Resoluutio**: 160 × 96 pikseliä
+- **Värisyvyys**: 1 bitti per pikseli
+- **VRAM-tarve**: 1 920 sanaa (sama alue $F800–$FF7F kuin tekstitilassa)
+- **Merkkiruudun koko**: 2 pikseliä leveyttä × 4 pikseliä korkeutta
 
-Koko: 80 × 24 × 3 = 5 760 sanaa.
+### 6.2 Braille-pisteiden numerointi ja bittijärjestys
 
-Koska nykyinen VRAM ($F800–$FF7F = 1 920 sanaa) ei riitä, GVRAM sijoitetaan
-vapaalle RAM-alueelle, esimerkiksi:
+Unicode-braille-standardi numeroi pisteet seuraavasti:
 
 ```
-$E200 – $F7FF = 5 888 sanaa (riittää 5 760 sanan GVRAM:lle)
+Sarake → 0    1
+        ┌────┬────┐
+Rivi 0  │ 1  │ 4  │
+        ├────┼────┤
+Rivi 1  │ 2  │ 5  │
+        ├────┼────┤
+Rivi 2  │ 3  │ 6  │
+        ├────┼────┤
+Rivi 3  │ 7  │ 8  │
+        └────┴────┘
 ```
 
-True-color-laajennus vaatii merkittävästi enemmän muistia ja monimutkaisemman
-assembly-ohjelmoinnin, joten se soveltuu lähinnä erikoiskäyttöön.
-
----
-
-## 6. Ehdotus: 640 × 480 pikseliä Textual-toteutuksena
-
-### 6.1 Historiallinen vertailu: Commodore 64 ja BBC Micro
-
-Sekä C64 että BBC Micro joutuivat ratkaisemaan saman peruskonfliktin kuin
-kCPU16: korkea pikseliresoluutio vaatii paljon muistia, mutta prosessorin
-osoiteavaruus on rajallinen. Kumpikin kone kehitti omanlaisensa strategian,
-josta kCPU16 voi ammentaa.
-
-#### 6.1.1 Commodore 64: HiRes Bitmap (320 × 200)
-
-C64:n VIC-II-kuvasirun HiRes-bittikarttamoodi tarjoaa 320 × 200 pikseliä:
-
-| Komponentti        | Koko    | Kuvaus |
-| ------------------ | ------- | ------ |
-| Bitmap-puskuri     | 8 000 t | 1 bitti/pikseli (vain väri päällä/pois per piste) |
-| Color RAM          | 1 000 t | Yksi tavu per 8×8-solu: ylempi nybble = FG-väri (0–15), alempi nybble = BG-väri |
-| **Yhteensä**       | **9 000 t** | **= 4 500 sanaa 16-bittisessä muistissa** |
-
-C64:ssa on 64 KB RAM:ia (65 536 tavua), joten 9 000 tavua vie vain **13,7 %**
-osoiteavaruudesta — loput jäävät ohjelmoijalle.
-
-**Avainidea 1 — solukohtainen väri:** Pikselit ovat mustavalkoisessa bitmapissa
-(1 bitti/pikseli), mutta jokainen 8×8-pikselin solu saa omat FG- ja BG-värit
-Color RAM:ista. Tämä on tismalleen sama filosofia kuin kCPU16:n 80×48
-puoliblokkimoodissa, jossa tekstitilan VRAM:n FG/BG-bitit (11–13 / 8–10)
-määräävät ylemmän ja alemman pikseliä.
-
-**Avainidea 2 — pankkikytkentä (CPU/VIC-II):** VIC-II näkee vain 16 KB
-kerrallaan, mutta ohjelma voi ohjata, mikä 16 KB:n lohko on VIC-II:n
-nähtävillä (neljä mahdollista lohkoa à 16 KB 64 KB:n tilassa). CPU:lla on
-silti täysi pääsy koko 64 KB:iin. Tämä on inspiraationa kCPU16:n
-GBANK-pankkikytkentämekanismille.
-
-#### 6.1.2 BBC Micro: moodiperhe 640 × 256 – 160 × 256
-
-BBC Microssa on oma lähestymistapa: **kaikki grafiikkatilat käyttävät saman
-kokoisen näyttömuistin** — aina 20 480 tavua (= 10 240 sanaa). Moodin vaihto
-ei muuta muistin kokoa vaan ainoastaan sen, kuinka monta bittiä per pikseli
-varataan:
-
-| Moodi  | Resoluutio  | Värejä | Bittiä/pikseli | Muisti        |
-| ------ | ----------- | ------ | -------------- | ------------- |
-| Mode 0 | 640 × 256   | 2      | 1              | 20 480 t      |
-| Mode 1 | 320 × 256   | 4      | 2              | 20 480 t      |
-| Mode 2 | 160 × 256   | 16     | 4              | 20 480 t      |
-| Mode 4 | 320 × 256   | 2      | 1              | 10 240 t (\*) |
-| Mode 5 | 160 × 256   | 4      | 2              | 10 240 t (\*) |
-
-(\*) Mode 4 ja 5 käyttävät vain puoliskoa näyttömuistista.
-
-**Avainidea 3 — kiinteä näyttömuisti, vaihtuva pikselitarkkuus:** Resoluutiota
-nostamalla pienennetään värisyvyyttä (ja päinvastoin), mutta muistin kokonaismäärä
-pysyy vakiona. Ohjelmoija valitsee haluamansa kompromissin `MODE`-komennolla
-ilman, että muistikartta muuttuu.
-
-**Avainidea 4 — näyttömuisti muistikartan huipussa:** BBC Micro sijoittaa
-näyttömuistin RAM:n ylimpiin osoitteisiin (tyypillisesti `$3000–$7FFF` tai
-`$4000–$8FFF` riippuen moodista). Näin se ei häiritse käyttöjärjestelmää eikä
-ohjelmakoodia alarekistereissä.
-
-#### 6.1.3 Vertailu kCPU16:n nykyiseen arkkitehtuuriin
-
-| Ominaisuus              | C64             | BBC Micro        | kCPU16 (nykyinen) |
-| ----------------------- | --------------- | ---------------- | ------------------ |
-| Suoritin                | 8-bittinen 6510 | 8-bittinen 6502  | 16-bittinen kCPU16 |
-| Osoiteavaruus           | 64 KB (tavua)   | 32 KB (tavua)    | 65 536 sanaa       |
-| Näyttömuistin koko      | 9 000 t         | 10 240–20 480 t  | 1 920 sanaa        |
-| Grafiikan resoluutio    | 320 × 200       | 640 × 256        | 80 × 48 (half-block) |
-| Pikselibittejä          | 1 + color RAM   | 1–4 bittiä/px    | 3 bittiä/px (FG/BG) |
-| Muistinhallintaratkaisu | CPU/VIC pankki  | Kiinteä blokit   | —                  |
-| Laitteistokiihdytys     | VIC-II DMA      | 6845 CRTC        | Ei (ohjelmisto)    |
-
-#### 6.1.4 Opetukset kCPU16:n 640 × 480 -ehdotukselle
-
-| Opetus | Lähde | Sovellus kCPU16:ssa |
-| ------ | ----- | ------------------- |
-| Solukohtainen väri säästää muistia | C64 Color RAM | 80×48 half-block on jo tätä; 640×480:ssa bitmap + paletti |
-| Pankkikytkentä mahdollistaa suuremman näyttömuistin | C64 VIC-II | GBANK-rekisteri (`$FF81`) valitsee aktiivisen 8 192 sanan GVRAM-pankin |
-| Kiinteä näyttömuisti, vaihtuva moodileikki | BBC `MODE`-komento | Yksi GVRAM-alue, GMODE valitsee pakkaustavan |
-| Näyttömuisti muistikartan "hiljaisessa" alueessa | BBC `$3000–$7FFF` | kCPU16 GVRAM-ikkuna `$2000–$3FFF` |
-| Korkea resoluutio = vähemmän värejä | BBC Mode 0 | 640×480 käyttää 3 bittiä/pikseli (8 väriä), ei 16M |
-
-BBC Micron moodiperhe havainnollistaa lisäksi, että **640 × 256 olisi täysin
-mahdollinen kCPU16:ssa ilman pankkikytkentää**: 3 bittiä/pikseli (5 px/sana)
-vaatisi vain `128 × 256 = 32 768 sanaa` — alle puolet osoiteavaruudesta.
-640 × 480 ylittää rajan (61 440 sanaa), minkä vuoksi GBANK-pankkikytkentä on
-välttämätön.
-
----
-
-### 6.2 Reunaehdot
-
-Ennen kuin 640 × 480 on mahdollinen, on ratkaistava kaksi perusongelmaa:
-
-| Ongelma | Syy |
-| ------- | --- |
-| **Muistinpuute** | 640 × 480 pikseliä vaatii 38 400–76 800 sanaa, mutta kCPU16:n koko osoiteavaruus on 65 536 sanaa. GVRAM ei mahdu normaaliin muistikarttaan. |
-| **Terminaalin koko** | 640 × 480 pikseliä half-block-tekniikalla vaatisi 640 saraketta × 240 riviä, mikä ylittää jokaisen käytännön terminaalin. |
-
-Molemmat ongelmat ovat ratkaistavissa: muisti pankkikytkennällä ja
-terminaalinäkymä skaalaamalla.
-
----
-
-### 6.3 Grafiikkamuisti: GVRAM-pankkikytkentä
-
-#### Pikseliformaatti: 3 bittiä / pikseli, 5 pikseliä / sana
-
-Säilyttämällä kCPU16:n olemassa oleva 8 värin paletti (sama kuin tekstitilassa)
-saadaan kompakti esitys: 3 bittiä per pikseli, 5 pikseliä per 16-bittinen sana
-(5 × 3 = 15 bittiä; bitti 15 jätetään käyttämättä).
+Unicode-merkin koodi: `U+2800 + bittikuvio`, jossa:
 
 ```
-Sana: [14–0] = px4[2:0] | px3[2:0] | px2[2:0] | px1[2:0] | px0[2:0]
+Bitti 0 = piste 1  (sarake 0, rivi 0)
+Bitti 1 = piste 2  (sarake 0, rivi 1)
+Bitti 2 = piste 3  (sarake 0, rivi 2)
+Bitti 3 = piste 4  (sarake 1, rivi 0)
+Bitti 4 = piste 5  (sarake 1, rivi 1)
+Bitti 5 = piste 6  (sarake 1, rivi 2)
+Bitti 6 = piste 7  (sarake 0, rivi 3)
+Bitti 7 = piste 8  (sarake 1, rivi 3)
 ```
 
-Muistintarve:
+### 6.3 VRAM-sanan rakenne (tila C)
+
+Jokainen VRAM-sana koodaa yhden braille-merkkiruudun (2 × 4 pikseliä):
 
 ```
-640 / 5 = 128 sanaa / rivi
-128 × 480 = 61 440 sanaa yhteensä
-→ 8 pankkia à 8 192 sanaa (8 × 8 192 = 65 536)
+Bitti 15–8:  Käyttämättä (ignoroidaan)
+Bitti 7–0:   Braille-bittikuvio (8 pikseliä, 1 bitti kukin)
 ```
 
-#### Pankkikytkentärekisteri GBANK
+VRAM-sanan bitti → pikselikoordinaatti (`(sarake, rivi)` merkkiruudun sisällä):
 
-Lisätään uusi **järjestelmärekisteri GBANK** (indeksi 6 tai erillinen portti).
-Se valitsee aktiivisen GVRAM-pankin 0–7, joka kartoitetaan osoitteisiin
-`$2000–$3FFF` (8 192 sanaa).
+| Bitti | Piste | Merkkiruudun sarake | Merkkiruudun rivi |
+| ----- | ----- | ------------------- | ----------------- |
+| 0     | 1     | 0                   | 0                 |
+| 1     | 2     | 0                   | 1                 |
+| 2     | 3     | 0                   | 2                 |
+| 3     | 4     | 1                   | 0                 |
+| 4     | 5     | 1                   | 1                 |
+| 5     | 6     | 1                   | 2                 |
+| 6     | 7     | 0                   | 3                 |
+| 7     | 8     | 1                   | 3                 |
 
-| Rekisteri | Arvo   | Kuvaus                                        |
-| --------- | ------ | --------------------------------------------- |
-| GBANK     | 0–7    | Aktiivinen GVRAM-pankki                       |
-| GMODE     | 0 / 1  | Näyttötila: 0 = teksti/80×48, 1 = 640×480     |
-
-Fyysinen GVRAM on emulaattorin Python-tasolla 65 536 sanaa pitkä taulukko,
-erillään normaalista muistista. CPU lukee ja kirjoittaa sitä osoitteiden
-`$2000–$3FFF` kautta, ja GBANK-rekisteri kertoo emulaattorille, mikä
-8 192 sanan lohko on näkyvissä.
-
-#### Muistikartta GVRAM-ikkunan kanssa
+Pikseli `(px, py)` (0 ≤ px < 160, 0 ≤ py < 96) kartoitetaan VRAM:iin:
 
 ```
-$0000 – $0008   9 sanaa       Keskeytysvektoritaulukko (ennallaan)
-$0009 – $00FF   247 sanaa     Käyttöjärjestelmän varaus
-$0100 – $01FF   256 sanaa     Bootloader
-$0200 – $1FFF   7 680 sanaa   Vapaa RAM (ohjelmakoodi)
-$2000 – $3FFF   8 192 sanaa   ← GVRAM-ikkuna (pankkikytkentä, GBANK 0–7)
-$4000 – $F7FF   47 104 sanaa  Vapaa RAM (data, pinorakenne)
-$F800 – $FF7F   1 920 sanaa   VRAM (tekstitila) — ennallaan
-$FF80 – $FF81   2 sanaa       GMODE-rekisteri ($FF80) ja GBANK-rekisteri ($FF81)
-$FF82 – $FFFF   126 sanaa     Kernel-pino
+merkkiruudun sarake  = px // 2
+merkkiruudun rivi    = py // 4
+piste-sarake         = px mod 2
+piste-rivi           = py mod 4
+
+osoite = $F800 + merkkiruudun_rivi * 80 + merkkiruudun_sarake
+
+bittinumero (pisterivin 0–2 mukaan):
+  jos piste-rivi < 3:  bitti = piste-sarake * 3 + piste-rivi
+  jos piste-rivi = 3:  bitti = 6 + piste-sarake
 ```
 
----
-
-### 6.4 Uudet käskyt ja rekisterit
-
-#### Uusi järjestelmärekisteri GBANK
-
-Pankkikytkentärekisterin kirjoittaminen onnistuu uudella etuoikeutetulla käskyllä:
-
-| Käsky          | Operandit      | Kuvaus                              |
-| -------------- | -------------- | ----------------------------------- |
-| `SGBANK Rx`    | rekisteri      | Aseta GBANK ← Rx (Kernel-tila)      |
-| `LGBANK Rx`    | rekisteri      | Lue GBANK → Rx                      |
-
-Vaihtoehtoisesti GBANK voidaan toteuttaa muistikartatun rekisterin avulla
-(`STORE R0, [$FF81]` / `LOAD R0, [$FF81]`), jolloin uusia käskyjä ei tarvita.
-Tämä on yksinkertaisempi ja suositeltava lähestymistapa.
-
-#### GMODE-rekisteri
-
-Kirjoitetaan muistikartatusti, samoin kuin nykyinen näyttötilarekisteri:
+### 6.4 Assembly-esimerkki: pikselin asettaminen
 
 ```asm
-; Kytke 640×480 grafiikkatila päälle
-LOAD R0, #1
-STORE R0, [$FF80]     ; GMODE = 1 (grafiikkatila)
-LOAD R0, #0
-STORE R0, [$FF81]     ; GBANK = 0 (ensimmäinen pankki)
+; Aseta pikseli (px=5, py=7) päälle
+; Merkkiruudun sarake = 5 // 2 = 2
+; Merkkiruudun rivi   = 7 // 4 = 1
+; Piste-sarake = 5 mod 2 = 1
+; Piste-rivi   = 7 mod 4 = 3
+; → piste-rivi = 3, piste-sarake = 1 → bitti = 6 + 1 = 7
+
+LOAD R1, #0xF852    ; osoite = F800 + 1*80 + 2
+LOAD R2, [R1]       ; lue nykyinen sana
+OR   R2, #0x0080    ; aseta bitti 7  (1 << 7)
+STORE R2, [R1]
 ```
 
----
+### 6.5 Tilakytkin
 
-### 6.5 GVRAM-pikselioperaatiot assembly-koodissa
-
-#### Pikselin osoitteen laskenta
-
-Pikseli `(x, y)`:
-
-```
-pankki         = (y * 128 + x / 5) / 8192
-pankkisisäinen = (y * 128 + x / 5) mod 8192
-bitti-siirtymä = (x mod 5) * 3
-osoite         = $2000 + pankkisisäinen
-```
-
-Pikselivärin lukeminen (3 bittiä):
-
-```
-arvo = (GVRAM[osoite] >> bitti-siirtymä) & 0x7
-```
-
-#### Assembly-esimerkki: pikselin asettaminen
+Näyttötilarekisteri `$FF80` asetetaan arvoon **2**:
 
 ```asm
-; Aseta pikseli (x=10, y=5) väriksi punainen (1)
-; Laske: sanaindeksi = 5*128 + 10/5 = 640 + 2 = 642
-;        pankki = 642 / 8192 = 0
-;        pankkisisäinen = 642 mod 8192 = 642
-;        bitti-siirtymä = (10 mod 5) * 3 = 0
-
-LOAD R0, #0
-STORE R0, [$FF81]       ; GBANK = 0
-
-LOAD R1, #0x2000        ; GVRAM-ikkunan alku
-LOAD R2, #642           ; pankkisisäinen osoite
-ADD R1, R2              ; R1 = $2000 + 642
-
-LOAD R3, [R1]           ; lue nykyinen sana
-AND R3, #0xFFF8         ; tyhjennä bitit 2-0 (pikseli 0:n paikka)
-OR  R3, #1              ; aseta väri = punainen (1)
-STORE R3, [R1]          ; kirjoita takaisin
+LOAD R0, #2
+LOAD R1, #0xFF80    ; näyttötilarekisteri
+STORE R0, [R1]      ; kytke braille-tila päälle
 ```
 
----
+### 6.6 TUI-widgetin toiminta (tila C)
 
-### 6.6 Textual-renderöinti: skaalaus 640 × 480 → 80 × 48
-
-640 × 480 pikseliä ei voi näyttää suoraan terminaalissa — terminaalin
-käytännöllinen maksimikoko on noin 200 × 50 merkkiä. Ratkaisu on
-**lähimmän naapurin skaalaus** (nearest-neighbor) loogisesta framebufferista
-Textual-widgetin `render_line()`-metodissa:
-
-```
-Horisontaalinen skaalaus: 640 / 80 = 8 (jokainen terminaalipikseliä = 8 loogista pikseliä)
-Vertikaalinen skaalaus:   480 / 48 = 10 (jokainen half-block rivi = 10 loogista pikseliä)
-```
+`ScreenDevice`-widget lukee VRAM-sanan alemman tavun (bitit 7–0) ja
+muodostaa braille-merkin:
 
 ```python
-class GfxScreen640x480(Widget):
-    """Textual-widget, joka renderöi 640×480 GVRAM:n skaalatusti 80×24-terminaaliin."""
-
-    def render_line(self, y: int) -> Strip:
-        # y = terminaalin rivi 0..23; yksi rivi = 2 half-block pikseliä
-        top_row = y * 20       # Ylempi puolikas: looginen pikselirivi (480 / 24 = 20)
-        bot_row = y * 20 + 10  # Alempi puolikas: 10 riviä alempana
-
-        segments = []
-        for x in range(80):
-            px_col = x * 8     # 640 / 80 = 8 loogista pikseliä per sarake
-
-            top_color = self._read_gvram_pixel(px_col, top_row)
-            bot_color = self._read_gvram_pixel(px_col, bot_row)
-
-            style = Style(
-                color=_PALETTE[top_color],
-                bgcolor=_PALETTE[bot_color],
-            )
-            segments.append(Segment("▀", style))
-        return Strip(segments)
-
-    def _read_gvram_pixel(self, x: int, y: int) -> int:
-        """Lue pikseliväri (0-7) GVRAM:sta."""
-        word_idx = y * 128 + x // 5       # 128 sanaa/rivi
-        bit_shift = (x % 5) * 3           # 3 bittiä/pikseli
-        bank = word_idx // 8192
-        offset = word_idx % 8192
-        addr = 0x2000 + offset
-        # Valitse pankki ja lue muistista
-        self._machine.memory.write(0xFF81, bank)
-        word = self._machine.memory.read(addr)
-        return (word >> bit_shift) & 0x7
+braille_char = chr(0x2800 + (vram_word & 0xFF))
 ```
 
-Tuloksena koko 640 × 480 framebuffer esitetään 80 × 24 merkkiruudussa
-(80 × 48 half-block pikseliä), jossa jokainen näyttöpiste vastaa
-8 × 10 loogista pikseliä.
+---
+
+## 7. Näyttötilarekisteri ($FF80)
+
+Kaikki tilat valitaan kirjoittamalla muistiosoitteeseen `$FF80`:
+
+| Arvo | Tila                         | Resoluutio        |
+| ---- | ---------------------------- | ----------------- |
+| 0    | A — Tekstitila (oletustila)  | 80 × 24 merkkiä   |
+| 1    | B — Puoliblokkipikseli       | 80 × 48 pikseliä  |
+| 2    | C — Braille                  | 160 × 96 pikseliä |
+
+Textual-widget tarkistaa tämän osoitteen `refresh()`-kutsun yhteydessä ja
+valitsee renderöintitavan sen mukaan. Muistikartassa ei tapahdu muutoksia
+tilaa vaihdettaessa — kaikki tilat käyttävät samaa VRAM-aluetta $F800–$FF7F.
 
 ---
 
-### 6.7 Tarvittavat arkkitehtuurimuutokset yhteenveto
+## 8. Yhteenveto
 
-| Muutos                     | Tyyppi               | Kuvaus |
-| -------------------------- | -------------------- | ------ |
-| **GVRAM-puskuri**          | Emulaattori (Python) | 65 536 sanan erillinen taulukko `Machine`-luokkaan |
-| **GBANK-rekisteri**        | CPU / muistikartta   | Muistikartattu `$FF81`: valitsee aktiivisen 8 192 sanan GVRAM-pankin 0–7 |
-| **GMODE-rekisteri**        | CPU / muistikartta   | Muistikartattu `$FF80`: `0` = tekstitila, `1` = 640×480 grafiikkatila |
-| **Pankkikytkentä `Memory`-luokassa** | Emulaattori | `read()`/`write()` tarkistaa `$2000–$3FFF`: osoite ohjataan `gvram[GBANK * 8192 + offset]` |
-| **`ScreenDevice`-päivitys** | Python / TUI        | Uusi `render_pixel_mode_640()` -metodi, joka kutsuu `render_line()` + skaalaus 8×10 |
-| **Textual-widget**         | TUI (`tui.py`)       | `GfxScreen640x480` toteuttaa `render_line(y)` + `_read_gvram_pixel()` |
-| **Uusi näppäinsidos**      | TUI                  | F8 tai `Ctrl+G`: vaihda tekstitila ↔ 640×480 grafiikkatila |
-| **Assembly-vakiot**        | `constants.py`       | `GVRAM_WINDOW`, `GVRAM_BANK_SIZE`, `GMODE_ADDR`, `GBANK_ADDR` |
+| Kriteeri              | A — Tekstitila     | B — Puoliblokkipikseli | C — Braille          |
+| --------------------- | ------------------ | ---------------------- | -------------------- |
+| Resoluutio            | 80 × 24 merkkiä    | 80 × 48 pikseliä       | 160 × 96 pikseliä    |
+| Värisyvyys/pikseli    | 8 FG + 8 BG        | 1 bitti                | 1 bitti              |
+| VRAM-tarve            | 1 920 sanaa        | 1 920 sanaa            | 1 920 sanaa          |
+| Muistikarttamuutos    | —                  | Ei                     | Ei                   |
+| ISA-muutos            | —                  | Ei                     | Ei                   |
+| Näyttötilarekisteri   | $FF80 = 0          | $FF80 = 1              | $FF80 = 2            |
+| Unicode-tekniikka     | ASCII/CP437        | ▀ ▄ █ (U+2580–U+2588)  | U+2800–U+28FF        |
+| Pikseleitä/merkkiruutu| 1 merkki           | 2 (1 × 2)              | 8 (2 × 4)            |
+| Toteutuksen monimutkaisuus | Käytössä      | Matala                 | Kohtalainen          |
 
-Yksikään muutos ei edellytä ISA:n laajentamista uusilla konekielen käskyillä —
-kaikki kontrolli tapahtuu muistikartattujen rekisterien (`$FF80`, `$FF81`)
-kautta, joihin voidaan kirjoittaa tavallisilla `LOAD`/`STORE`-käskyillä.
+Kaikki kolme tilaa käyttävät täsmälleen samaa 1 920 sanan VRAM-aluetta
+($F800–$FF7F). Tilan valinta tapahtuu yksinomaan näyttötilarekisterin
+(`$FF80`) arvolla ilman muistikarttatmuutoksia tai uusia konekielen käskyjä.
+Grafiikkatilat B ja C ovat **yksivärisisiä**: jokainen pikseli on 1-bittinen
+(päällä tai pois).
 
----
-
-## 7. Yhteenveto
-
-| Kriteeri              | Perustoteutus (puoliblokkipikseli) | 640 × 480 Textual-toteutus                  |
-| --------------------- | ---------------------------------- | ------------------------------------------- |
-| Resoluutio            | 80 × 48 pikseliä                   | 640 × 480 pikseliä (looginen framebuffer)   |
-| Terminaalinäyttö      | 80 × 24 merkkiä                    | 80 × 24 merkkiä (skaalattu 8×10)            |
-| Värisyvyys            | 8 väriä per pikseli                | 8 väriä per pikseli (sama 3-bittinen paletti) |
-| VRAM-tarve            | 1 920 sanaa ($F800–$FF7F)          | 61 440 sanaa (8 pankkia à 8 192)            |
-| Muistikarttamuutos    | Ei (sama VRAM)                     | GVRAM-ikkuna $2000–$3FFF + GBANK $FF81      |
-| ISA-muutos            | Ei                                 | Ei (muistikartattu ohjaus)                  |
-| Uudet vakiot          | GMODE_ADDR ($FF80)                 | + GBANK_ADDR ($FF81), GVRAM_BANK_SIZE       |
-| Textual-mekanismi     | `render_line()` + `Strip`          | `render_line()` + skaalaus 8×10 + GBANK     |
-| Toteutuksen monimutkaisuus | Matala                        | Kohtalainen                                 |
-
-Textual-kirjasto mahdollistaa tehokkaan pikseligrafiikan toteuttamisen
-Unicode-puoliblokkiruuduin (`▀`) ja true-color -väreillä. Perustoteutuksena
-**80 × 48 pikseliä, 8 väriä** toimii nykyisen VRAM-rakenteen kanssa ilman
-muistikarttatmuutoksia. Täysi **640 × 480** on toteutettavissa pankkikytkennällä
-ja muistikartatuilla GMODE/GBANK-rekistereillä ilman uusia konekielen käskyjä —
-Textual skaalaa loogisen framebufferin 80 × 24 terminaalinäyttöön automaattisesti.
-
-Historiallinen vertailu (luku 6.1) osoittaa, että ehdotetut mekanismit ovat
-vakiintuneita: C64:n VIC-II-pankkikytkentä inspiroi GBANK-rekisteriä, ja
-BBC Micron kiinteä-muisti/vaihtuva-moodi -filosofia selittää, miksi
-**640 × 256 olisi toteutettavissa ilman pankkikytkentää** (32 768 sanaa).
-640 × 480 vaatii pankkikytkennän, koska se ylittää osoiteavaruuden yksittäisenä
-alueena (61 440 > 65 536 sanaa).
