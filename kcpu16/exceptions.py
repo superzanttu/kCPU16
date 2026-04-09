@@ -10,6 +10,7 @@ Poikkeushierarkia:
     |-- PrivilegeViolationError -> INT 4
     |-- MemoryAccessFaultError  -> INT 5
     |-- StackOverflowError      -> INT 2
+    |-- WriteProtectedError     -> INT 10
 
 Ei-virhepohjaiset keskeytykset (eivat kayta poikkeusluokkia):
     ZeroDivisionError (Python)  -> INT 0  (DIV-kaskyn jakaja = 0)
@@ -17,6 +18,7 @@ Ei-virhepohjaiset keskeytykset (eivat kayta poikkeusluokkia):
     INT 6 (Keyboard)            -- laitteistokeskeytys
     INT 7 (Timer)               -- ajastinkeskeytys
     INT 8 (Process Exit)        -- EXIT-kasky
+    INT 9 (Clock)               -- kellokeskeytys
 """
 
 
@@ -76,4 +78,16 @@ class StackOverflowError(KCPU16Error):
     koodi ei voi ylikirjoittaa jarjestelman muistia.
 
     Johtaa keskeytykseen INT 2 (Stack Overflow).
+    """
+
+
+class WriteProtectedError(KCPU16Error):
+    """
+    Heitetaan kun yritetaan kirjoittaa kirjoitussuojatulle muistialueelle.
+
+    Kirjoitussuojattuja alueita ovat esimerkiksi:
+    - Nappaimisto-MMIO ($0020-$0021): KBD_DATA ja KBD_STATUS ovat luku-vain
+    - Tulevaisuudessa: ROM-alueet
+
+    Johtaa keskeytykseen INT 10 (Write Protected).
     """

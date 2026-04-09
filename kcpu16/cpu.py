@@ -55,6 +55,7 @@ from .constants import (
     INT_PRIVILEGE_VIOLATION,
     INT_STACK_OVERFLOW,
     INT_TIMER,
+    INT_WRITE_PROTECTED,
     INT_VECTOR_COUNT,
     INT_VECTOR_BASE,
     KBD_DATA,
@@ -82,6 +83,7 @@ from .exceptions import (
     MemoryAccessFaultError,
     PrivilegeViolationError,
     StackOverflowError,
+    WriteProtectedError,
 )
 from .instruction import (
     DecodedInstruction,
@@ -223,6 +225,9 @@ class CPU:
         except StackOverflowError:
             # Pino meni MPR:n alle -> INT 2
             self._trigger_interrupt(INT_STACK_OVERFLOW)
+        except WriteProtectedError:
+            # Kirjoitusyritys kirjoitussuojatulle alueelle (MMIO/ROM) -> INT 10
+            self._trigger_interrupt(INT_WRITE_PROTECTED)
 
     def run(self, max_cycles: int | None = None) -> None:
         """
@@ -923,9 +928,8 @@ class CPU:
         # Muut kellolohkon osoitteet ovat vain luettavia — ohita hiljainen kirjoitus
         if CLOCK_MMIO_START <= addr <= CLOCK_MMIO_END:
             return
-        # Nappaimisto-MMIO on vain luettava — ohita hiljainen kirjoitus
-        if KBD_MMIO_START <= addr <= KBD_MMIO_END:
-            return
+        # KBD-MMIO ($0020-$0021) on kirjoitussuojattu — memory.write() heittaa
+        # WriteProtectedError jos osoite osuu suojatulle alueelle
         self.memory.write(addr, value)
 
     def _read_clock_mmio(self, addr: int) -> int:
