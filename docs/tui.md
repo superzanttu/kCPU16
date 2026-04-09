@@ -8,18 +8,14 @@ Se on inspiroitu MARS/RARS-, GDB TUI-, Turbo Debugger- ja emu8086-ohjelmistoista
 # 1. Asettelu
 
 ```
-┌─────────────────────────────────────────────────────────────────────────┐
-│ Toolbar                                                                 │
-├──────────────┬──────────────────────┬──────────────────────────────────┤
-│ Screen       │ Disassembly          │ Editor                           │
-│ (80×24 VRAM) │ [Disassembly|        │                                  │
-│              │  Memory|Stack]       │                                  │
-├──────────────┴──────────────────────┤                                  │
-│ Output                              │                                  │
-│                                     │                                  │
-├─────────────────────────────────────┼──────────────────┬───────────────┤
-│ Input                               │ Flags            │ Registers     │
-└─────────────────────────────────────┴──────────────────┴───────────────┘
+┌──────────────────────────────────────────────────────────────────────────────────────────────────┐
+│ Toolbar: Load | Assemble ^B | Step F7 | Full F5 | Slow F6 | Stop F8 | Reset ^R | BP F2 | ...    │
+├────────────────────────────┬─────────────────────────────────────────────────────────────────────┤
+│ Screen (80×24 VRAM)        │ [Disassembly | Memory | Stack]                                      │
+│                            │ ●=breakpoint  ▶=nykyinen PC                                        │
+├────────────────────────────┴─────────────────────────────────────────────────────────────────────┤
+│ Flags / CPU-tila    │ Registers (R0–R15, FP, SP …)    │ Output (loki + > komentosyöte)          │
+└─────────────────────┴─────────────────────────────────┴─────────────────────────────────────────┘
 ```
 
 ---
@@ -42,28 +38,18 @@ Kolme välilehteä:
 
 Ikkunan korkeus säätyy automaattisesti, sisältö skrollautuu pystysuunnassa.
 
-## Output
-Komentojen tulosteet ja lokitiedot. Yhtä leveä kuin Screen- ja Disassembly-ikkunat yhteensä.
-Sisältö skrollautuu pystysuunnassa.
-
-## Input
-Komentorivikehote (`>`). Sijaitsee terminaalin alareunassa.
-Kiinteästi yksi rivi korkea, ei reunusta.
-
 ## Flags
-Prosessorin tilarekisterin liput (Z/N/C/V/I/P) ja CPU:n tila (READY / HALTED / EXITED / RUNNING).
-Muuttuneet rekisteriarvot korostetaan punaisella.
+Prosessorin tilarekisterin liput (Z/N/C/V/I/P) ja CPU:n tila (STOPPED / RUNNING / HALTED / EXITED).
 Kiinteä koko, ei skrollattava.
 
 ## Registers
-Kaikkien rekisterien arvot (R0–R3, FP, SP, PC, SR, MPR, TMR).
+Kaikkien rekisterien arvot: R0–R15 (yleiskäyttöiset), FP, SP, PC, SR, MPR, TMR, CTMR.
+Muuttuneet arvot korostetaan punaisella.
 Kiinteä koko, ei skrollattava.
-Flags- ja Registers-ikkunat ovat yhteensä yhtä leveitä kuin Editor-ikkuna.
 
-## Editor
-Muokattava assembly-koodieditori rivinumeroin ja syntaksivärityksin.
-Täyttää terminaalista jäljelle jäävän tilan.
-Sisältö skrollautuu pystysuunnassa.
+## Output
+Komentojen tulosteet ja lokitiedot. Sijaitsee alarivillä Flagsin ja Registersin oikealla puolella.
+Sisältö skrollautuu pystysuunnassa. Alareunassa komentorivisyöte (`>`).
 
 ---
 
@@ -73,12 +59,13 @@ Sisältö skrollautuu pystysuunnassa.
 | -------- | ------------------------------------ |
 | F1       | Ohje                                 |
 | F2       | Vaihda breakpoint nykyisellä rivillä |
-| F5       | Run (pysähtyy breakpointiin)         |
+| F5       | Aja täydellä nopeudella              |
+| F6       | Aja hitaalla nopeudella              |
 | F7 / F10 | Step (1 käsky kerrallaan)            |
+| F8       | Pysäytä ajo                          |
 | F9       | Tyhjennä VRAM                        |
 | Ctrl+B   | Assembloi koodi                      |
 | Ctrl+O   | Avaa tiedosto                        |
-| Ctrl+S   | Tallenna tiedosto                    |
 | Ctrl+R   | Reset kone                           |
 | Ctrl+Q   | Lopeta                               |
 
@@ -90,26 +77,32 @@ TUI:n syöttökentästä (`>`) voidaan antaa seuraavat komennot:
 
 | Komento                       | Kuvaus                                       |
 | ----------------------------- | -------------------------------------------- |
-| `step` / `s`                  | Suorita yksi käsky                           |
-| `run` / `r`                   | Aja ohjelmaa (pysähtyy breakpointiin/HALT)   |
+| `step [n]`                    | Suorita 1 tai n käskyä                       |
+| `run [n]`                     | Aja ohjelmaa (pysähtyy breakpointiin/HALT)   |
 | `stop`                        | Keskeytä ajaminen                            |
-| `reset`                       | Nollaa kone                                  |
-| `restart`                     | Kääntää koodin uudelleen ja nollaa koneen    |
-| `asm`                         | Käännä editorin koodi (= Ctrl+B)             |
+| `reset`                       | Nollaa muisti + CPU (storage säilyy)         |
+| `reset deep`                  | Nollaa muisti + CPU + storage                |
+| `reset cpu`                   | Nollaa vain CPU (muisti säilyy)              |
+| `restart`                     | Käännä uudelleen ja aloita alusta            |
+| `asm`                         | Assembloi ladattu tiedosto (= Ctrl+B)        |
 | `check`                       | Tarkista syntaksi ilman lataamista           |
+| `load <tiedosto>`             | Lataa .asm-tiedosto ja assembloi             |
 | `bp <addr>`                   | Lisää/poista breakpoint osoitteessa          |
-| `mem <addr>`                  | Näytä muisti osoitteesta                     |
+| `bp list`                     | Listaa kaikki breakpointit                   |
+| `bp clear`                    | Poista kaikki breakpointit                   |
+| `mem <addr> [count]`          | Näytä muisti osoitteesta                     |
 | `mset <addr> <val>`           | Kirjoita arvo muistiosoitteeseen             |
 | `mfill <addr> <count> <val>`  | Täytä muistialue vakioarvolla                |
 | `disk <block>`                | Näytä tallennuslaitteen blokki               |
+| `disk load <polku>`           | Lataa .dsk-levykuva tallennuslaitteeseen     |
+| `disk save [polku]`           | Tallenna tallennuslaite .dsk-tiedostoon      |
 | `dset <block> <offset> <val>` | Kirjoita arvo blokkiin                       |
 | `dfill <block> <val>`         | Täytä koko blokki vakioarvolla               |
 | `mem2disk <addr> <block>`     | Kopioi muistista yhden blokin verran levylle |
 | `disk2mem <block> <addr>`     | Kopioi levyblokki muistiin                   |
-| `load <tiedosto>`             | Lataa .asm-tiedosto editoriin                |
-| `save <tiedosto>`             | Tallenna editorin sisältö tiedostoon         |
 | `cls`                         | Tyhjennä VRAM-näyttö                         |
 | `spec`                        | Näytä arkkitehtuurispesifikaatio             |
+| `version`                     | Näytä versiotiedot                           |
 | `help`                        | Näytä komentojen ohjeet                      |
 
 ---

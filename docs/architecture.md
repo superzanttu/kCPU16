@@ -105,15 +105,17 @@ SR on 16-bittinen, josta bitit 0–5 ovat käytössä.
 
 # 4. Muistikartta
 
-| Osoitealue    | Koko         | Kuvaus                          |
-| ------------- | ------------ | ------------------------------- |
-| $0000 – $000F | 16 sanaa     | Keskeytysvektoritaulukko        |
-| $0010 – $001F | 16 sanaa     | Kellokello MMIO (vain luettava) |
-| $0020 – $00FF | 224 sanaa    | Käyttöjärjestelmän varattu alue |
-| $0100 – $01FF | 256 sanaa    | Bootloaderin latausalue         |
-| $0200 – $F7FF | 62 464 sanaa | Vapaa RAM (ohjelmat ja data)    |
-| $F800 – $FF7F | 1920 sanaa   | Video RAM (80 × 24, MMIO)       |
-| $FF80 – $FFFF | 128 sanaa    | Kernel Stack                    |
+| Osoitealue    | Koko         | Kuvaus                                                      |
+| ------------- | ------------ | ----------------------------------------------------------- |
+| $0000 – $000F | 16 sanaa     | Keskeytysvektoritaulukko                                    |
+| $0010 – $001F | 16 sanaa     | Kellokello MMIO (vain luettava, paitsi $001B kirjoitettava) |
+| $0020 – $0021 | 2 sanaa      | Näppäimistö MMIO (KBD_DATA, KBD_STATUS)                     |
+| $0022         | 1 sana       | Satunnaisluku MMIO (RAND_MMIO, LFSR)                        |
+| $0023 – $00FF | 221 sanaa    | Käyttöjärjestelmän varattu alue                             |
+| $0100 – $01FF | 256 sanaa    | Bootloaderin latausalue                                     |
+| $0200 – $F7FF | 62 464 sanaa | Vapaa RAM (ohjelmat ja data)                                |
+| $F800 – $FF7F | 1920 sanaa   | Video RAM (80 × 24, MMIO)                                   |
+| $FF80 – $FFFF | 128 sanaa    | Kernel Stack                                                |
 
 ## 4.1 Keskeytysvektoritaulukko ($0000–$000F)
 
@@ -130,12 +132,14 @@ Jokainen vektoripaikka sisältää keskeytyskäsittelijän muistiosoitteen.
 | 6       | $0006       | Näppäimistökeskeytys         |
 | 7       | $0007       | Ajastinkeskeytys             |
 | 8       | $0008       | Prosessin lopetus (EXIT)     |
-| 9–15    | $0009–$000F | Varattu tulevaisuutta varten |
+| 9       | $0009       | Kellokeskeytys (CTMR)        |
+| 10–15   | $000A–$000F | Varattu tulevaisuutta varten |
 
 ## 4.1b Kellokello MMIO ($0010–$001F)
 
-Osoitteet ovat vain luettavia lukuun ottamatta $001B (CTMR-kirjoitus).
+Osoitteet ovat vain luettavia lukuun ottamatta $001B (kirjoitus asettaa CTMR-arvon).
 Lukeminen palauttaa reaaliaikaisen järjestelmäkellon arvon.
+Uptime-laskuri on 64-bittinen sekuntilaskuri jaettuna neljään 16-bittiseen sanaan (MSW ensin).
 
 | Osoite      | Vakio              | Kuvaus                                                     |
 | ----------- | ------------------ | ---------------------------------------------------------- |
@@ -146,12 +150,38 @@ Lukeminen palauttaa reaaliaikaisen järjestelmäkellon arvon.
 | $0014       | CLOCK_MINUTE       | Minuutti (0–59)                                            |
 | $0015       | CLOCK_SECOND       | Sekunti (0–59)                                             |
 | $0016       | CLOCK_MILLIS       | Millisekunti (0–999)                                       |
-| $0017       | UPTIME_W3          | Varattu (aina 0, 32-bit uptime ei käytä)                   |
-| $0018       | UPTIME_W2          | Varattu (aina 0, 32-bit uptime ei käytä)                   |
-| $0019       | UPTIME_W1          | 32-bit sekuntilaskuri bitit 16–31 (korkea)                 |
-| $001A       | UPTIME_W0          | 32-bit sekuntilaskuri bitit 0–15 (matala)                  |
+| $0017       | UPTIME_W3          | 64-bit sekuntilaskuri bitit 48–63 (korkein)                |
+| $0018       | UPTIME_W2          | 64-bit sekuntilaskuri bitit 32–47                          |
+| $0019       | UPTIME_W1          | 64-bit sekuntilaskuri bitit 16–31                          |
+| $001A       | UPTIME_W0          | 64-bit sekuntilaskuri bitit 0–15 (matalin)                 |
 | $001B       | CLOCK_INT_INTERVAL | CTMR: kellokeskeytyksen väli ms (0 = pois, luku/kirjoitus) |
 | $001C–$001F | —                  | Varattu                                                    |
+
+## 4.1c Näppäimistö MMIO ($0020–$0021)
+
+| Osoite | Vakio      | Kuvaus                                                                  |
+| ------ | ---------- | ----------------------------------------------------------------------- |
+| $0020  | KBD_DATA   | Lue: pops seuraava näppäintapahtuma puskurista (0 jos puskuri on tyhjä) |
+| $0021  | KBD_STATUS | Lue: tapahtumien määrä puskurissa (0 = tyhjä)                           |
+
+**Skannikoodin rakenne (KBD_DATA):**
+
+| Bitit | Kuvaus                                         |
+| ----- | ---------------------------------------------- |
+| 6–0   | Näppäinkoodi (ASCII-arvo tai scan code, 0–127) |
+| 7     | 0 = painallus, 1 = vapautus                    |
+
+Esimerkki: `A` painetaan → KBD_DATA = 0x41; `A` vapautetaan → KBD_DATA = 0xC1.
+Keskeytys **Int 6** laukeaa jokaisesta painalluksesta ja vapautuksesta (kun `I = 1`).
+
+## 4.1d Satunnaisluku MMIO ($0022)
+
+| Osoite | Vakio     | Kuvaus                                                                |
+| ------ | --------- | --------------------------------------------------------------------- |
+| $0022  | RAND_MMIO | Lue: seuraava 16-bittinen pseudosatunnaisluku; kirjoita: aseta siemen |
+
+Toteutus: 16-bittinen Galois LFSR, polynomi x¹⁶+x¹⁵+x¹³+x⁴+1 (mask 0xB400). Jakso 65 535.
+Kirjoittaminen asettaa siemenen (arvo 0 nollataan arvoon 1 automaattisesti).
 
 ## 4.2 Video RAM ($F800–$FF7F)
 
@@ -212,8 +242,8 @@ Tämä palauttaa automaattisesti edellisen suojaustilan (User/Kernel) ja keskeyt
 | Virhepoikkeukset | 0–2     | Automaattinen: DIV/0, tuntematon opcode, stack overflow |
 | Ohjelmistokesk.  | 3, 8    | `INT`-käskyllä tai `EXIT`-käskyllä                      |
 | Suojausvirheet   | 4–5     | Automaattinen: käsky- tai muistisuojausrikkomus         |
-| Laitekesk.       | 6–7     | Laitteiston laukaisema (näppäimistö, käskylaskuri)       |
-| Kellokeskeytys   | 9       | Reaaliaikatimer (CTMR ms-väli, `SCTMR`-käsky)          |
+| Laitekesk.       | 6–7     | Laitteiston laukaisema (näppäimistö, käskylaskuri)      |
+| Kellokeskeytys   | 9       | Reaaliaikatimer (CTMR ms-väli, `SCTMR`-käsky)           |
 | Varattu          | 10–15   | Tulevaisuuden käyttöön                                  |
 
 ## 5.4 Ajastinkeskeytys (TMR)
@@ -244,9 +274,9 @@ Jokainen `step()` suorittaa yhden käskyn seuraavassa järjestyksessä:
 | 3     | MEMORY    | Tarkista muistiviittausten laillisuus (User: addr < MPR → Int 5) |
 | 4     | EXECUTE   | Suorita käsky, päivitä rekisterit ja liput                       |
 | 5     | PC UPDATE | PC ← PC + käskyn sanamäärä                                       |
-| 6     | TIMER     | Tarkista ja laukaise ajastinkeskeytys (TMR) tarvittaessa       |
-| 7     | UPTIME    | Kasvata 32-bittista sekuntilaskuria tarvittaessa               |
-| 8     | CLOCK INT | Tarkista ja laukaise kellokeskeytys (CTMR) tarvittaessa        |
+| 6     | TIMER     | Tarkista ja laukaise ajastinkeskeytys (TMR) tarvittaessa         |
+| 7     | UPTIME    | Kasvata 64-bittista sekuntilaskuria tarvittaessa                 |
+| 8     | CLOCK INT | Tarkista ja laukaise kellokeskeytys (CTMR) tarvittaessa          |
 
 Jos vaiheissa 2–3 tapahtuu virhe, suoritetaan vastaava keskeytys eikä vaiheita 4–6 tehdä.
 
@@ -256,13 +286,13 @@ Jos vaiheissa 2–3 tapahtuu virhe, suoritetaan vastaava keskeytys eikä vaiheit
 
 ## 7.1 Operandityypit
 
-| Merkintä | Kuvaus                                                               |
-| -------- | -------------------------------------------------------------------- |
-| `reg`    | Rekisteri: R0, R1, R2, R3, FP, SP (koodattu 3-bittisellä indeksillä) |
-| `regD`   | Kohderekisteri (destination)                                         |
-| `regS`   | Lähderekisteri (source)                                              |
-| `imm`    | 16-bittinen välitön arvo (immediate)                                 |
-| `addr`   | 16-bittinen absoluuttinen muistiosoite                               |
+| Merkintä | Kuvaus                                                                     |
+| -------- | -------------------------------------------------------------------------- |
+| `reg`    | Rekisteri: R0–R15, FP, SP (koodattu 5-bittisellä indeksillä, R0=0 … SP=17) |
+| `regD`   | Kohderekisteri (destination)                                               |
+| `regS`   | Lähderekisteri (source)                                                    |
+| `imm`    | 16-bittinen välitön arvo (immediate)                                       |
+| `addr`   | 16-bittinen absoluuttinen muistiosoite                                     |
 
 Käskyissä kohde (destination) on aina **ensimmäisenä** ja lähde (source) **toisena**.
 
@@ -312,16 +342,21 @@ Käskyn koko sanoina on `1 + OPS` (opcode-sana + operandisanat).
 
 ## 7.4 Tiedonsiirtokäskyt
 
-| Opcode | Käsky     | Operandit  | Tila | Liput | Kuvaus             |
-| ------ | --------- | ---------- | ---- | ----- | ------------------ |
-| 0x1080 | LOAD      | reg, imm   | U    | —     | `reg ← imm`        |
-| 0x1180 | CPY       | regD, regS | U    | —     | `regD ← regS`      |
-| 0x1280 | READ      | reg, addr  | U    | —     | `reg ← [addr]`     |
-| 0x1380 | STORE     | reg, addr  | U    | —     | `[addr] ← reg`     |
-| 0x1480 | READ_IND  | regD, regS | U    | —     | `regD ← [regS]`    |
-| 0x1580 | STORE_IND | regD, regS | U    | —     | `[regD] ← regS`    |
-| 0x1680 | READ_REL  | reg, imm   | U    | —     | `reg ← [FP + imm]` |
-| 0x1780 | STORE_REL | reg, imm   | U    | —     | `[FP + imm] ← reg` |
+| Opcode | Käsky      | Operandit  | Tila | Liput | Kuvaus              |
+| ------ | ---------- | ---------- | ---- | ----- | ------------------- |
+| 0x1080 | LOAD       | reg, imm   | U    | —     | `reg ← imm`         |
+| 0x1180 | CPY        | regD, regS | U    | —     | `regD ← regS`       |
+| 0x1280 | READ       | reg, addr  | U    | —     | `reg ← [addr]`      |
+| 0x1380 | STORE      | reg, addr  | U    | —     | `[addr] ← reg`      |
+| 0x1480 | READ_IND   | regD, regS | U    | —     | `regD ← [regS]`     |
+| 0x1580 | STORE_IND  | regD, regS | U    | —     | `[regD] ← regS`     |
+| 0x1680 | READ_REL   | reg, imm   | U    | —     | `reg ← [FP + imm]`  |
+| 0x1780 | STORE_REL  | reg, imm   | U    | —     | `[FP + imm] ← reg`  |
+| 0x1880 | STOREI     | imm, addr  | U    | —     | `[addr] ← imm`      |
+| 0x1980 | STOREI_IND | regD, imm  | U    | —     | `[regD] ← imm`      |
+| 0x1A80 | STOREI_REL | imm, offs  | U    | —     | `[FP + offs] ← imm` |
+
+> **Huom:** Assemblerissa käytetään `LOAD`- ja `STORE`-käskyistä `[...]`-hakasulkunotaatiota. Assembler valitsee oikean konekielikäskyn (READ/STORE/READ_IND/STORE_IND/READ_REL/STORE_REL/STOREI jne.) automaattisesti syntaksin perusteella. Suoria `READ_IND`, `STORE_REL` jne. -mnemoniikkita ei suositella kirjoittaa käsin.
 
 **LOAD** lataa 16-bittisen välittömän arvon (immediate) suoraan rekisteriin. Tämä on ainoa tapa saada vakioarvo rekisteriin. Käsky on 3 sanaa pitkä: opcode, rekisteri-indeksi ja 16-bittinen arvo.
 
@@ -463,15 +498,17 @@ Käytetään CMP-käskyn jälkeen. Etumerkillinen vertailu perustuu N- ja V-lipp
 
 ## 7.10 Järjestelmä- ja I/O-käskyt
 
-| Opcode | Käsky  | Operandit  | Tila | Liput | Kuvaus                                |
-| ------ | ------ | ---------- | ---- | ----- | ------------------------------------- |
-| 0xF180 | DREAD  | regD, regS | K    | —     | `regD ← storage[regS]`                |
-| 0xF280 | DWRITE | regS, regD | K    | —     | `storage[regD] ← regS`                |
-| 0xF340 | SMPR   | reg        | K    | —     | `MPR ← reg`                           |
-| 0xF440 | STMR   | reg        | K    | —     | `TMR ← reg`                           |
-| 0x7640 | KGET   | reg        | U    | —     | `reg ← keyboard_buffer` (0 jos tyhjä) |
-| 0x7780 | TSL    | reg, addr  | U    | ZN——  | `reg ← [addr]; [addr] ← 1` (atominen) |
-| 0x7F00 | NOP    | —          | U    | —     | Ei tee mitään                         |
+| Opcode | Käsky  | Operandit  | Tila | Liput | Kuvaus                                                |
+| ------ | ------ | ---------- | ---- | ----- | ----------------------------------------------------- |
+| 0xF180 | DREAD  | regD, regS | K    | —     | `regD ← storage[regS]`                                |
+| 0xF280 | DWRITE | regS, regD | K    | —     | `storage[regD] ← regS`                                |
+| 0xF340 | SMPR   | reg        | K    | —     | `MPR ← reg`                                           |
+| 0xF440 | STMR   | reg        | K    | —     | `TMR ← reg`                                           |
+| 0xF540 | SCTMR  | reg        | K    | —     | `CTMR ← reg` (kellokeskeytyksen väli millisekunteina) |
+| 0x7780 | TSL    | reg, addr  | U    | ZN——  | `reg ← [addr]; [addr] ← 1` (atominen)                 |
+| 0x7F00 | NOP    | —          | U    | —     | Ei tee mitään                                         |
+
+> **Näppäimistön lukeminen:** Ei erillinen käsky. Luetaan MMIO-osoitteesta `READ reg, [KBD_DATA]` (0x0020). Ks. kohta 4.1c.
 
 **DREAD** (Device Read) lukee yhden sanan tallennuslaitteelta (block device). Lähderekisteri sisältää lukuosoitteen tallennuslaitteen muistiavaruudessa (0x0000–0xFFFF), ja luettu arvo tallennetaan kohderekisteriin. Käytetään käyttöjärjestelmän bootloaderissa ja levyoperaatioissa. Vaatii Kernel-tilan.
 
@@ -481,7 +518,7 @@ Käytetään CMP-käskyn jälkeen. Etumerkillinen vertailu perustuu N- ja V-lipp
 
 **STMR** (Set TMR) asettaa ajastinrekisterin (Timer Register) arvon. TMR määrittää, kuinka monen käskyn välein ajastinkeskeytys (Int 7) laukeaa. Arvo 0 kytkee ajastimen pois päältä. Käytetään preemptiivisen moniajon toteuttamiseen: käyttöjärjestelmä asettaa aikavälin, ja ajastinkeskeytys pakottaa prosessinvaihdon tasaisin välein. Vaatii Kernel-tilan.
 
-**KGET** (Keyboard Get) lukee yhden merkin näppäimistön FIFO-puskurista rekisteriin. Jos puskuri on tyhjä, rekisteriin asetetaan 0. Käytetään tyypillisesti näppäimistökeskeytyksen (Int 6) käsittelijässä lukemaan painettu näppäin. Sallittu User-tilassa.
+**SCTMR** (Set Clock Timer Register) asettaa kellokeskeytysrekisterin arvon millisekunteina. Kun CTMR ms on kulunut, laukeaa Int 9 (jos I = 1). Arvo 0 kytkee kellokeskeytyksen pois päältä. Asetetaan vain Kernel-tilassa. Vastaava MMIO-osoite on `CLOCK_INT_INTERVAL` ($001B).
 
 **TSL** (Test and Set Lock) suorittaa atomisen luku-ja-kirjoitusoperaation: lukee muistiosoitteen arvon rekisteriin ja kirjoittaa samaan osoitteeseen arvon 1. Operaatio on jakamaton — keskeytys ei voi tapahtua lukemisen ja kirjoittamisen välissä. Päivittää Z- ja N-liput luetun arvon perusteella. Käytetään keskinäisen poissulkemisen (mutex) toteuttamiseen moniajossa: jos luettu arvo oli 0, lukko saatiin haltuun; jos 1, lukko oli jo varattu.
 
@@ -492,15 +529,24 @@ Käytetään CMP-käskyn jälkeen. Etumerkillinen vertailu perustuu N- ja V-lipp
 ## 8.1 Näppäimistö
 
 - Jonopohjainen FIFO-puskuri
-- Kun käyttäjä painaa näppäintä, ASCII-arvo lisätään jonoon ja CPU laukaisee **Int 6**
-- Keskeytysrutiini lukee näppäimen `KGET`-käskyllä
-- Jos jono on tyhjä, KGET palauttaa 0
+- Kun käyttäjä painaa tai vapauttaa näppäimen, tapahtuma lisätään jonoon ja CPU laukaisee **Int 6** (jos I = 1)
+- Keskeytysrutiini lukee näppäimen: `READ reg, [KBD_DATA]` (osoite $0020)
+  - Bits 6–0: näppäinkoodi; bitti 7: 0 = painallus, 1 = vapautus
+- Puskurin koko luetaan `READ reg, [KBD_STATUS]` ($0021)
+- Jos puskuri on tyhjä, KBD_DATA palauttaa 0
 
 ## 8.2 Tallennuslaite (Block Device)
 
-- Koko: 65 536 sanaa (0x0000–0xFFFF), kukin 16-bittinen
+- Koko: 256 blokkia × 256 sanaa = 65 536 sanaa (0x0000–0xFFFF), kukin 16-bittinen
 - Pääsy vain Kernel-tilassa `DREAD`- ja `DWRITE`-käskyillä
 - Käytetään käyttöjärjestelmän ja ohjelmien pysyvään tallennukseen
+
+## 8.3 Satunnaislukugeneraattori (RAND MMIO)
+
+- Osoite $0022 (`RAND_MMIO`): lukeminen palauttaa seuraavan 16-bittisen pseudosatunnaisluvun
+- Toteutus: 16-bittinen Galois LFSR, polynomi 0xB400, jakso 65 535
+- Kirjoittaminen asettaa siemenen (0 korvautuu arvolla 1 automaattisesti)
+- Sallittu sekä Kernel- että User-tilassa (READ reg, [RAND_MMIO])
 
 ---
 
@@ -537,68 +583,76 @@ Assembly-kielen syntaksi, direktiivit, arkkitehtuurivakiot ja käyttöesimerkit 
 
 ## 11.1 Kaikki käskyt aakkosellisesti järjestettynä
 
-| Opcode | Käsky     | Sanat | Kuvaus                                             |
-| ------ | --------- | ----- | -------------------------------------------------- |
-| 0x2580 | ADC       | 3     | Yhteenlasku carry:lla: regD = regD + regS + C      |
-| 0x2080 | ADD       | 3     | Yhteenlasku: regD = regD + regS                    |
-| 0x3080 | AND       | 3     | Bittitason JA-operaatio                            |
-| 0x5140 | CALL      | 2     | Kutsu aliohjelmaa (PUSH PC; PC = addr)             |
-| 0xE300 | CLI       | 1     | Estä keskeytykset (I = 0, Kernel-tila)             |
-| 0x2480 | CMP       | 3     | Vertailu: aseta liput regA - regB:n perusteella    |
-| 0x1180 | CPY       | 3     | Kopioi rekisterien arvot keskenään                 |
-| 0xF180 | DREAD     | 3     | Lue tallennuslaitteelta (Kernel-tila)              |
-| 0xF280 | DWRITE    | 3     | Kirjoita tallennuslaitteelle (Kernel-tila)         |
-| 0x2380 | DIV       | 3     | Kokonaislukujako: regD = regD ÷ regS               |
-| 0x7500 | EXIT      | 1     | Prosessin hallittu lopetus (Int 8)                 |
-| 0xF000 | HALT      | 1     | Pysäytä prosessori (Kernel-tila)                   |
-| 0x6040 | INT       | 2     | Laukaise ohjelmallinen keskeytys (0–8)             |
-| 0xE100 | IRET      | 1     | Paluu keskeytyksestä (POP SR; POP PC)              |
-| 0x5840 | JGE       | 2     | Hyppy jos suurempi tai yhtä suuri (N = V)          |
-| 0x5640 | JGT       | 2     | Hyppy jos suurempi (etumerkillinen, Z=0 ∧ N=V)     |
-| 0x5740 | JLE       | 2     | Hyppy jos pienempi tai yhtä suuri (Z=1 ∨ N≠V)      |
-| 0x5540 | JLT       | 2     | Hyppy jos pienempi (etumerkillinen, N ≠ V)         |
-| 0x5440 | JNZ       | 2     | Hyppy jos eri suuruinen (Z = 0), alias: JNE        |
-| 0x5340 | JZ        | 2     | Hyppy jos yhtä suuri (Z = 1), alias: JE            |
-| 0x5040 | JUMP      | 2     | Ehdoton hyppy (PC = addr)                          |
-| 0x7640 | KGET      | 2     | Lue näppäimistön puskurista                        |
-| 0x1080 | LOAD      | 3     | Lataa välitön arvo rekisteriin                     |
-| 0x2280 | MUL       | 3     | Kertolasku: regD = regD × regS                     |
-| 0x7F00 | NOP       | 1     | Ei tee mitään                                      |
-| 0x3340 | NOT       | 2     | Bittitason komplementti (käännä kaikki bitit)      |
-| 0x3180 | OR        | 3     | Bittitason TAI-operaatio                           |
-| 0x4140 | POP       | 2     | Hae arvo pinosta rekisteriin                       |
-| 0x4040 | PUSH      | 2     | Talleta rekisteri pinoon                           |
-| 0x1280 | READ      | 3     | Lue muistista absoluuttisesti                      |
-| 0x1480 | READ_IND  | 3     | Lue muistista epäsuorasti (osoitinta käyttäen)     |
-| 0x1680 | READ_REL  | 3     | Lue muistista FP-suhteellisesti                    |
-| 0x5200 | RET       | 1     | Palaa aliohjelmasta (POP PC)                       |
-| 0x3480 | SHL       | 3     | Looginen vasen siirto                              |
-| 0x3580 | SHR       | 3     | Looginen oikea siirto                              |
-| 0xF340 | SMPR      | 2     | Aseta muistisuojarekisteri (Kernel-tila)           |
-| 0x1380 | STORE     | 3     | Kirjoita muistiin absoluuttisesti                  |
-| 0x1580 | STORE_IND | 3     | Kirjoita muistiin epäsuorasti (osoitinta käyttäen) |
-| 0x1780 | STORE_REL | 3     | Kirjoita muistiin FP-suhteellisesti                |
-| 0xE200 | STI       | 1     | Salli keskeytykset (I = 1, Kernel-tila)            |
-| 0xF440 | STMR      | 2     | Aseta ajastinrekisteri (Kernel-tila)               |
-| 0x2180 | SUB       | 3     | Vähennyslasku: regD = regD - regS                  |
-| 0x4280 | SWSP      | 3     | Vaihda pinorekisteri atomisesti                    |
-| 0x7780 | TSL       | 3     | Atominen testi ja asetus (Test and Set Lock)       |
-| 0x3280 | XOR       | 3     | Bittitason poissulkeva TAI                         |
+| Opcode  | Käsky      | Sanat | Kuvaus                                              |
+| ------- | ---------- | ----- | --------------------------------------------------- |
+| 0x2580  | ADC        | 3     | Yhteenlasku carry:lla: regD = regD + regS + C       |
+| 0x2080  | ADD        | 3     | Yhteenlasku: regD = regD + regS                     |
+| 0x3080  | AND        | 3     | Bittitason JA-operaatio                             |
+| 0x5A00+ | CALLI      | var.  | Indeksoitu taulukkokutsu (PUSH PC; PC = addr[reg])  |
+| 0x5140  | CALL       | 2     | Kutsu aliohjelmaa (PUSH PC; PC = addr)              |
+| 0xE300  | CLI        | 1     | Estä keskeytykset (I = 0, Kernel-tila)              |
+| 0x2480  | CMP        | 3     | Vertailu: aseta liput regA - regB:n perusteella     |
+| 0x1180  | CPY        | 3     | Kopioi rekisterien arvot keskenään                  |
+| 0xF180  | DREAD      | 3     | Lue tallennuslaitteelta (Kernel-tila)               |
+| 0xF280  | DWRITE     | 3     | Kirjoita tallennuslaitteelle (Kernel-tila)          |
+| 0x2380  | DIV        | 3     | Kokonaislukujako: regD = regD ÷ regS                |
+| 0x7500  | EXIT       | 1     | Prosessin hallittu lopetus (Int 8)                  |
+| 0xF000  | HALT       | 1     | Pysäytä prosessori (Kernel-tila)                    |
+| 0x6040  | INT        | 2     | Laukaise ohjelmallinen keskeytys (0–9)              |
+| 0xE100  | IRET       | 1     | Paluu keskeytyksestä (POP SR; POP PC)               |
+| 0x5840  | JGE        | 2     | Hyppy jos suurempi tai yhtä suuri (N = V)           |
+| 0x5640  | JGT        | 2     | Hyppy jos suurempi (etumerkillinen, Z=0 ∧ N=V)      |
+| 0x5740  | JLE        | 2     | Hyppy jos pienempi tai yhtä suuri (Z=1 ∨ N≠V)       |
+| 0x5540  | JLT        | 2     | Hyppy jos pienempi (etumerkillinen, N ≠ V)          |
+| 0x5900+ | JMPI       | var.  | Indeksoitu taulukkohyppy: PC = addr[reg]            |
+| 0x5440  | JNZ        | 2     | Hyppy jos eri suuruinen (Z = 0), alias: JNE         |
+| 0x5340  | JZ         | 2     | Hyppy jos yhtä suuri (Z = 1), alias: JE             |
+| 0x5040  | JUMP       | 2     | Ehdoton hyppy (PC = addr)                           |
+| 0x1080  | LOAD       | 3     | Lataa välitön arvo rekisteriin                      |
+| 0x2280  | MUL        | 3     | Kertolasku: regD = regD × regS                      |
+| 0x7F00  | NOP        | 1     | Ei tee mitään                                       |
+| 0x3340  | NOT        | 2     | Bittitason komplementti (käännä kaikki bitit)       |
+| 0x3180  | OR         | 3     | Bittitason TAI-operaatio                            |
+| 0x4140  | POP        | 2     | Hae arvo pinosta rekisteriin                        |
+| 0x4040  | PUSH       | 2     | Talleta rekisteri pinoon                            |
+| 0x1280  | READ       | 3     | Lue muistista absoluuttisesti                       |
+| 0x1480  | READ_IND   | 3     | Lue muistista epäsuorasti (osoitinta käyttäen)      |
+| 0x1680  | READ_REL   | 3     | Lue muistista FP-suhteellisesti                     |
+| 0x5200  | RET        | 1     | Palaa aliohjelmasta (POP PC)                        |
+| 0xF540  | SCTMR      | 2     | Aseta kellokeskeytysrekisteri ms-välillä (Kernel)   |
+| 0x3480  | SHL        | 3     | Looginen vasen siirto                               |
+| 0x3580  | SHR        | 3     | Looginen oikea siirto                               |
+| 0xF340  | SMPR       | 2     | Aseta muistisuojarekisteri (Kernel-tila)            |
+| 0x1380  | STORE      | 3     | Kirjoita muistiin absoluuttisesti                   |
+| 0x1580  | STORE_IND  | 3     | Kirjoita muistiin epäsuorasti (osoitinta käyttäen)  |
+| 0x1780  | STORE_REL  | 3     | Kirjoita muistiin FP-suhteellisesti                 |
+| 0x1880  | STOREI     | 3     | Kirjoita välitön arvo absoluuttiseen osoitteeseen   |
+| 0x1980  | STOREI_IND | 3     | Kirjoita välitön arvo epäsuoraan osoitteeseen       |
+| 0x1A80  | STOREI_REL | 3     | Kirjoita välitön arvo FP-suhteelliseen osoitteeseen |
+| 0xE200  | STI        | 1     | Salli keskeytykset (I = 1, Kernel-tila)             |
+| 0xF440  | STMR       | 2     | Aseta ajastinrekisteri (Kernel-tila)                |
+| 0x2180  | SUB        | 3     | Vähennyslasku: regD = regD - regS                   |
+| 0x4280  | SWSP       | 3     | Vaihda pinorekisteri atomisesti                     |
+| 0x7780  | TSL        | 3     | Atominen testi ja asetus (Test and Set Lock)        |
+| 0x3280  | XOR        | 3     | Bittitason poissulkeva TAI                          |
 
 ## 11.2 Käskyt kategorioittain
 
 ### Tiedonsiirto
 
-| Käsky     | Opcode | Kuvaus                                                             |
-| --------- | ------ | ------------------------------------------------------------------ |
-| LOAD      | 0x1080 | Lataa välitön 16-bittinen arvo rekisteriin                         |
-| CPY       | 0x1180 | Kopioi yhden rekisterin sisältö toiseen rekisteriin                |
-| READ      | 0x1280 | Lue yhden sanan muistista absoluuttisella osoitteella              |
-| STORE     | 0x1380 | Kirjoita yhden sanan muistiin absoluuttisella osoitteella          |
-| READ_IND  | 0x1480 | Lue muistista käyttäen rekisterissa olevaa osoitetta (epäsuorasti) |
-| STORE_IND | 0x1580 | Kirjoita muistiin käyttäen rekisterissa olevaa osoitetta           |
-| READ_REL  | 0x1680 | Lue muistista frame pointerin suhteen (paikallismuuttujat)         |
-| STORE_REL | 0x1780 | Kirjoita muistiin frame pointerin suhteen                          |
+| Käsky      | Opcode | Kuvaus                                                             |
+| ---------- | ------ | ------------------------------------------------------------------ |
+| LOAD       | 0x1080 | Lataa välitön 16-bittinen arvo rekisteriin                         |
+| CPY        | 0x1180 | Kopioi yhden rekisterin sisältö toiseen rekisteriin                |
+| READ       | 0x1280 | Lue yhden sanan muistista absoluuttisella osoitteella              |
+| STORE      | 0x1380 | Kirjoita yhden sanan muistiin absoluuttisella osoitteella          |
+| READ_IND   | 0x1480 | Lue muistista käyttäen rekisterissa olevaa osoitetta (epäsuorasti) |
+| STORE_IND  | 0x1580 | Kirjoita muistiin käyttäen rekisterissa olevaa osoitetta           |
+| READ_REL   | 0x1680 | Lue muistista frame pointerin suhteen (paikallismuuttujat)         |
+| STORE_REL  | 0x1780 | Kirjoita muistiin frame pointerin suhteen                          |
+| STOREI     | 0x1880 | Kirjoita välitön arvo absoluuttiseen osoitteeseen                  |
+| STOREI_IND | 0x1980 | Kirjoita välitön arvo epäsuoraan osoitteeseen (rekisterin kautta)  |
+| STOREI_REL | 0x1A80 | Kirjoita välitön arvo FP-suhteelliseen osoitteeseen                |
 
 ### Aritmetiikka
 
@@ -632,17 +686,19 @@ Assembly-kielen syntaksi, direktiivit, arkkitehtuurivakiot ja käyttöesimerkit 
 
 ### Ohjaus
 
-| Käsky | Opcode | Kuvaus                                                         |
-| ----- | ------ | -------------------------------------------------------------- |
-| JUMP  | 0x5040 | Ehdoton hyppy absoluuttiselle osoitteelle                      |
-| CALL  | 0x5140 | Kutsu aliohjelmaa: talleta paluuosoite ja hyppy                |
-| RET   | 0x5200 | Palaa aliohjelmasta palauttamalla PC pinosta                   |
-| JZ    | 0x5340 | Ehdollinen hyppy, jos Z-lippu = 1 (yhtä suuret), alias: JE     |
-| JNZ   | 0x5440 | Ehdollinen hyppy, jos Z-lippu = 0 (eri suuruiset), alias: JNE  |
-| JLT   | 0x5540 | Ehdollinen hyppy, jos etumerkillisesti pienempi (signed)       |
-| JGT   | 0x5640 | Ehdollinen hyppy, jos etumerkillisesti suurempi                |
-| JLE   | 0x5740 | Ehdollinen hyppy, jos etumerkillisesti pienempi tai yhtä suuri |
-| JGE   | 0x5840 | Ehdollinen hyppy, jos etumerkillisesti suurempi tai yhtä suuri |
+| Käsky | Opcode  | Kuvaus                                                         |
+| ----- | ------- | -------------------------------------------------------------- |
+| JUMP  | 0x5040  | Ehdoton hyppy absoluuttiselle osoitteelle                      |
+| CALL  | 0x5140  | Kutsu aliohjelmaa: talleta paluuosoite ja hyppy                |
+| RET   | 0x5200  | Palaa aliohjelmasta palauttamalla PC pinosta                   |
+| JZ    | 0x5340  | Ehdollinen hyppy, jos Z-lippu = 1 (yhtä suuret), alias: JE     |
+| JNZ   | 0x5440  | Ehdollinen hyppy, jos Z-lippu = 0 (eri suuruiset), alias: JNE  |
+| JLT   | 0x5540  | Ehdollinen hyppy, jos etumerkillisesti pienempi (signed)       |
+| JGT   | 0x5640  | Ehdollinen hyppy, jos etumerkillisesti suurempi                |
+| JLE   | 0x5740  | Ehdollinen hyppy, jos etumerkillisesti pienempi tai yhtä suuri |
+| JGE   | 0x5840  | Ehdollinen hyppy, jos etumerkillisesti suurempi tai yhtä suuri |
+| JMPI  | 0x5900+ | Indeksoitu taulukkohyppy: PC ← addr[reg] (muuttuvan pituinen)  |
+| CALLI | 0x5A00+ | Indeksoitu taulukkokutsu: PUSH PC; PC ← addr[reg]              |
 
 ### Keskeytykset
 
@@ -662,7 +718,10 @@ Assembly-kielen syntaksi, direktiivit, arkkitehtuurivakiot ja käyttöesimerkit 
 | DWRITE | 0xF280 | Kirjoita tallennuslaitteelle, vaatii Kernel-tilan                  |
 | SMPR   | 0xF340 | Aseta Memory Protection Register, vaatii Kernel-tilan              |
 | STMR   | 0xF440 | Aseta Timer Register (ajastinväli), vaatii Kernel-tilan            |
+| SCTMR  | 0xF540 | Aseta Clock Timer Register (ms-väli), vaatii Kernel-tilan          |
 | EXIT   | 0x7500 | Prosessin hallittu lopetus, laukaisee Int 8                        |
-| KGET   | 0x7640 | Lue merkki näppäimistön FIFO-puskurista, palauttaa 0 jos tyhjä     |
+| SCTMR  | 0xF540 | Aseta kellokeskeytysrekisteri ms-välillä, vaatii Kernel-tilan      |
 | TSL    | 0x7780 | Atominen testi ja asetus: lue [addr] ja kirjoita 1, mutex-käyttöön |
 | NOP    | 0x7F00 | Ei tee mitään                                                      |
+
+> **Näppäimistön lukeminen:** Ei erillinen käsky. Käytä `READ reg, [KBD_DATA]` (MMIO $0020). Ks. kohta 4.1c.
