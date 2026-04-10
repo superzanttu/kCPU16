@@ -28,6 +28,71 @@ Tehtävät on merkitty hakasulkeilla, ja niiden tilaa voidaan päivittää seura
   
 ## Tehtävät
 
+<!-- ============================================================ -->
+<!-- RYHMÄ 1: Selvitystehtävät (itsenäiset, ei riippuvuuksia)     -->
+<!-- Suorita ensin – tulokset voivat vaikuttaa muihin ryhmiin.    -->
+<!-- ============================================================ -->
+
+### Ryhmä 1: Selvitystehtävät
+
+[ ] Mitä Flags-ikkunassa näkyvä "State: READY" tieto tarkoittaa?
+[ ] Analysoi kaikki muistialueet-, -rekisterit ja -varaukset päälekkäisyyksien varalta, ja varmista että niissä ei ole päällekkäisyyksiä, jotka voisivat aiheuttaa ongelmia ohjelman suorituksessa. Tämä tarkoittaa, että jokaisella muistialueella, rekisterillä ja varauksella on oma selkeä osoitealueensa, eikä mikään niistä ylitä toisen alueen rajoja. Tämä auttaa varmistamaan, että ohjelma toimii oikein ja että muistiviittaukset tapahtuvat turvallisesti ja oikein.
+[ ] Tarkista että demo_lib_gfx.asm ja lib_gfx.asm käyttävät FILL-käskyä taulukkojen alustamiseen tai muistialueiden nollaamiseen, missä se on hyödyllinen. Tämä auttaa tekemään demoista tehokkaampia ja selkeämpiä, ja varmistaa että ne hyödyntävät uusia käskyjä parhaalla mahdollisella tavalla.
+
+<!-- ============================================================ -->
+<!-- RYHMÄ 2: Assembler-parannukset (assembler.py + cpu.py)       -->
+<!-- Muokkaa assembler.py ja cpu.py yhtä aikaa.                   -->
+<!-- ============================================================ -->
+
+### Ryhmä 2: Assembler-parannukset
+
+[ ] Assemblerin antaessa virheilmoitus, on näytettävä virheen aiheuttavan rivin numero, itse rivi ja kuvaus virheestä. Tämä auttaa ohjelmoijaa ymmärtämään, mikä osa koodista aiheuttaa ongelman, ja antaa selkeän viestin siitä, mitä virhe on, jotta se voidaan korjata tehokkaasti.
+[ ] Varmista ettö FILL-komennon kohteena oleva muisti alue on kokonaisuudessa kirjoitettavissa, ennen kuin varsinainen kirjoitus aloitetaan. Mikäli kohdealue ei ole kokonaisuutenaa, annetaan virheilmoitus.
+[ ] Lisää dokumentaatioon kuvaus siitä, että assemblerin virheilmoitukset sisältävät rivin numeron, itse rivin ja kuvauksen virheestä, ja että tämä auttaa ohjelmoijaa ymmärtämään ja korjaamaan virheet tehokkaasti.
+[ ] Lisää dokumentaatioon kuvaus siitä, että FILL-komennon kohteena olevan muistialueen on oltava kokonaisuudessaan kirjoitettavissa ennen kuin kirjoitus aloitetaan, ja että virheilmoitus annetaan, jos alue ei ole kokonaisuudessaan kirjoitettavissa.
+
+<!-- ============================================================ -->
+<!-- RYHMÄ 3: UI – Tiedostohallinta & suoritustila (tui.py)       -->
+<!-- Kaikki koskevat lataus-/tallennus-/käynnistyslogiikkaa.      -->
+<!-- ============================================================ -->
+
+### Ryhmä 3: UI – Tiedostohallinta & suoritustila
+
+[ ] Varmista että käyttöliittymän kaikki osat ovat englanninkielisiä ja johdonmukaisesti nimettyjä, mukaan lukien kaikki painikkeet, valikot, virheilmoitukset. Tämä varmistaa, että käyttöliittymä on yhdenmukainen ja ymmärrettävä kaikille käyttäjille, riippumatta heidän kielitaustastaan.
+[ ] Step/Full/Slow painikkeet eivät saa käynnistää prosessorin toimintaa, ellei load-komennolla ole ladattu muistii ohjelmaa. Pitää antaa virheilmoitus, jos yritetään käynnistää ilman ladattua ohjelmaa. Tämä varmistaa, että käyttäjä ei vahingossa yritä suorittaa ohjelmaa, joka ei ole ladattu, ja antaa selkeän viestin siitä, että ensin on ladattava ohjelma ennen kuin sitä voi suorittaa.
+[ ] Varmista että .asm tai .dsk-tiedoston lataamisen jälkeen ohjelman suoritustila on STOPPED, eikä esimerkiksi STEP tai FULL. Tämä varmistaa, että ohjelma ei ala suorittaa automaattisesti heti lataamisen jälkeen, ja antaa käyttäjälle mahdollisuuden tarkistaa ladatun ohjelman ennen sen suorittamista.
+[ ] VArmista että latatun .asm-ohjelman nimi näkyy käyttöliitymässä. Jos ei ole ladattu älä näytä nimeä.
+[ ] Varmista että ladatun .dsk-levykuvan nimi näkyy käyttöliittymässä tallennuslaitteen kohdalla. Jos ei ole ladattu, älä näytä nimeä.
+[ ] Varmista että .dsk ja .asm-tiedostojen tallennuksen jälkee ko. nimi näytetään käyttöliittymässä, kuin se olisi juuri ladattu. Tämä antaa käyttäjälle selkeän vahvistuksen siitä, että tiedosto on tallennettu onnistuneesti, ja auttaa pitämään käyttöliittymän ajan tasalla ladattujen ja tallennettujen tiedostojen kanssa.
+[ ] Lisää LOAD-painikkeeseen toiminto, jolla ladattava ohjelma (pakotettu code-hakemistoon) valitaan valintaikkunasta, jossa on esillä kaikki code-hakemistossa olevat .asm-tiedostot. Tämä helpottaa ohjelman lataamista, koska käyttäjän ei tarvitse muistaa tai kirjoittaa tarkkaa tiedostopolkua, vaan hän voi valita ladattavan ohjelman visuaalisesta listasta. Valintaikkunasta valitaan ladattava ohjelma hiiren tuplaklikillä tai valitsemalla ohjelma ja painamall Load-painiketta. Toiminnon voi peruttaa Cancel-painikkeella.
+[ ] Lisää dokumentaatioon kuvaus siitä, että Step/Full/Slow-painikkeet vaativat ladatun ohjelman toimiakseen ja että ne antavat virheilmoituksen, jos yritetään käynnistää ilman ladattua ohjelmaa.
+[ ] Lisää dokumentaatioon kuvaus siitä, että .asm- tai .dsk-tiedoston lataamisen jälkeen ohjelman suoritustila on STOPPED, eikä esimerkiksi STEP tai FULL, ja että tämä antaa käyttäjälle mahdollisuuden tarkistaa ladatun ohjelman ennen sen suorittamista.
+[ ] Lisää dokumentaatioon kuvaus siitä, että latatun .asm-ohjelman nimi näkyy käyttöliittymässä, ja että nimeä ei näytetä, jos ohjelmaa ei ole ladattu.
+[ ] Lisää dokumentaatioon kuvaus siitä, että ladatun .dsk-levykuvan nimi näkyy käyttöliittymässä tallennuslaitteen kohdalla, ja että nimeä ei näytetä, jos levykuvaa ei ole ladattu.
+[ ] Lisää dokumentaatioon kuvaus siitä, että .dsk- ja .asm-tiedostojen tallennuksen jälkeen ko. nimi näytetään käyttöliittymässä, kuin se olisi juuri ladattu, ja että tämä auttaa käyttäjää ymmärtämään, että tiedosto on tallennettu onnistuneesti.
+[ ] Lisää dokumentaatioon kuvaus siitä, että LOAD-painikkeella voidaan valita ladattava ohjelma ikkunasta, jossa on esillä kaikki code-hakemistossa olevat .asm-tiedostot, ja että tämä helpottaa ohjelman lataamista.
+
+<!-- ============================================================ -->
+<!-- RYHMÄ 4: Suoritusaikajärjestelmä (instruction.py/cpu.py/tui) -->
+<!-- Isoin muutos. Tehtävät ovat ketjutettuja: suoritusajat ensin,-->
+<!-- sitten uptime, sitten TMR/CTMR, sitten Flags-ikkuna.         -->
+<!-- ============================================================ -->
+
+### Ryhmä 4: Suoritusaikajärjestelmä
+
+[ ] Määritä kaikille käskyille suorituajat, jotka kuvaavat kuinka kauan kunkin käskyn suorittaminen kestää. Nämä ajat voivat perustua esimerkiksi käskyjen monimutkaisuuteen tai siihen, kuinka paljon muistiviittauksia ne tekevät. Käskyjen suoritusajat voidaan määrittää esimerkiksi mikrosekunteina tai millisekunteina, ja ne voivat vaihdella käskyittäin. Tämä auttaa tekemään ohjelman suorituksesta realistisempaa ja antaa käyttäjälle paremman käsityksen siitä, kuinka kauan ohjelman suorituminen kestää.
+[ ] Muuta toimintaa niin että uptime-laskurin arvon kasvattamiseen käytetään konekielisille käskyille määriteltyjä suoritusaikoja.
+[ ] Muuta Ajastinkeskeytyksen (TMR) ja Kellokeskeytyksen (CTMR) toimintaa niin, että ne perustuvat käskyjen suoritusaikoihin eikä pelkästään suoritettujen käskyjen lukumäärään. Tämä tarkoittaa, että keskeytykset laukaistaan, kun käskyjen suoritukseen kuluva aika saavuttaa tietyn rajan, eikä vain silloin, kun tietty määrä käskyjä on suoritettu. Tämä tekee keskeytyksistä realistisempia ja antaa käyttäjälle paremman käsityksen siitä, kuinka kauan ohjelman suorituminen kestää. Tämä mahdollistaa prosessorin toiminnan hidastamisen ilman ongelmia.
+[ ] Lisää Flags-ikkunaan TMR- ja CTRM- keskeytyksiin liittyvät tiedot, kuten jäljellä olevan ajan määrä ennen keskeytyksen laukeamista. Tämä antaa käyttäjälle paremman käsityksen siitä, kuinka kauan ohjelman suorituminen kestää ennen kuin keskeytys laukeaa, ja auttaa suunnittelemaan ohjelman suoritusta tehokkaammin.
+[ ] Lisää dokumentaatioon kuvaus siitä, miten käskyjen suoritusajat määritetään ja miten ne vaikuttavat ohjelman suoritukseen.
+[ ] Lisää dokumentaatioon kuvaus siitä, miten TMR- ja CTMR-keskeytykset laukaistaan käskyjen suoritusaikojen perusteella ja miten se vaikuttaa ohjelman suoritukseen.
+[ ] Lisää dokumentaatioon kuvaus siitä, miten TMR- ja CTMR-keskeytyksiin liittyvät tiedot näytetään Flags-ikkunassa ja miten se auttaa käyttäjää ymmärtämään ohjelman suoritusta.
+
+<!-- ============================================================ -->
+<!-- VALMIIT TEHTÄVÄT                                             -->
+<!-- ============================================================ -->
+
+### Valmiit tehtävät
 
 [X] Lisää prosessorille käsky, jolla muistialueen voi täyttää nopeasti annetulla arvolla. Tämä voisi olla esimerkiksi "FILL" -käsky, joka ottaa kolme operandia: alku- ja loppuosoitteet sekä täytettävän arvon. Tämä käsky voisi olla hyödyllinen esimerkiksi taulukkojen alustamiseen tai muistialueiden nollaamiseen nopeasti.
 [X] Lisää dokumentaatioon kuvaus uudesta FILL-käskystä.
@@ -49,30 +114,3 @@ Tehtävät on merkitty hakasulkeilla, ja niiden tilaa voidaan päivittää seura
 [X] Lisää dokumentaatioon kuvaus siitä, että assembler sallii vain READ ja STORE käytön.
 [X] Lisää KCPU16:n näyttöön kaksoisbufferionti, joka mahdollistaa näytön päivittämisen ilman välkkymistä. Tämä tarkoittaa, että kaikki näytölle piirretyt muutokset tehdään ensin taustalla olevaan bufferiin, ja sitten koko buffer kopioidaan kerralla näytölle. Tämä parantaa suorituskykyä ja tekee näytön päivityksestä sujuvampaa, erityisesti silloin, kun piirretään paljon pikseleitä tai tehdään suuria muutoksia näytölle. Säilytä kuitenkin mahdollisuus olla käyttämättä kaksoisbufferointia, jos käyttäjä haluaa nähdä jokaisen käskyn vaikutuksen näytöllä välittömästi.
 [X] Lisää dokumentaatioon kuvaus siitä, miten kaksoisbufferointi toimii ja miten se parantaa näytön päivitystä.
-[ ] Määritä kaikille käskyille suorituajat, jotka kuvaavat kuinka kauan kunkin käskyn suorittaminen kestää. Nämä ajat voivat perustua esimerkiksi käskyjen monimutkaisuuteen tai siihen, kuinka paljon muistiviittauksia ne tekevät. Käskyjen suoritusajat voidaan määrittää esimerkiksi mikrosekunteina tai millisekunteina, ja ne voivat vaihdella käskyittäin. Tämä auttaa tekemään ohjelman suorituksesta realistisempaa ja antaa käyttäjälle paremman käsityksen siitä, kuinka kauan ohjelman suorituminen kestää.
-[ ] Lisää dokumentaatioon kuvaus siitä, miten käskyjen suoritusajat määritetään ja miten ne vaikuttavat ohjelman suoritukseen.
-[ ] Muuta toimintaa niin että uptime-laskurin arvon kasvattamiseen käytetään konekielisille käskyille määriteltyjä suoritusaikoja.
-[ ] Muuta Ajastinkeskeytyksen (TMR) ja Kellokeskeytyksen (CTMR) toimintaa niin, että ne perustuvat käskyjen suoritusaikoihin eikä pelkästään suoritettujen käskyjen lukumäärään. Tämä tarkoittaa, että keskeytykset laukaistaan, kun käskyjen suoritukseen kuluva aika saavuttaa tietyn rajan, eikä vain silloin, kun tietty määrä käskyjä on suoritettu. Tämä tekee keskeytyksistä realistisempia ja antaa käyttäjälle paremman käsityksen siitä, kuinka kauan ohjelman suorituminen kestää. Tämä mahdollistaa prosessorin toiminnan hidastamisen ilman ongelmia.
-[ ] Lisää dokumentaatioon kuvaus siitä, miten TMR- ja CTMR-keskeytykset laukaistaan käskyjen suoritusaikojen perusteella ja miten se vaikuttaa ohjelman suoritukseen.
-[ ] Lisää Flags-ikkunaan TMR- ja CTRM- keskeytyksiin liittyvät tiedot, kuten jäljellä olevan ajan määrä ennen keskeytyksen laukeamista. Tämä antaa käyttäjälle paremman käsityksen siitä, kuinka kauan ohjelman suorituminen kestää ennen kuin keskeytys laukeaa, ja auttaa suunnittelemaan ohjelman suoritusta tehokkaammin.
-[ ] Lisää dokumentaatioon kuvaus siitä, miten TMR- ja CTMR-keskeytyksiin liittyvät tiedot näytetään Flags-ikkunassa ja miten se auttaa käyttäjää ymmärtämään ohjelman suoritusta.
-[ ] Step/Full/Slow painikkeet eivät saa käynnistää prosessorin toimintaa, ellei load-komennolla ole ladattu muistii ohjelmaa. Pitää antaa virheilmoitus, jos yritetään käynnistää ilman ladattua ohjelmaa. Tämä varmistaa, että käyttäjä ei vahingossa yritä suorittaa ohjelmaa, joka ei ole ladattu, ja antaa selkeän viestin siitä, että ensin on ladattava ohjelma ennen kuin sitä voi suorittaa.
-[ ] Lisää dokumentaatioon kuvaus siitä, että Step/Full/Slow-painikkeet vaativat ladatun ohjelman toimiakseen ja että ne antavat virheilmoituksen, jos yritetään käynnistää ilman ladattua ohjelmaa.
-[ ] Tarkista että demo_lib_gfx.asm ja lib_gfx.asm käyttävät FILL-käskyä taulukkojen alustamiseen tai muistialueiden nollaamiseen, missä se on hyödyllinen. Tämä auttaa tekemään demoista tehokkaampia ja selkeämpiä, ja varmistaa että ne hyödyntävät uusia käskyjä parhaalla mahdollisella tavalla.    
-[ ] Mitä Flags-ikkunassa näkyvä "State: READY" tieto tarkoittaa?
-[ ] VArmista että latatun .asm-ohjelman nimi näkyy käyttöliitymässä. Jos ei ole ladattu älä näytä nimeä.
-[ ] Lisää dokumentaatioon kuvaus siitä, että latatun .asm-ohjelman nimi näkyy käyttöliittymässä, ja että nimeä ei näytetä, jos ohjelmaa ei ole ladattu.
-[ ] Varmista että ladatun .dsk-levykuvan nimi näkyy käyttöliittymässä tallennuslaitteen kohdalla. Jos ei ole ladattu, älä näytä nimeä.
-[ ] Lisää dokumentaatioon kuvaus siitä, että ladatun .dsk-levykuvan nimi näkyy käyttöliittymässä tallennuslaitteen kohdalla, ja että nimeä ei näytetä, jos levykuvaa ei ole ladattu.
-[ ] Varmista että .dsk ja .asm-tiedostojen tallennuksen jälkee ko. nimi näytetään käyttöliittymässä, kuin se olisi juuri ladattu. Tämä antaa käyttäjälle selkeän vahvistuksen siitä, että tiedosto on tallennettu onnistuneesti, ja auttaa pitämään käyttöliittymän ajan tasalla ladattujen ja tallennettujen tiedostojen kanssa.
-[ ] Lisää dokumentaatioon kuvaus siitä, että .dsk- ja .asm-tiedostojen tallennuksen jälkeen ko. nimi näytetään käyttöliittymässä, kuin se olisi juuri ladattu, ja että tämä auttaa käyttäjää ymmärtämään, että tiedosto on tallennettu onnistuneesti.
-[ ] Varmista että .asm tai .dsk-tiedoston lataamisen jälkeen ohjelman suoritustila on STOPPED, eikä esimerkiksi STEP tai FULL. Tämä varmistaa, että ohjelma ei ala suorittaa automaattisesti heti lataamisen jälkeen, ja antaa käyttäjälle mahdollisuuden tarkistaa ladatun ohjelman ennen sen suorittamista.
-[ ] Lisää dokumentaatioon kuvaus siitä, että .asm- tai .dsk-tiedoston lataamisen jälkeen ohjelman suoritustila on STOPPED, eikä esimerkiksi STEP tai FULL, ja että tämä antaa käyttäjälle mahdollisuuden tarkistaa ladatun ohjelman ennen sen suorittamista.
-[ ] Varmista että käyttöliittymän kaikki osat ovat englanninkielisiä ja johdonmukaisesti nimettyjä, mukaan lukien kaikki painikkeet, valikot, virheilmoitukset. Tämä varmistaa, että käyttöliittymä on yhdenmukainen ja ymmärrettävä kaikille käyttäjille, riippumatta heidän kielitaustastaan.
-[ ] Lisää LOAD-painikkeeseen toiminto, jolla ladattava ohjelma (pakotettu code-hakemistoon) valitaan valintaikkunasta, jossa on esillä kaikki code-hakemistossa olevat .asm-tiedostot. Tämä helpottaa ohjelman lataamista, koska käyttäjän ei tarvitse muistaa tai kirjoittaa tarkkaa tiedostopolkua, vaan hän voi valita ladattavan ohjelman visuaalisesta listasta. Valintaikkunasta valitaan ladattava ohjelma hiiren tuplaklikillä tai valitsemalla ohjelma ja painamall Load-painiketta. Toiminnon voi peruttaa Cancel-painikkeella.
-[ ] Lisää dokumentaatioon kuvaus siitä, että LOAD-painikkeella voidaan valita ladattava ohjelma ikkunasta, jossa on esillä kaikki code-hakemistossa olevat .asm-tiedostot, ja että tämä helpottaa ohjelman lataamista.
-[ ] Analysoi kaikki muistialueet-, -rekisterit ja -varaukset päälekkäisyyksien varalta, ja varmista että niissä ei ole päällekkäisyyksiä, jotka voisivat aiheuttaa ongelmia ohjelman suorituksessa. Tämä tarkoittaa, että jokaisella muistialueella, rekisterillä ja varauksella on oma selkeä osoitealueensa, eikä mikään niistä ylitä toisen alueen rajoja. Tämä auttaa varmistamaan, että ohjelma toimii oikein ja että muistiviittaukset tapahtuvat turvallisesti ja oikein.
-[ ] Assemblerin antaessa virheilmoitus, on näytettävä virheen aiheuttavan rivin numero, itse rivi ja kuvaus virheestä. Tämä auttaa ohjelmoijaa ymmärtämään, mikä osa koodista aiheuttaa ongelman, ja antaa selkeän viestin siitä, mitä virhe on, jotta se voidaan korjata tehokkaasti.
-[ ] Lisää dokumentaatioon kuvaus siitä, että assemblerin virheilmoitukset sisältävät rivin numeron, itse rivin ja kuvauksen virheestä, ja että tämä auttaa ohjelmoijaa ymmärtämään ja korjaamaan virheet tehokkaasti.
-[ ] Varmista ettö FILL-komennon kohteena oleva muisti alue on kokonaisuudessa kirjoitettavissa, ennen kuin varsinainen kirjoitus aloitetaan. Mikäli kohdealue ei ole kokonaisuutenaa, annetaan virheilmoitus.
-[ ] Lisää dokumentaatioon kuvaus siitä, että FILL-komennon kohteena olevan muistialueen on oltava kokonaisuudessaan kirjoitettavissa ennen kuin kirjoitus aloitetaan, ja että virheilmoitus annetaan, jos alue ei ole kokonaisuudessaan kirjoitettavissa.

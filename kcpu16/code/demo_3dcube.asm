@@ -4,20 +4,21 @@
 ;
 ; KUVAUS:
 ;   Piirtää pyörivän wireframe-3D-kuution grafiikkanäytölle.
-;   Pyörittää kuutiota Y-akselin ympäri (64 askelta per täysi kierros).
-;   Kuutio on esikallistettu ~25° X-akselin ympäri, jotta myös ala- ja
-;   yläpinnat näkyvät – ei pelkkää vaakatasoa.
+;   Pyörittää kuutiota samanaikaisesti kaikkien kolmen akselin ympäri:
+;     Y: nopea  (64 askelta/kierros, joka kehys)
+;     X: hidas  (64 askelta/kierros, joka 4. kehys)
+;     Z: hitain (64 askelta/kierros, joka 7. kehys)
 ;
-;   Vaihe 1 (20 s): Tila B — 80 × 48 pikseliä (kuution säde 15 pikseliä)
-;   Vaihe 2 (20 s): Tila C — 160 × 96 pikseliä (säde skaalattu ×2 = 30 px)
+;   Vaihe 1 (20 s): Tila B — 80 × 48 pikseliä (kuution säde 12 pikseliä)
+;   Vaihe 2 (20 s): Tila C — 160 × 96 pikseliä (säde skaalattu ×2 = 24 px)
 ;   Tämän jälkeen: käynnistyy alusta vaiheesta 1.
 ;
-; PYÖRITYSALGORITMI (Y-akseli):
-;   nx = (vx · cos θ − vz · sin θ) / 100
-;   ny =  vy  (muuttumaton)
-;   Ortografinen projektio:
-;     screen_x = center_x + nx          (tila B: center=40,24)
-;     screen_y = center_y + ny          (tila C: center=80,48, skaala ×2)
+; PYÖRITYSALGORITMI (järjestys X→Y→Z, ortografinen projektio):
+;   X: ay=(vy·cox−vz·six)/100, az=(vy·six+vz·cox)/100, ax=vx
+;   Y: bx=(ax·coy−az·siy)/100, by=ay
+;   Z: cx=(bx·coz−by·siz)/100, cy=(bx·siz+by·coz)/100
+;   Projektio: screen_x = center_x + cx  (tila B: center=40,24)
+;              screen_y = center_y + cy  (tila C: center=80,48, skaala ×2)
 ;
 ; KIINTEÄPISTE-ARITMETIIKKA:
 ;   sin/cos-taulu: arvot × 100 (alue −100 … 100)
@@ -34,6 +35,7 @@
 ;   R14 = grafiikkatila (1=B, 2=C) — säilyy gfx_line/smul_div100-kutsujen yli
 ;   R13, R15 = silmukkalaskurit draw_cube_frame:ssä
 ;   R0–R12 = scratch / lib-gfx-kutsut
+;   angle, angle_x, angle_z, cnt_x, cnt_z, sin/cos_cache_* = muistissa
 ;
 ; KÄYTTÖ:
 ;   python main.py --run kcpu16/code/demo_3dcube.asm
@@ -74,29 +76,25 @@ sin_table:
 ; =============================================================================
 ; Kuution kärkipisteiden koordinaatit (8 kärkipistettä)
 ;
-; Alkuperäinen kuutio: ±15 pikseliä, kärkipisteet:
-;   0:(−15,−15,−15)  1:(15,−15,−15)  2:(15,15,−15)  3:(−15,15,−15)
-;   4:(−15,−15, 15)  5:(15,−15, 15)  6:(15,15, 15)  7:(−15,15, 15)
+; Kuutio: ±12 pikseliä. Säde 12 takaa ettei mikään piste ylitä
+; näyttöaluetta kolmiakselisen pyörityksen aikana (max etäisyys = 12√3 ≈ 21).
+; Kärkipisteet:
+;   0:(−12,−12,−12)  1:(12,−12,−12)  2:(12,12,−12)  3:(−12,12,−12)
+;   4:(−12,−12, 12)  5:(12,−12, 12)  6:(12,12, 12)  7:(−12,12, 12)
 ;
-; Esikallistus ~25° X-akselin ympäri (cos≈91/100, sin≈42/100):
-;   y' = y·cos − z·sin ≈ y·91/100 − z·42/100
-;   z' = y·sin + z·cos ≈ y·42/100 + z·91/100
-;
-; Tulokset (pyöristettynä kokonaisluvuiksi):
-;   0:(−15, −7,−20)  1:(15, −7,−20)  2:(15, 20, −7)  3:(−15, 20, −7)
-;   4:(−15,−20,  7)  5:(15,−20,  7)  6:(15,  7, 20)  7:(−15,  7, 20)
+; Kolmiakselinen X→Y→Z-rotaatio lasketaan dynaamisesti draw_cube_frame:ssä.
 ;
 ; Tallennettu .dw-direktiivillä.
 ; =============================================================================
 
 cube_vx:
-        .dw  -15,  15,  15, -15, -15,  15,  15, -15
+        .dw  -12,  12,  12, -12, -12,  12,  12, -12
 
 cube_vy:
-        .dw   -7,  -7,  20,  20, -20, -20,   7,   7
+        .dw  -12, -12,  12,  12, -12, -12,  12,  12
 
 cube_vz:
-        .dw  -20, -20,  -7,  -7,   7,   7,  20,  20
+        .dw  -12, -12, -12, -12,  12,  12,  12,  12
 
 ; =============================================================================
 ; Projisoidut näyttökoordinaatit (täytetään draw_cube_frame-kutsussa)
@@ -140,7 +138,33 @@ phase:
         .db  0         ; 0=tila B käynnissä, 1=tila C käynnissä, 2=käynnistä uudelleen
 
 angle:
-        .db  0         ; rotaatiokulma (0–63, yksi täysi kierros = 64 askelta)
+        .db  0         ; Y-akselin rotaatiokulma (0–63, joka kehys)
+
+angle_x:
+        .db  0         ; X-akselin rotaatiokulma (0–63, joka 4. kehys)
+
+angle_z:
+        .db  0         ; Z-akselin rotaatiokulma (0–63, joka 7. kehys)
+
+cnt_x:
+        .db  0         ; kehyslaskuri angle_x:n päivitykseen
+
+cnt_z:
+        .db  0         ; kehyslaskuri angle_z:n päivitykseen
+
+; Esilasketut sin/cos-arvot (täytetään draw_cube_frame:n alussa joka kehyksellä)
+sin_cache_x:
+        .dw  0
+cos_cache_x:
+        .dw  0
+sin_cache_y:
+        .dw  0
+cos_cache_y:
+        .dw  0
+sin_cache_z:
+        .dw  0
+cos_cache_z:
+        .dw  0
 
 ; =============================================================================
 ; clock_handler — Kellokeskeytyksen käsittelijä (INT 9)
@@ -253,73 +277,157 @@ _smul_done:
 ; draw_cube_frame — Piirrä yksi kuutioanimaatiokehys
 ;
 ; Sisään:  R14 = grafiikkatila (1 = tila B, 2 = tila C)
-;          angle-muuttuja muistissa = nykyinen rotaatiokulma (0–63)
+;          angle, angle_x, angle_z muistissa = rotaatiokulmat (0–63)
 ; Ulos:    —
 ; Clobbers: R0–R13, R15   (R14 = tila säilyy)
 ;
-; gfx_line clobbers R0–R12 → R13, R14, R15 ovat turvassa sen kutsujen yli.
-; smul_div100 clobbers R0–R5 → R6–R15 ovat turvassa sen kutsujen yli.
+; smul_div100 clobbers R0–R5 → R6–R15 säilyvät sen kutsujen yli.
+; gfx_line   clobbers R0–R12 → R13, R14, R15 säilyvät.
 ;
-; VAIHE 1: Projisoidaan kaikki 8 kärkipistettä
-;   Y-akselin rotaatio:  nx = (vx·cos − vz·sin) / 100,  ny = vy
-;   Tila B:  screen = (40 + nx,  24 + ny)
-;   Tila C:  screen = (80 + nx·2, 48 + ny·2)
+; VAIHE 0: Esitallennetaan sin/cos kaikille kolmelle kulmalle:
+;   sin_cache_x/y/z, cos_cache_x/y/z
 ;
-; VAIHE 2: Piirretään 12 kaarta edge_table:sta proj_x/proj_y-arvojen avulla
+; VAIHE 1: Projisoidaan 8 kärkipistettä — rotaatio järjestyksessä X→Y→Z.
+;   Rekisterikartta vertex-silmukassa (säilyvät smul_div100:n yli):
+;     R8  = ax=vx (→ ax·cos_y/100 → bx)
+;     R9  = vy (→ bx·cos_z/100 → cx)
+;     R10 = vz (→ bx·sin_z/100 → cy)
+;     R11 = ay (= by, ei muutu Y-rotaatiossa)
+;     R12 = az (→ ei enää tarvita Y-rotaation jälkeen)
+;     R14 = grafiikkatila (koskematon)
+;     R15 = kärkipiste-indeksi (koskematon)
+;
+; VAIHE 2: Piirretään 12 kaarta edge_table:sta proj_x/proj_y-arvojen avulla.
 ; =============================================================================
 
 draw_cube_frame:
-        ; Lataa rotaatiokulma R13:een (käytetään eri VAIHE 1:ssä)
-        READ  R13, [angle]
+        ; === VAIHE 0: Esilaskenta — sin/cos kaikille kolmelle kulmalle ===
 
-        ; --- VAIHE 1: Kärkipisteiden Y-akselin pyöritys ja projektio ---
+        ; --- angle_x ---
+        READ  R0, [angle_x]
+        READ  R1, sin_table
+        ADD   R1, R0
+        READ  R2, [R1]
+        STORE [sin_cache_x], R2
+        READ  R1, 16
+        ADD   R0, R1
+        READ  R1, 63
+        AND   R0, R1
+        READ  R1, sin_table
+        ADD   R1, R0
+        READ  R2, [R1]
+        STORE [cos_cache_x], R2
+
+        ; --- angle (Y-akseli) ---
+        READ  R0, [angle]
+        READ  R1, sin_table
+        ADD   R1, R0
+        READ  R2, [R1]
+        STORE [sin_cache_y], R2
+        READ  R1, 16
+        ADD   R0, R1
+        READ  R1, 63
+        AND   R0, R1
+        READ  R1, sin_table
+        ADD   R1, R0
+        READ  R2, [R1]
+        STORE [cos_cache_y], R2
+
+        ; --- angle_z ---
+        READ  R0, [angle_z]
+        READ  R1, sin_table
+        ADD   R1, R0
+        READ  R2, [R1]
+        STORE [sin_cache_z], R2
+        READ  R1, 16
+        ADD   R0, R1
+        READ  R1, 63
+        AND   R0, R1
+        READ  R1, sin_table
+        ADD   R1, R0
+        READ  R2, [R1]
+        STORE [cos_cache_z], R2
+
+        ; === VAIHE 1: Kärkipisteiden 3D-rotaatio ja projektio ===
         READ  R15, 0          ; R15 = kärkipiste-indeksi (0–7)
 
 _dcf_vertex_loop:
         ; Lataa vx[R15], vy[R15], vz[R15]
         READ  R0, cube_vx
         ADD   R0, R15
-        READ  R8, [R0]        ; R8 = vx (etumerkillinen)
+        READ  R8, [R0]        ; R8 = vx (= ax, ei muutu X-rotaatiossa)
 
         READ  R0, cube_vy
         ADD   R0, R15
-        READ  R9, [R0]        ; R9 = vy (etumerkillinen)
+        READ  R9, [R0]        ; R9 = vy
 
         READ  R0, cube_vz
         ADD   R0, R15
-        READ  R10, [R0]       ; R10 = vz (etumerkillinen)
+        READ  R10, [R0]       ; R10 = vz
 
-        ; Hae sin(angle): sin_table[angle]
-        READ  R0, sin_table
-        ADD   R0, R13
-        READ  R6, [R0]        ; R6 = sin(angle) × 100
+        ; --- X-akselin rotaatio ---
+        ; ay = (vy·cos_x − vz·sin_x) / 100
+        CPY   R0, R9
+        READ  R1, [cos_cache_x]
+        CALL  smul_div100     ; R0 = vy·cos_x/100
+        CPY   R11, R0         ; R11 = vy·cos_x/100
 
-        ; Hae cos(angle): sin_table[(angle + 16) & 63]
-        READ  R0, 16
-        ADD   R0, R13         ; R0 = angle + 16
-        READ  R4, 63
-        AND   R0, R4          ; R0 = (angle + 16) & 63
-        READ  R4, sin_table
-        ADD   R0, R4          ; R0 = &sin_table[(angle+16)&63]
-        READ  R7, [R0]        ; R7 = cos(angle) × 100
+        CPY   R0, R10
+        READ  R1, [sin_cache_x]
+        CALL  smul_div100     ; R0 = vz·sin_x/100
+        SUB   R11, R0         ; R11 = ay
 
-        ; Laske vx·cos/100
-        ; smul_div100 clobbers R0–R5 mutta R6,R7,R8,R9,R10,R13,R14,R15 pysyvät
-        CPY   R0, R8          ; R0 = vx
-        CPY   R1, R7          ; R1 = cos
-        CALL  smul_div100     ; R0 = vx·cos/100
-        CPY   R11, R0         ; R11 = vx·cos/100 (säilytetään)
+        ; az = (vy·sin_x + vz·cos_x) / 100
+        CPY   R0, R9
+        READ  R1, [sin_cache_x]
+        CALL  smul_div100     ; R0 = vy·sin_x/100
+        CPY   R12, R0         ; R12 = vy·sin_x/100
 
-        ; Laske vz·sin/100
-        CPY   R0, R10         ; R0 = vz
-        CPY   R1, R6          ; R1 = sin
-        CALL  smul_div100     ; R0 = vz·sin/100
+        CPY   R0, R10
+        READ  R1, [cos_cache_x]
+        CALL  smul_div100     ; R0 = vz·cos_x/100
+        ADD   R12, R0         ; R12 = az
 
-        ; nx = vx·cos/100 − vz·sin/100
-        ; SUB toimii oikein 2-komplementissa myös negatiivisilla arvoilla
-        SUB   R11, R0         ; R11 = nx
+        ; Nyt: R8=ax=vx, R11=ay, R12=az
 
-        ; ny = vy (R9 säilyy muuttumattomana)
+        ; --- Y-akselin rotaatio ---
+        ; bx = (ax·cos_y − az·sin_y) / 100,  by = ay (R11 muuttumaton)
+        CPY   R0, R8
+        READ  R1, [cos_cache_y]
+        CALL  smul_div100     ; R0 = ax·cos_y/100
+        CPY   R8, R0          ; R8 = ax·cos_y/100 (välivaihe)
+
+        CPY   R0, R12
+        READ  R1, [sin_cache_y]
+        CALL  smul_div100     ; R0 = az·sin_y/100
+        SUB   R8, R0          ; R8 = bx
+
+        ; R11 = by = ay (ei koskaan muutettu)
+
+        ; --- Z-akselin rotaatio ---
+        ; cx = (bx·cos_z − by·sin_z) / 100
+        CPY   R0, R8
+        READ  R1, [cos_cache_z]
+        CALL  smul_div100     ; R0 = bx·cos_z/100
+        CPY   R9, R0          ; R9 = bx·cos_z/100  (R9:n vy ei enää tarvita)
+
+        CPY   R0, R11
+        READ  R1, [sin_cache_z]
+        CALL  smul_div100     ; R0 = by·sin_z/100
+        SUB   R9, R0          ; R9 = cx
+
+        ; cy = (bx·sin_z + by·cos_z) / 100
+        CPY   R0, R8
+        READ  R1, [sin_cache_z]
+        CALL  smul_div100     ; R0 = bx·sin_z/100
+        CPY   R10, R0         ; R10 = bx·sin_z/100  (R10:n vz ei enää tarvita)
+
+        CPY   R0, R11
+        READ  R1, [cos_cache_z]
+        CALL  smul_div100     ; R0 = by·cos_z/100
+        ADD   R10, R0         ; R10 = cy
+
+        ; Nyt: R9=cx (projisoitu X), R10=cy (projisoitu Y)
 
         ; --- Sovella skaalaus ja siirros tilan mukaan ---
         READ  R4, 2
@@ -327,32 +435,30 @@ _dcf_vertex_loop:
         JNZ   _dcf_mode_b
 
         ; Tila C: skaalaa ×2, keskipiste (80, 48)
-        CPY   R0, R11
-        ADD   R11, R0         ; R11 = nx × 2  (etumerkitön ADD = 2-komplementin×2 ✓)
-        CPY   R0, R9
-        ADD   R9, R0          ; R9  = ny × 2
+        ADD   R9, R9          ; cx × 2
+        ADD   R10, R10        ; cy × 2
         READ  R0, 80
-        ADD   R11, R0         ; R11 = screen_x
+        ADD   R9, R0
         READ  R0, 48
-        ADD   R9, R0          ; R9  = screen_y
+        ADD   R10, R0
         JUMP  _dcf_store
 
 _dcf_mode_b:
         ; Tila B: suoraan, keskipiste (40, 24)
         READ  R0, 40
-        ADD   R11, R0         ; R11 = screen_x
+        ADD   R9, R0
         READ  R0, 24
-        ADD   R9, R0          ; R9  = screen_y
+        ADD   R10, R0
 
 _dcf_store:
         ; Tallenna proj_x[R15] ja proj_y[R15]
         READ  R0, proj_x
         ADD   R0, R15
-        STORE [R0], R11       ; proj_x[R15] = screen_x
+        STORE [R0], R9        ; proj_x[R15] = screen_x
 
         READ  R0, proj_y
         ADD   R0, R15
-        STORE [R0], R9        ; proj_y[R15] = screen_y
+        STORE [R0], R10       ; proj_y[R15] = screen_y
 
         ; Seuraava kärkipiste
         READ  R0, 1
@@ -361,7 +467,7 @@ _dcf_store:
         CMP   R15, R0
         JNZ   _dcf_vertex_loop
 
-        ; --- VAIHE 2: Piirrä 12 kaarta ---
+        ; === VAIHE 2: Piirrä 12 kaarta ===
         ; gfx_line clobbers R0–R12, mutta R13 ja R15 pysyvät!
         READ  R13, 0          ; R13 = edge_table sanatason offset (0, 2, 4 … 22)
         READ  R15, 0          ; R15 = kaarilaskuri (0–11)
@@ -423,9 +529,9 @@ main:
         STI
 
 restart_loop:
-        ; Nollaa tilamuuttujat — phase ja angle ovat vierekkäisiä sanoja muistissa
+        ; Nollaa tilamuuttujat phase..cnt_z yhtenä alueena (FILL: inklusiiviinen)
         READ  R0, phase
-        READ  R1, angle
+        READ  R1, cnt_z
         READ  R2, 0
         FILL  R0, R1, R2
 
@@ -452,7 +558,7 @@ b_loop:
         ; Kehys valmis — flipaa kaksoisbufferointi
         CALL  gfx_flip
 
-        ; Kasvata rotaatiokulmaa (0–63), nollaa kierroksen jälkeen
+        ; Kasvata Y-rotaatiokulmaa (0–63), nollaa kierroksen jälkeen
         READ  R0, [angle]
         READ  R1, 1
         ADD   R0, R1
@@ -462,6 +568,46 @@ b_loop:
         READ  R0, 0
 _b_no_wrap:
         STORE [angle], R0
+
+        ; Kasvata angle_x (joka 4. kehys)
+        READ  R0, [cnt_x]
+        READ  R1, 1
+        ADD   R0, R1
+        READ  R1, 4
+        CMP   R0, R1
+        JNZ   _b_cnt_x_done
+        READ  R0, 0
+        READ  R1, [angle_x]
+        READ  R2, 1
+        ADD   R1, R2
+        READ  R2, 64
+        CMP   R1, R2
+        JNZ   _b_ax_no_wrap
+        READ  R1, 0
+_b_ax_no_wrap:
+        STORE [angle_x], R1
+_b_cnt_x_done:
+        STORE [cnt_x], R0
+
+        ; Kasvata angle_z (joka 7. kehys)
+        READ  R0, [cnt_z]
+        READ  R1, 1
+        ADD   R0, R1
+        READ  R1, 7
+        CMP   R0, R1
+        JNZ   _b_cnt_z_done
+        READ  R0, 0
+        READ  R1, [angle_z]
+        READ  R2, 1
+        ADD   R1, R2
+        READ  R2, 64
+        CMP   R1, R2
+        JNZ   _b_az_no_wrap
+        READ  R1, 0
+_b_az_no_wrap:
+        STORE [angle_z], R1
+_b_cnt_z_done:
+        STORE [cnt_z], R0
 
         ; Tarkista vaihe — jos edelleen 0, jatka tila B:tä
         READ  R0, [phase]
@@ -485,7 +631,7 @@ c_loop:
         ; Kehys valmis — flipaa kaksoisbufferointi
         CALL  gfx_flip
 
-        ; Kasvata rotaatiokulmaa
+        ; Kasvata Y-rotaatiokulmaa (0–63), nollaa kierroksen jälkeen
         READ  R0, [angle]
         READ  R1, 1
         ADD   R0, R1
@@ -495,6 +641,46 @@ c_loop:
         READ  R0, 0
 _c_no_wrap:
         STORE [angle], R0
+
+        ; Kasvata angle_x (joka 4. kehys)
+        READ  R0, [cnt_x]
+        READ  R1, 1
+        ADD   R0, R1
+        READ  R1, 4
+        CMP   R0, R1
+        JNZ   _c_cnt_x_done
+        READ  R0, 0
+        READ  R1, [angle_x]
+        READ  R2, 1
+        ADD   R1, R2
+        READ  R2, 64
+        CMP   R1, R2
+        JNZ   _c_ax_no_wrap
+        READ  R1, 0
+_c_ax_no_wrap:
+        STORE [angle_x], R1
+_c_cnt_x_done:
+        STORE [cnt_x], R0
+
+        ; Kasvata angle_z (joka 7. kehys)
+        READ  R0, [cnt_z]
+        READ  R1, 1
+        ADD   R0, R1
+        READ  R1, 7
+        CMP   R0, R1
+        JNZ   _c_cnt_z_done
+        READ  R0, 0
+        READ  R1, [angle_z]
+        READ  R2, 1
+        ADD   R1, R2
+        READ  R2, 64
+        CMP   R1, R2
+        JNZ   _c_az_no_wrap
+        READ  R1, 0
+_c_az_no_wrap:
+        STORE [angle_z], R1
+_c_cnt_z_done:
+        STORE [cnt_z], R0
 
         ; Tarkista vaihe — jos edelleen 1, jatka tila C:tä
         READ  R0, [phase]
