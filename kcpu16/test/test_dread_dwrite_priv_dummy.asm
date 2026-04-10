@@ -31,10 +31,10 @@
 
 ; Dummy: tarkista että DREAD/DWRITE toimii kernel-tilassa
 ; kun storage-laite on kytketty (testrunner kytkee sen)
-LOAD  R0, 0xCAFE
-LOAD  R1, 10
+READ  R0, 0xCAFE
+READ  R1, 10
 DWRITE R0, R1         ; storage[10] = 0xCAFE
-LOAD  R2, 10
+READ  R2, 10
 DREAD R3, R2          ; R3 = storage[10] = 0xCAFE
 
 HALT

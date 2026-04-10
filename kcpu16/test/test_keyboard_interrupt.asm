@@ -14,40 +14,40 @@
 .origin 0x0200
 
 ; Aseta INT 6 -handler (näppäimistö)
-LOAD  R0, kbd_handler
+READ  R0, kbd_handler
 STORE [INT_KEYBOARD], R0
 
 ; Alusta: R1 = 0 (painalluksen koodi), R2 = 0 (vapautuksen koodi)
-LOAD  R1, 0
-LOAD  R2, 0
+READ  R1, 0
+READ  R2, 0
 
 ; Salli keskeytykset (I=1)
 STI
 
 ; Suorita muutama käsky niin keskeytys ehtii laueta
-LOAD  R0, 0
-LOAD  R0, 0
-LOAD  R0, 0
-LOAD  R0, 0
-LOAD  R0, 0
-LOAD  R0, 0
-LOAD  R0, 0
-LOAD  R0, 0
-LOAD  R0, 0
-LOAD  R0, 0
+READ  R0, 0
+READ  R0, 0
+READ  R0, 0
+READ  R0, 0
+READ  R0, 0
+READ  R0, 0
+READ  R0, 0
+READ  R0, 0
+READ  R0, 0
+READ  R0, 0
 
 HALT
 
 ; --- Näppäimistön keskeytysrutiini ---
 kbd_handler:
     ; Lue näppäintapahtuma KBD_DATA MMIO:sta ($0020)
-    LOAD  R0, [KBD_DATA]
+    READ  R0, [KBD_DATA]
     ; Tarkista onko vapautusbitti (bit 7) asetettu
-    LOAD  R3, KBD_RELEASE_BIT
+    READ  R3, KBD_RELEASE_BIT
     AND   R3, R0
     JZ    key_press
     ; Vapautus: tallenna koodi R2:een (ilman release-bittiä)
-    LOAD  R3, KBD_KEY_CODE_MASK
+    READ  R3, KBD_KEY_CODE_MASK
     AND   R0, R3
     CPY   R2, R0
     IRET

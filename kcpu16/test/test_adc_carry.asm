@@ -8,13 +8,13 @@
         .origin 0x0200
 
         ; Vaihe 1: Aseta C=1 ylivuotavalla ADD:lla
-        LOAD  R0, 0xFFFF
-        LOAD  R1, 1
+        READ  R0, 0xFFFF
+        READ  R1, 1
         ADD   R0, R1          ; 0xFFFF + 1 → R0=0, C=1
 
         ; Vaihe 2: ADC ylivuotaa itse — oma carry syntyy
-        LOAD  R2, 0xFFFE
-        LOAD  R3, 1
+        READ  R2, 0xFFFE
+        READ  R3, 1
         ADC   R2, R3          ; 0xFFFE + 1 + 1(carry) = 0x10000 → R2=0, C=1
 
         HALT

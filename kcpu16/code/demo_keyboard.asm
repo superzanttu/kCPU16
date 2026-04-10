@@ -70,7 +70,7 @@ STR_IDLE:
 ; ALIOHJELMA: write_str
 ; =============================================================================
 write_str:
-        LOAD  R11, [R9]
+        READ  R11, [R9]
         CMP   R11, R12
         JZ    ws_done
         OR    R11, R10
@@ -85,15 +85,15 @@ ws_done:
 ; ALIOHJELMA: write_nibble
 ; =============================================================================
 write_nibble:
-        LOAD  R6, 0x000F
+        READ  R6, 0x000F
         AND   R5, R6
-        LOAD  R6, 9
+        READ  R6, 9
         CMP   R5, R6
         JGT   wn_alpha
-        LOAD  R6, 0x0030
+        READ  R6, 0x0030
         JUMP  wn_store
 wn_alpha:
-        LOAD  R6, 0x0037
+        READ  R6, 0x0037
 wn_store:
         ADD   R5, R6
         OR    R5, R10
@@ -106,15 +106,15 @@ wn_store:
 ; =============================================================================
 write_hex4:
         CPY   R5, R1
-        LOAD  R6, 12
+        READ  R6, 12
         SHR   R5, R6
         CALL  write_nibble
         CPY   R5, R1
-        LOAD  R6, 8
+        READ  R6, 8
         SHR   R5, R6
         CALL  write_nibble
         CPY   R5, R1
-        LOAD  R6, 4
+        READ  R6, 4
         SHR   R5, R6
         CALL  write_nibble
         CPY   R5, R1
@@ -127,29 +127,29 @@ write_hex4:
 ; R12=0, R13=1 asetetaan pääohjelmassa ennen STI:tä.
 ; =============================================================================
 kbd_handler:
-        LOAD  R0, [KBD_DATA]  ; lue näppäintapahtuma MMIO:sta
+        READ  R0, [KBD_DATA]  ; lue näppäintapahtuma MMIO:sta
 
         ; Tarkista onko vapautustapahtuma (bitti 7)
-        LOAD  R1, KBD_RELEASE_BIT  ; 0x80
+        READ  R1, KBD_RELEASE_BIT  ; 0x80
         AND   R1, R0               ; R1 = release_bit & event
         JZ    kh_press             ; Z=1 → bitti ei asetettu → painallus
 
 ; --- Vapautus ---
-        LOAD  R8, 0xF9E0      ; rivi 6, sarake 0 = 0xF800 + 6*80 = 0xF9E0
-        LOAD  R9, STR_STATLBL
-        LOAD  R10, 0x0600     ; syaani etiketti
+        READ  R8, 0xF9E0      ; rivi 6, sarake 0 = 0xF800 + 6*80 = 0xF9E0
+        READ  R9, STR_STATLBL
+        READ  R10, 0x0600     ; syaani etiketti
         CALL  write_str
-        LOAD  R9, STR_RELEASE
-        LOAD  R10, 0x0100     ; punainen
+        READ  R9, STR_RELEASE
+        READ  R10, 0x0100     ; punainen
         CALL  write_str
         IRET
 
 ; --- Painallus ---
 kh_press:
         ; Näytä merkki (ASCII bit 6..0)
-        LOAD  R8, 0xF948      ; rivi 4, col 8 = 0xF800+320+8 = 0xF948
-        LOAD  R10, 0x4300     ; bold keltainen
-        LOAD  R5, KBD_KEY_CODE_MASK  ; 0x7F (maskaa release-bitin)
+        READ  R8, 0xF948      ; rivi 4, col 8 = 0xF800+320+8 = 0xF948
+        READ  R10, 0x4300     ; bold keltainen
+        READ  R5, KBD_KEY_CODE_MASK  ; 0x7F (maskaa release-bitin)
         CPY   R1, R0
         AND   R1, R5          ; R1 = ASCII-koodi
         OR    R1, R10         ; lisää väri
@@ -157,36 +157,36 @@ kh_press:
 
         ; Tyhjennä seuraavat paikat (jos edellinen merkki oli leveämpi)
         ADD   R8, R13
-        LOAD  R1, 0x0020      ; välilyönti (BG=0)
+        READ  R1, 0x0020      ; välilyönti (BG=0)
         OR    R1, R10
         STORE [R8], R1
 
         ; Näytä hex-koodi
-        LOAD  R8, 0xF990      ; rivi 5, sarake 0 = 0xF800 + 5*80 = 0xF990
-        LOAD  R9, STR_CODELBL
-        LOAD  R10, 0x0600     ; syaani
+        READ  R8, 0xF990      ; rivi 5, sarake 0 = 0xF800 + 5*80 = 0xF990
+        READ  R9, STR_CODELBL
+        READ  R10, 0x0600     ; syaani
         CALL  write_str       ; kirjoittaa "Koodi:  0x", R8 osoittaa sen jälkeen
 
-        LOAD  R5, KBD_KEY_CODE_MASK
+        READ  R5, KBD_KEY_CODE_MASK
         CPY   R1, R0
         AND   R1, R5          ; R1 = puhdas ASCII-koodi
-        LOAD  R10, 0x4200     ; bold vihreä
+        READ  R10, 0x4200     ; bold vihreä
         CALL  write_hex4      ; kirjoittaa 4 hex-numeroa
 
         ; Näytä tila
-        LOAD  R8, 0xF9E0      ; rivi 6, sarake 0
-        LOAD  R9, STR_STATLBL
-        LOAD  R10, 0x0600
+        READ  R8, 0xF9E0      ; rivi 6, sarake 0
+        READ  R9, STR_STATLBL
+        READ  R10, 0x0600
         CALL  write_str
-        LOAD  R9, STR_PRESS
-        LOAD  R10, 0x0200     ; vihreä
+        READ  R9, STR_PRESS
+        READ  R10, 0x0200     ; vihreä
         CALL  write_str
 
         ; Paina Q (0x51) → lopeta
-        LOAD  R5, KBD_KEY_CODE_MASK
+        READ  R5, KBD_KEY_CODE_MASK
         CPY   R1, R0
         AND   R1, R5
-        LOAD  R5, 0x0051      ; 'Q'
+        READ  R5, 0x0051      ; 'Q'
         CMP   R1, R5
         JZ    kh_quit
 
@@ -199,42 +199,42 @@ kh_quit:
 ; PÄÄOHJELMA
 ; =============================================================================
 main:
-        LOAD  R12, 0          ; nollavakio (write_str käyttää nullin tunnistukseen)
-        LOAD  R13, 1          ; inkrementtivakio
+        READ  R12, 0          ; nollavakio (write_str käyttää nullin tunnistukseen)
+        READ  R13, 1          ; inkrementtivakio
 
         ; --- Otsikko: rivi 0, sarake 28 = 0xF81C ---
-        LOAD  R8, 0xF81C
-        LOAD  R9, STR_TITLE
-        LOAD  R10, 0x4300     ; bold keltainen
+        READ  R8, 0xF81C
+        READ  R9, STR_TITLE
+        READ  R10, 0x4300     ; bold keltainen
         CALL  write_str
 
         ; --- Kehote: rivi 2, sarake 27 = 0xF8BB ---
         ; (80-25)/2 = 27, STR_PROMPT = 25 merkkiä
-        LOAD  R8, 0xF8BB
-        LOAD  R9, STR_PROMPT
-        LOAD  R10, 0x0700     ; valkoinen
+        READ  R8, 0xF8BB
+        READ  R9, STR_PROMPT
+        READ  R10, 0x0700     ; valkoinen
         CALL  write_str
 
         ; --- Etiketti "Merkki: ": rivi 4, sarake 0 = 0xF940 ---
-        LOAD  R8, 0xF940
-        LOAD  R9, STR_KEYLBL
-        LOAD  R10, 0x0600     ; syaani
+        READ  R8, 0xF940
+        READ  R9, STR_KEYLBL
+        READ  R10, 0x0600     ; syaani
         CALL  write_str
 
         ; --- Etiketti "Koodi:  0x": rivi 5, sarake 0 = 0xF990 ---
-        LOAD  R8, 0xF990
-        LOAD  R9, STR_CODELBL
-        LOAD  R10, 0x0600
+        READ  R8, 0xF990
+        READ  R9, STR_CODELBL
+        READ  R10, 0x0600
         CALL  write_str
 
         ; --- "Odotetaan...": rivi 6, sarake 8 = 0xF9E8 ---
-        LOAD  R8, 0xF9E8
-        LOAD  R9, STR_IDLE
-        LOAD  R10, 0x0300     ; keltainen
+        READ  R8, 0xF9E8
+        READ  R9, STR_IDLE
+        READ  R10, 0x0300     ; keltainen
         CALL  write_str
 
         ; Rekisteröi INT 6 -käsittelijä
-        LOAD  R0, kbd_handler
+        READ  R0, kbd_handler
         STORE [INT_KEYBOARD], R0   ; INT_KEYBOARD = 0x0006
 
         ; Salli keskeytykset

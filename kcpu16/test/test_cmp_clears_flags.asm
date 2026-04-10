@@ -9,25 +9,25 @@
 
         ; --- Vaihe 1: aseta kaikki liput 1 ---
         ; SUB 0x7FFF - 0xFFFF = 0x8000: C=1, N=1, V=1, Z=0
-        LOAD  R0, 0x7FFF
-        LOAD  R1, 0xFFFF
+        READ  R0, 0x7FFF
+        READ  R1, 0xFFFF
         SUB   R0, R1          ; C=1, N=1, V=1, Z=0
 
         ; --- Vaihe 2: aseta myös Z=1 ---
-        LOAD  R0, 42
-        LOAD  R1, 42
+        READ  R0, 42
+        READ  R1, 42
         CMP   R0, R1          ; 42-42=0: Z=1 (0→1 koska Z oli 0 vaiheesta 1)
                               ; N=0 (1→0), C=0 (1→0), V=0 (1→0)
 
         ; --- Vaihe 3: aseta kaikki liput 1 uudelleen (SUB) ---
-        LOAD  R0, 0x7FFF
-        LOAD  R1, 0xFFFF
+        READ  R0, 0x7FFF
+        READ  R1, 0xFFFF
         SUB   R0, R1          ; C=1, N=1, V=1, Z=0
 
         ; --- Vaihe 4: CMP joka tuottaa vain positiivisen ei-nolla tuloksen ---
         ; 100 - 50 = 50: Z=0 (1→0), N=0 (1→0), C=0 (1→0), V=0 (1→0)
-        LOAD  R0, 100
-        LOAD  R1, 50
+        READ  R0, 100
+        READ  R1, 50
         CMP   R0, R1
 
         HALT

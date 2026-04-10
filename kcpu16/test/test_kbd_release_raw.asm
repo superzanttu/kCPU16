@@ -14,39 +14,39 @@
 .origin 0x0200
 
 ; Aseta INT 6 -handler
-LOAD  R0, kbd_handler
+READ  R0, kbd_handler
 STORE [INT_KEYBOARD], R0
 
 ; Alusta
-LOAD  R1, 0      ; raakakoodi KBD_DATA:sta
-LOAD  R2, 0      ; AND KBD_RELEASE_BIT -tulos
-LOAD  R3, 0      ; AND KBD_KEY_CODE_MASK -tulos
+READ  R1, 0      ; raakakoodi KBD_DATA:sta
+READ  R2, 0      ; AND KBD_RELEASE_BIT -tulos
+READ  R3, 0      ; AND KBD_KEY_CODE_MASK -tulos
 
 ; Salli keskeytykset
 STI
 
-LOAD  R0, 0
-LOAD  R0, 0
-LOAD  R0, 0
-LOAD  R0, 0
-LOAD  R0, 0
-LOAD  R0, 0
-LOAD  R0, 0
-LOAD  R0, 0
-LOAD  R0, 0
-LOAD  R0, 0
+READ  R0, 0
+READ  R0, 0
+READ  R0, 0
+READ  R0, 0
+READ  R0, 0
+READ  R0, 0
+READ  R0, 0
+READ  R0, 0
+READ  R0, 0
+READ  R0, 0
 
 HALT
 
 kbd_handler:
-    LOAD  R1, [KBD_DATA]         ; R1 = raakakoodi (esim. 0x00DA)
+    READ  R1, [KBD_DATA]         ; R1 = raakakoodi (esim. 0x00DA)
 
     ; Tarkista release-bitti
-    LOAD  R2, KBD_RELEASE_BIT    ; R2 = 0x0080
+    READ  R2, KBD_RELEASE_BIT    ; R2 = 0x0080
     AND   R2, R1                 ; R2 = R1 & 0x80
 
     ; Maskaa näppäinkoodi
-    LOAD  R3, KBD_KEY_CODE_MASK  ; R3 = 0x007F
+    READ  R3, KBD_KEY_CODE_MASK  ; R3 = 0x007F
     AND   R3, R1                 ; R3 = R1 & 0x7F
 
     IRET

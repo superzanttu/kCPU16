@@ -9,14 +9,14 @@
 ; --- Vaihe 1: SHR joka asettaa C=1 ---
 ; 0x0001 siirrettynä oikealle 1: bit 0 (=1) siirtyy ulos → C=1
 ; tulos = 0x0000, Z=1
-LOAD  R0, 0x0001
-LOAD  R1, 1
+READ  R0, 0x0001
+READ  R1, 1
 SHR   R0, R1          ; 0x0001 >> 1 = 0x0000: C=1, Z=1, N=0
 
 ; --- Vaihe 2: SHR arvolle jonka bit 0 = 0 → C: 1→0 ---
 ; 0x0002 >> 1 = 0x0001: bit 0 of 0x0002 = 0 → C=0
-LOAD  R0, 0x0002
-LOAD  R1, 1
+READ  R0, 0x0002
+READ  R1, 1
 SHR   R0, R1          ; 0x0002 >> 1 = 0x0001: C=0, Z=0, N=0
 
 HALT

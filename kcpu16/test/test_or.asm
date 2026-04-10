@@ -7,8 +7,8 @@
         .origin 0x0200
 
         ; 0xFF00 | 0x00FF = 0xFFFF → N=1 (bitti 15 asetettu)
-        LOAD  R0, 0xFF00
-        LOAD  R1, 0x00FF
+        READ  R0, 0xFF00
+        READ  R1, 0x00FF
         OR    R0, R1
 
         HALT

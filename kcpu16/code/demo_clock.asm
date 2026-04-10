@@ -79,18 +79,18 @@
 ; =============================================================================
 
         ; Aseta kellokeskeytyksen käsittelijä (Int 9 -vektori osoitteeseen $0009)
-        LOAD  R0, clock_handler
+        READ  R0, clock_handler
         STORE [0x0009], R0
 
         ; blink_flag = 1 → ':' näkyvissä aluksi
-        LOAD  R0, 1
+        READ  R0, 1
         STORE [blink_flag], R0
 
         ; Ensimmäinen piirto ennen kellokeskeytyksen käynnistystä
         CALL  draw_clock
 
         ; Käynnistä 500 ms kellokeskeytys (→ 1 Hz vilkku)
-        LOAD  R0, 500
+        READ  R0, 500
         SCTMR R0
 
         ; Salli keskeytykset
@@ -108,8 +108,8 @@ main_loop:
 ; =============================================================================
 clock_handler:
         ; Vaihda blink_flag: 0 → 1 tai 1 → 0
-        LOAD  R0, [blink_flag]
-        LOAD  R1, 1
+        READ  R0, [blink_flag]
+        READ  R1, 1
         XOR   R0, R1
         STORE [blink_flag], R0
 
@@ -128,8 +128,8 @@ clock_handler:
 ; =============================================================================
 draw_clock:
         ; --- HH (tunti) ---
-        LOAD  R1, [CLOCK_HOUR]        ; R1 = tunti (0–23)
-        LOAD  R2, 10
+        READ  R1, [CLOCK_HOUR]        ; R1 = tunti (0–23)
+        READ  R2, 10
         CPY   R3, R1
         DIV   R3, R2                  ; R3 = H1 (kymmenet)
         CPY   R4, R3
@@ -138,41 +138,41 @@ draw_clock:
         SUB   R5, R4                  ; R5 = H2 (ykköset)
         PUSH  R5                      ; säilytä H2 pinossa
 
-        LOAD  R0, VRAM_H1
+        READ  R0, VRAM_H1
         CPY   R1, R3                  ; R1 = H1
-        LOAD  R2, prev_H1             ; R2 = prev_H1-osoite
+        READ  R2, prev_H1             ; R2 = prev_H1-osoite
         CALL  check_and_draw_digit
 
-        LOAD  R0, VRAM_H2
+        READ  R0, VRAM_H2
         POP   R1                      ; R1 = H2
-        LOAD  R2, prev_H2
+        READ  R2, prev_H2
         CALL  check_and_draw_digit
 
         ; --- ':'-merkit — piirretään molemmat yhtä aikaa kun blink muuttuu ---
-        LOAD  R3, [blink_flag]
-        LOAD  R4, [prev_blink]
+        READ  R3, [blink_flag]
+        READ  R4, [prev_blink]
         CMP   R3, R4
         JZ    dc_skip_colons          ; blink ei muuttunut → ohita
         STORE [prev_blink], R3        ; päivitä edellinen tila
-        LOAD  R4, 1
+        READ  R4, 1
         CMP   R3, R4
         JZ    dc_col_on
-        LOAD  R1, 12                  ; ' ' (vilkku pois, fontti-idx 12)
+        READ  R1, 12                  ; ' ' (vilkku pois, fontti-idx 12)
         JUMP  dc_draw_colons
 dc_col_on:
-        LOAD  R1, 10                  ; ':' (vilkku päällä, fontti-idx 10)
+        READ  R1, 10                  ; ':' (vilkku päällä, fontti-idx 10)
 dc_draw_colons:
-        LOAD  R0, VRAM_C1
+        READ  R0, VRAM_C1
         PUSH  R1                      ; säilytä idx (draw_big_char hävittää R1)
         CALL  draw_big_char
         POP   R1
-        LOAD  R0, VRAM_C2
+        READ  R0, VRAM_C2
         CALL  draw_big_char
 dc_skip_colons:
 
         ; --- MM (minuutti) ---
-        LOAD  R1, [CLOCK_MINUTE]      ; R1 = minuutti (0–59)
-        LOAD  R2, 10
+        READ  R1, [CLOCK_MINUTE]      ; R1 = minuutti (0–59)
+        READ  R2, 10
         CPY   R3, R1
         DIV   R3, R2                  ; R3 = M1
         CPY   R4, R3
@@ -181,19 +181,19 @@ dc_skip_colons:
         SUB   R5, R4                  ; R5 = M2
         PUSH  R5
 
-        LOAD  R0, VRAM_M1
+        READ  R0, VRAM_M1
         CPY   R1, R3
-        LOAD  R2, prev_M1
+        READ  R2, prev_M1
         CALL  check_and_draw_digit
 
-        LOAD  R0, VRAM_M2
+        READ  R0, VRAM_M2
         POP   R1
-        LOAD  R2, prev_M2
+        READ  R2, prev_M2
         CALL  check_and_draw_digit
 
         ; --- SS (sekunti) ---
-        LOAD  R1, [CLOCK_SECOND]      ; R1 = sekunti (0–59)
-        LOAD  R2, 10
+        READ  R1, [CLOCK_SECOND]      ; R1 = sekunti (0–59)
+        READ  R2, 10
         CPY   R3, R1
         DIV   R3, R2                  ; R3 = S1
         CPY   R4, R3
@@ -202,14 +202,14 @@ dc_skip_colons:
         SUB   R5, R4                  ; R5 = S2
         PUSH  R5
 
-        LOAD  R0, VRAM_S1
+        READ  R0, VRAM_S1
         CPY   R1, R3
-        LOAD  R2, prev_S1
+        READ  R2, prev_S1
         CALL  check_and_draw_digit
 
-        LOAD  R0, VRAM_S2
+        READ  R0, VRAM_S2
         POP   R1
-        LOAD  R2, prev_S2
+        READ  R2, prev_S2
         CALL  check_and_draw_digit
 
         RET
@@ -227,7 +227,7 @@ dc_skip_colons:
 ;   [R2] != R1  → STORE [R2]=R1, tail-call draw_big_char
 ; =============================================================================
 check_and_draw_digit:
-        LOAD  R3, [R2]                ; R3 = edellinen arvo
+        READ  R3, [R2]                ; R3 = edellinen arvo
         CMP   R1, R3                  ; uusi == vanha?
         JZ    cdd_no_change           ; sama → ei piirretä
         STORE [R2], R1                ; päivitä "edellinen"
@@ -256,20 +256,20 @@ cdd_no_change:
 ; =============================================================================
 draw_big_char:
         ; Laske fonttiosoitin: R1 = BIG_FONT + R1 * BIG_WORDS_PER_CHAR
-        LOAD  R6, BIG_WORDS_PER_CHAR  ; R6 = 8
+        READ  R6, BIG_WORDS_PER_CHAR  ; R6 = 8
         MUL   R1, R6                  ; R1 = indeksi * 8
-        LOAD  R6, BIG_FONT            ; R6 = BIG_FONT:n osoite
+        READ  R6, BIG_FONT            ; R6 = BIG_FONT:n osoite
         ADD   R1, R6                  ; R1 = fontti-datan osoitin
 
         CPY   R2, R0                  ; R2 = rivin aloitusosoite (row_start)
-        LOAD  R3, 8                   ; R3 = rivilaskuri (8 riviä per merkki)
-        LOAD  R7, 80                  ; R7 = näyttöleveys (rivin askel)
-        LOAD  R8, 1                   ; R8 = vakio 1
+        READ  R3, 8                   ; R3 = rivilaskuri (8 riviä per merkki)
+        READ  R7, 80                  ; R7 = näyttöleveys (rivin askel)
+        READ  R8, 1                   ; R8 = vakio 1
 
         PUSH  R0                      ; tallenna alkuperäinen R0 paluuarvoa varten
 
 dbc_row_loop:
-        LOAD  R5, [R1]                ; R5 = rivipikselit (6 bittiä)
+        READ  R5, [R1]                ; R5 = rivipikselit (6 bittiä)
         ADD   R1, R8                  ; seuraava fonttibytte
 
         CPY   R0, R2                  ; R0 = rivin alku
@@ -280,7 +280,7 @@ dbc_row_loop:
         JNZ   dbc_row_loop            ; jatka jos rivejä jäljellä
 
         POP   R0                      ; palauta alkuperäinen R0
-        LOAD  R6, 6
+        READ  R6, 6
         ADD   R0, R6                  ; R0 += 6 (seuraavan merkin paikka)
         RET
 
@@ -296,11 +296,11 @@ dbc_row_loop:
 ; Huom: bitti 0 (sarake 5) on aina 0 fontissa → kirjoittaa PIXEL_OFF
 ; =============================================================================
 draw_pixel_row:
-        LOAD  R9,  5                  ; R9  = bittipaikka (aloitetaan bitistä 5)
-        LOAD  R10, 6                  ; R10 = sarakeslurikka (6 saraketta)
-        LOAD  R11, 1                  ; R11 = vakio 1
-        LOAD  R12, PIXEL_ON           ; R12 = lit-pikselin VRAM-arvo
-        LOAD  R13, PIXEL_OFF          ; R13 = tyhjän pikselin VRAM-arvo
+        READ  R9,  5                  ; R9  = bittipaikka (aloitetaan bitistä 5)
+        READ  R10, 6                  ; R10 = sarakeslurikka (6 saraketta)
+        READ  R11, 1                  ; R11 = vakio 1
+        READ  R12, PIXEL_ON           ; R12 = lit-pikselin VRAM-arvo
+        READ  R13, PIXEL_OFF          ; R13 = tyhjän pikselin VRAM-arvo
 
 dpr_loop:
         CPY   R14, R5                 ; R14 = kopio rivibitistä

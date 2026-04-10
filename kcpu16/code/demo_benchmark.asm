@@ -154,14 +154,14 @@ STR_S_DSK_W:
 ; Muuttaa: R11 (väliaikainen)
 ; =============================================================================
 write_str:
-        LOAD  R12, 0            ; R12 = 0 (null-terminaattorin vertailu)
+        READ  R12, 0            ; R12 = 0 (null-terminaattorin vertailu)
 ws_loop:
-        LOAD  R11, [R9]         ; R11 = seuraava merkki lähteestä
+        READ  R11, [R9]         ; R11 = seuraava merkki lähteestä
         CMP   R11, R12          ; merkki == null?
         JZ    ws_done           ; kyllä → lopeta
         OR    R11, R10          ; R11 = merkki | väriattribuutti
         STORE [R8], R11         ; kirjoita VRAM-sana
-        LOAD  R11, 1
+        READ  R11, 1
         ADD   R8,  R11          ; VRAM-osoitin++
         ADD   R9,  R11          ; lähde-osoitin++
         JUMP  ws_loop
@@ -182,7 +182,7 @@ ws_done:
 ; =============================================================================
 write5:
         ; --- Kymmenen tuhannen paikkaa ---
-        LOAD  R0, 10000
+        READ  R0, 10000
         CPY   R7, R1
         DIV   R7, R0            ; R7 = 10000-luku (0–6)
         CPY   R9, R7
@@ -194,7 +194,7 @@ write5:
         ADD   R8, R3
 
         ; --- Tuhannen paikkaa ---
-        LOAD  R0, 1000
+        READ  R0, 1000
         CPY   R7, R1
         DIV   R7, R0            ; R7 = 1000-luku (0–9)
         CPY   R9, R7
@@ -206,7 +206,7 @@ write5:
         ADD   R8, R3
 
         ; --- Sadan paikkaa ---
-        LOAD  R0, 100
+        READ  R0, 100
         CPY   R7, R1
         DIV   R7, R0            ; R7 = 100-luku (0–9)
         CPY   R9, R7
@@ -245,9 +245,9 @@ write5:
 ; Muuttaa:   R0  (edellinen sekunti väliaikaisesti)
 ; =============================================================================
 wait_sec:
-        LOAD  R0,  [CLOCK_SECOND]   ; R0 = nykyinen sekunti
+        READ  R0,  [CLOCK_SECOND]   ; R0 = nykyinen sekunti
 wait_sec_loop:
-        LOAD  R12, [CLOCK_SECOND]   ; R12 = tuorein sekunti
+        READ  R12, [CLOCK_SECOND]   ; R12 = tuorein sekunti
         CMP   R12, R0
         JZ    wait_sec_loop         ; ei muuttunut → odota
         RET                         ; R12 = uusi sekunti
@@ -263,7 +263,7 @@ wait_sec_loop:
 ; =============================================================================
 bench_cpu:
         CALL  wait_sec              ; R12 = uusi sekunti
-        LOAD  R13, 0                ; R13 = kierroslaskuri
+        READ  R13, 0                ; R13 = kierroslaskuri
 cpu_bm_loop:
         NOP                         ; benchmark-työ 1
         NOP                         ; benchmark-työ 2
@@ -272,7 +272,7 @@ cpu_bm_loop:
         NOP                         ; benchmark-työ 5
         NOP                         ; benchmark-työ 6
         ADD   R13, R3               ; kierrosten laskuri++  (R3 = 1)
-        LOAD  R14, [CLOCK_SECOND]   ; luetaan aika
+        READ  R14, [CLOCK_SECOND]   ; luetaan aika
         CMP   R14, R12              ; verrattaan aloitussekuntiin
         JZ    cpu_bm_loop           ; sama sekunti → jatka
         RET                         ; R13 = kierrosta/sekuntti
@@ -287,18 +287,18 @@ cpu_bm_loop:
 ; =============================================================================
 bench_ram_read:
         CALL  wait_sec
-        LOAD  R13, 0
-        LOAD  R0,  RAM_BM_START     ; R0 = puskurin osoitin
-        LOAD  R2,  RAM_BM_END       ; R2 = puskurin loppuraja
+        READ  R13, 0
+        READ  R0,  RAM_BM_START     ; R0 = puskurin osoitin
+        READ  R2,  RAM_BM_END       ; R2 = puskurin loppuraja
 ram_r_loop:
-        LOAD  R1,  [R0]             ; lue RAM-puskurista (benchmark)
+        READ  R1,  [R0]             ; lue RAM-puskurista (benchmark)
         ADD   R13, R3               ; laskuri++
         ADD   R0,  R3               ; osoitin++
         CMP   R0,  R2
         JLT   ram_r_chk             ; ei loppuun → tarkista aika
-        LOAD  R0,  RAM_BM_START     ; puskurin kierrätys
+        READ  R0,  RAM_BM_START     ; puskurin kierrätys
 ram_r_chk:
-        LOAD  R14, [CLOCK_SECOND]
+        READ  R14, [CLOCK_SECOND]
         CMP   R14, R12
         JZ    ram_r_loop
         RET
@@ -313,19 +313,19 @@ ram_r_chk:
 ; =============================================================================
 bench_ram_write:
         CALL  wait_sec
-        LOAD  R13, 0
-        LOAD  R0,  RAM_BM_START
-        LOAD  R2,  RAM_BM_END
-        LOAD  R1,  0xABCD           ; testiarvo (pysyy muuttumattomana)
+        READ  R13, 0
+        READ  R0,  RAM_BM_START
+        READ  R2,  RAM_BM_END
+        READ  R1,  0xABCD           ; testiarvo (pysyy muuttumattomana)
 ram_w_loop:
         STORE [R0], R1              ; kirjoita RAM-puskuriin (benchmark)
         ADD   R13, R3
         ADD   R0,  R3
         CMP   R0,  R2
         JLT   ram_w_chk
-        LOAD  R0,  RAM_BM_START
+        READ  R0,  RAM_BM_START
 ram_w_chk:
-        LOAD  R14, [CLOCK_SECOND]
+        READ  R14, [CLOCK_SECOND]
         CMP   R14, R12
         JZ    ram_w_loop
         RET
@@ -342,18 +342,18 @@ ram_w_chk:
 ; =============================================================================
 bench_dsk_read:
         CALL  wait_sec
-        LOAD  R13, 0
-        LOAD  R0,  DSK_BM_START     ; R0 = testin storage-osoitin
-        LOAD  R2,  DSK_BM_END
+        READ  R13, 0
+        READ  R0,  DSK_BM_START     ; R0 = testin storage-osoitin
+        READ  R2,  DSK_BM_END
 dsk_r_loop:
         DREAD R1,  R0               ; lue tallennuslaitteelta (benchmark)
         ADD   R13, R3
         ADD   R0,  R3
         CMP   R0,  R2
         JLT   dsk_r_chk
-        LOAD  R0,  DSK_BM_START
+        READ  R0,  DSK_BM_START
 dsk_r_chk:
-        LOAD  R14, [CLOCK_SECOND]
+        READ  R14, [CLOCK_SECOND]
         CMP   R14, R12
         JZ    dsk_r_loop
         RET
@@ -369,19 +369,19 @@ dsk_r_chk:
 ; =============================================================================
 bench_dsk_write:
         CALL  wait_sec
-        LOAD  R13, 0
-        LOAD  R0,  DSK_BM_START
-        LOAD  R2,  DSK_BM_END
-        LOAD  R1,  0x1234           ; testiarvo
+        READ  R13, 0
+        READ  R0,  DSK_BM_START
+        READ  R2,  DSK_BM_END
+        READ  R1,  0x1234           ; testiarvo
 dsk_w_loop:
         DWRITE R1, R0               ; kirjoita tallennuslaitteelle (benchmark)
         ADD   R13, R3
         ADD   R0,  R3
         CMP   R0,  R2
         JLT   dsk_w_chk
-        LOAD  R0,  DSK_BM_START
+        READ  R0,  DSK_BM_START
 dsk_w_chk:
-        LOAD  R14, [CLOCK_SECOND]
+        READ  R14, [CLOCK_SECOND]
         CMP   R14, R12
         JZ    dsk_w_loop
         RET
@@ -420,30 +420,30 @@ update_avg:
         ADD   R8, R3            ; R8 = R0+3
 
         ; Shift vanhat arvot eteenpäin (vanhin tipahtaa pois)
-        LOAD  R9,  [R7]
+        READ  R9,  [R7]
         STORE [R8], R9          ; [R0+3] = [R0+2]
-        LOAD  R9,  [R6]
+        READ  R9,  [R6]
         STORE [R7], R9          ; [R0+2] = [R0+1]
-        LOAD  R9,  [R0]
+        READ  R9,  [R0]
         STORE [R6], R9          ; [R0+1] = [R0+0]
 
         ; Tallenna uusi arvo historiataulukon alkuun
         STORE [R0], R1          ; [R0+0] = uusi arvo
 
         ; Laske avg = v_new/4 + v1/4 + v2/4 + v3/4  (välttää 16-bit ylivuodon)
-        LOAD  R10, 4            ; R10 = jakaja 4
+        READ  R10, 4            ; R10 = jakaja 4
         CPY   R9,  R1           ; R9 = uusi arvo (ei tarvitse lukea muistista uudelleen)
         DIV   R9,  R10          ; R9 = v_new/4  (kertyyakumulaattori)
 
-        LOAD  R6,  [R6]         ; R6 = [R0+1] = edellinen arvo
+        READ  R6,  [R6]         ; R6 = [R0+1] = edellinen arvo
         DIV   R6,  R10          ; R6 = v1/4
         ADD   R9,  R6
 
-        LOAD  R7,  [R7]         ; R7 = [R0+2] = toiseksi vanha
+        READ  R7,  [R7]         ; R7 = [R0+2] = toiseksi vanha
         DIV   R7,  R10          ; R7 = v2/4
         ADD   R9,  R7
 
-        LOAD  R8,  [R8]         ; R8 = [R0+3] = vanhin
+        READ  R8,  [R8]         ; R8 = [R0+3] = vanhin
         DIV   R8,  R10          ; R8 = v3/4
         ADD   R9,  R8
 
@@ -457,24 +457,24 @@ main:
         ; -------------------------------------------------------
         ; Globaalien vakiorekistereiden alustus
         ; -------------------------------------------------------
-        LOAD  R3,  1            ; R3  = 1  (askel-inkrementti)
-        LOAD  R4,  10           ; R4  = 10 (kymmenenjakaja write5:ssä)
-        LOAD  R5,  0x4230       ; R5  = vihreä bold '0' (numeroperusmerkki)
+        READ  R3,  1            ; R3  = 1  (askel-inkrementti)
+        READ  R4,  10           ; R4  = 10 (kymmenenjakaja write5:ssä)
+        READ  R5,  0x4230       ; R5  = vihreä bold '0' (numeroperusmerkki)
 
         ; -------------------------------------------------------
         ; Otsikkorivi 0
         ; -------------------------------------------------------
-        LOAD  R8,  VRAM_R0
-        LOAD  R9,  STR_TITLE
-        LOAD  R10, COL_TITLE    ; keltainen lihavoitu
+        READ  R8,  VRAM_R0
+        READ  R9,  STR_TITLE
+        READ  R10, COL_TITLE    ; keltainen lihavoitu
         CALL  write_str
 
         ; -------------------------------------------------------
         ; Erotinrivi 1
         ; -------------------------------------------------------
-        LOAD  R8,  VRAM_R1
-        LOAD  R9,  STR_SEP
-        LOAD  R10, COL_SEP      ; valkoinen
+        READ  R8,  VRAM_R1
+        READ  R9,  STR_SEP
+        READ  R10, COL_SEP      ; valkoinen
         CALL  write_str
 
 ; =============================================================================
@@ -487,9 +487,9 @@ main_loop:
         ; ============================================================
 
         ; Näytä mittausstatus rivi 11
-        LOAD  R8,  VRAM_R11
-        LOAD  R9,  STR_S_CPU
-        LOAD  R10, COL_STAT
+        READ  R8,  VRAM_R11
+        READ  R9,  STR_S_CPU
+        READ  R10, COL_STAT
         CALL  write_str
 
         ; Suorita benchmark → R13 = silmukkakierroksia/sekuntti (1 kierros ≈ 10 käskyä)
@@ -499,15 +499,15 @@ main_loop:
         ; Emulaattori ajaa ~70 000 käskyä/s → R13 ≈ 7000 → kIPS ≈ 70
         ; Tulos mahtuu aina 16-bittiin (max kIPS ≈ R13_max/100 = 655)
         CPY   R1,  R13
-        LOAD  R7,  100
+        READ  R7,  100
         DIV   R1,  R7           ; R1 = kIPS (R13 / 100)
         ; Päivitä 4-mittauksen liukuva keskiarvo
-        LOAD  R0,  BUF_CPU
+        READ  R0,  BUF_CPU
         CALL  update_avg        ; R1 = avg kIPS
         ; Kirjoita rivi 3: "CPU kIPS:       NNNNN"
-        LOAD  R8,  VRAM_R3
-        LOAD  R9,  STR_CPU_LBL
-        LOAD  R10, COL_LABEL
+        READ  R8,  VRAM_R3
+        READ  R9,  STR_CPU_LBL
+        READ  R10, COL_LABEL
         CALL  write_str
         CALL  write5
 
@@ -515,30 +515,30 @@ main_loop:
         ; MITTAUS 2: RAM latausnopeus (tavua/sekuntti)
         ; ============================================================
 
-        LOAD  R8,  VRAM_R11
-        LOAD  R9,  STR_S_RAM_R
-        LOAD  R10, COL_STAT
+        READ  R8,  VRAM_R11
+        READ  R9,  STR_S_RAM_R
+        READ  R10, COL_STAT
         CALL  write_str
 
         CALL  bench_ram_read    ; R13 = sanoja/sekuntti
 
         ; Laske B/s = R13 × 2 (1 sana = 2 tavua), saturoi 65535:ään
         ; CMP R13, 0: N=1 jos R13 >= 32768 (bitti 15 ylhäällä → × 2 ylivuotaisi)
-        LOAD  R7,  0
+        READ  R7,  0
         CMP   R13, R7
         JLT   rr_bps_sat        ; N=1, V=0 → R13 >= 32768 → saturoi
         CPY   R1,  R13
         ADD   R1,  R13          ; R1 = 2 × W/s
         JUMP  rr_bps_show
 rr_bps_sat:
-        LOAD  R1,  65535
+        READ  R1,  65535
 rr_bps_show:
-        LOAD  R0,  BUF_RAM_R
+        READ  R0,  BUF_RAM_R
         CALL  update_avg        ; R1 = avg B/s
         ; Kirjoita rivi 5: "RAM  luku  B/s: NNNNN"
-        LOAD  R8,  VRAM_R5
-        LOAD  R9,  STR_RAM_R_LBL
-        LOAD  R10, COL_LABEL
+        READ  R8,  VRAM_R5
+        READ  R9,  STR_RAM_R_LBL
+        READ  R10, COL_LABEL
         CALL  write_str
         CALL  write5
 
@@ -546,29 +546,29 @@ rr_bps_show:
         ; MITTAUS 3: RAM tallennusnopeus (tavua/sekuntti)
         ; ============================================================
 
-        LOAD  R8,  VRAM_R11
-        LOAD  R9,  STR_S_RAM_W
-        LOAD  R10, COL_STAT
+        READ  R8,  VRAM_R11
+        READ  R9,  STR_S_RAM_W
+        READ  R10, COL_STAT
         CALL  write_str
 
         CALL  bench_ram_write   ; R13 = sanoja/sekuntti
 
         ; Laske B/s = R13 × 2
-        LOAD  R7,  0
+        READ  R7,  0
         CMP   R13, R7
         JLT   rw_bps_sat
         CPY   R1,  R13
         ADD   R1,  R13
         JUMP  rw_bps_show
 rw_bps_sat:
-        LOAD  R1,  65535
+        READ  R1,  65535
 rw_bps_show:
-        LOAD  R0,  BUF_RAM_W
+        READ  R0,  BUF_RAM_W
         CALL  update_avg        ; R1 = avg B/s
         ; Kirjoita rivi 6: "RAM  kirj. B/s: NNNNN"
-        LOAD  R8,  VRAM_R6
-        LOAD  R9,  STR_RAM_W_LBL
-        LOAD  R10, COL_LABEL
+        READ  R8,  VRAM_R6
+        READ  R9,  STR_RAM_W_LBL
+        READ  R10, COL_LABEL
         CALL  write_str
         CALL  write5
 
@@ -576,49 +576,49 @@ rw_bps_show:
         ; MITTAUS 4: Tallennuslaitteen lukusnopeus (B/s ja blk/s)
         ; ============================================================
 
-        LOAD  R8,  VRAM_R11
-        LOAD  R9,  STR_S_DSK_R
-        LOAD  R10, COL_STAT
+        READ  R8,  VRAM_R11
+        READ  R9,  STR_S_DSK_R
+        READ  R10, COL_STAT
         CALL  write_str
 
         CALL  bench_dsk_read    ; R13 = sanoja/sekuntti
 
         ; Laske B/s (→ R1) ja blk/s (→ R2)
         ; B/s ensin
-        LOAD  R7,  0
+        READ  R7,  0
         CMP   R13, R7
         JLT   dr_bps_sat
         CPY   R1,  R13
         ADD   R1,  R13          ; R1 = B/s
         JUMP  dr_bps_done
 dr_bps_sat:
-        LOAD  R1,  65535
+        READ  R1,  65535
 dr_bps_done:
         ; blk/s = W/s / 256
-        LOAD  R7,  BLOCK_WORDS  ; R7 = 256
+        READ  R7,  BLOCK_WORDS  ; R7 = 256
         CPY   R2,  R13
         DIV   R2,  R7           ; R2 = blk/s
 
         ; Laske 4-mittauksen avg molemmille arvoille etukäteen (ennen write-kutsuja)
         ; B/s avg: R1 (jo laskettu), R2 säilyy
-        LOAD  R0,  BUF_DSK_RB
+        READ  R0,  BUF_DSK_RB
         CALL  update_avg        ; R1 = avg B/s  (R2 ei muutu)
         PUSH  R1                ; pino ← avg B/s
         ; blk/s avg: R1 = raw blk/s
-        LOAD  R0,  BUF_DSK_RK
+        READ  R0,  BUF_DSK_RK
         CPY   R1,  R2
         CALL  update_avg        ; R1 = avg blk/s
         CPY   R2,  R1           ; R2 = avg blk/s
         POP   R1                ; R1 = avg B/s
 
         ; Kirjoita rivi 8: "Levy luku  B/s: NNNNN  blk/s: NNNNN"
-        LOAD  R8,  VRAM_R8
-        LOAD  R9,  STR_DSK_R_LBL
-        LOAD  R10, COL_LABEL
+        READ  R8,  VRAM_R8
+        READ  R9,  STR_DSK_R_LBL
+        READ  R10, COL_LABEL
         CALL  write_str
         CALL  write5            ; kirjoita avg B/s
 
-        LOAD  R9,  STR_BLKS_LBL
+        READ  R9,  STR_BLKS_LBL
         CALL  write_str
         CPY   R1,  R2           ; R1 = avg blk/s
         CALL  write5
@@ -627,45 +627,45 @@ dr_bps_done:
         ; MITTAUS 5: Tallennuslaitteen kirjoitusnopeus (B/s ja blk/s)
         ; ============================================================
 
-        LOAD  R8,  VRAM_R11
-        LOAD  R9,  STR_S_DSK_W
-        LOAD  R10, COL_STAT
+        READ  R8,  VRAM_R11
+        READ  R9,  STR_S_DSK_W
+        READ  R10, COL_STAT
         CALL  write_str
 
         CALL  bench_dsk_write   ; R13 = sanoja/sekuntti
 
         ; Laske B/s (→ R1) ja blk/s (→ R2)
-        LOAD  R7,  0
+        READ  R7,  0
         CMP   R13, R7
         JLT   dw_bps_sat
         CPY   R1,  R13
         ADD   R1,  R13
         JUMP  dw_bps_done
 dw_bps_sat:
-        LOAD  R1,  65535
+        READ  R1,  65535
 dw_bps_done:
-        LOAD  R7,  BLOCK_WORDS
+        READ  R7,  BLOCK_WORDS
         CPY   R2,  R13
         DIV   R2,  R7           ; R2 = blk/s
 
         ; Laske 4-mittauksen avg molemmille arvoille
-        LOAD  R0,  BUF_DSK_WB
+        READ  R0,  BUF_DSK_WB
         CALL  update_avg        ; R1 = avg B/s  (R2 ei muutu)
         PUSH  R1                ; pino ← avg B/s
-        LOAD  R0,  BUF_DSK_WK
+        READ  R0,  BUF_DSK_WK
         CPY   R1,  R2
         CALL  update_avg        ; R1 = avg blk/s
         CPY   R2,  R1           ; R2 = avg blk/s
         POP   R1                ; R1 = avg B/s
 
         ; Kirjoita rivi 9: "Levy kirj. B/s: NNNNN  blk/s: NNNNN"
-        LOAD  R8,  VRAM_R9
-        LOAD  R9,  STR_DSK_W_LBL
-        LOAD  R10, COL_LABEL
+        READ  R8,  VRAM_R9
+        READ  R9,  STR_DSK_W_LBL
+        READ  R10, COL_LABEL
         CALL  write_str
         CALL  write5            ; kirjoita avg B/s
 
-        LOAD  R9,  STR_BLKS_LBL
+        READ  R9,  STR_BLKS_LBL
         CALL  write_str
         CPY   R1,  R2           ; R1 = avg blk/s
         CALL  write5

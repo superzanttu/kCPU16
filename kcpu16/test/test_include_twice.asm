@@ -8,7 +8,7 @@
         .origin 0x0200
 
 START:
-        LOAD  R0, 10
+        READ  R0, 10
         CALL  ADD_FIVE      ; R0 = 15
         CALL  ADD_THREE     ; R0 = 18
         HALT

@@ -65,7 +65,7 @@ STR_SHR:
 ; ALIOHJELMA: write_str
 ; =============================================================================
 write_str:
-        LOAD  R11, [R9]
+        READ  R11, [R9]
         CMP   R11, R12
         JZ    ws_done
         OR    R11, R10
@@ -83,15 +83,15 @@ ws_done:
 ; Ulkoon:  R8 += 1
 ; =============================================================================
 write_nibble:
-        LOAD  R6, 0x000F
+        READ  R6, 0x000F
         AND   R5, R6          ; pidä vain alin nibble (0–15)
-        LOAD  R6, 9
+        READ  R6, 9
         CMP   R5, R6          ; onko nibble > 9 (= A–F)?
         JGT   wn_alpha
-        LOAD  R6, 0x0030      ; '0' = 0x30
+        READ  R6, 0x0030      ; '0' = 0x30
         JUMP  wn_store
 wn_alpha:
-        LOAD  R6, 0x0037      ; 'A'−10 = 0x37  (A=0xA+0x37=0x41 ✓)
+        READ  R6, 0x0037      ; 'A'−10 = 0x37  (A=0xA+0x37=0x41 ✓)
 wn_store:
         ADD   R5, R6          ; ASCII-merkki
         OR    R5, R10         ; lisää väri
@@ -109,19 +109,19 @@ wn_store:
 write_hex4:
         ; Nibble 3 (ylin):  R1 >> 12
         CPY   R5, R1
-        LOAD  R6, 12
+        READ  R6, 12
         SHR   R5, R6
         CALL  write_nibble
 
         ; Nibble 2:  R1 >> 8
         CPY   R5, R1
-        LOAD  R6, 8
+        READ  R6, 8
         SHR   R5, R6
         CALL  write_nibble
 
         ; Nibble 1:  R1 >> 4
         CPY   R5, R1
-        LOAD  R6, 4
+        READ  R6, 4
         SHR   R5, R6
         CALL  write_nibble
 
@@ -134,108 +134,108 @@ write_hex4:
 ; PÄÄOHJELMA
 ; =============================================================================
 main:
-        LOAD  R12, 0          ; nollavakio
-        LOAD  R13, 1          ; inkrementtivakio
+        READ  R12, 0          ; nollavakio
+        READ  R13, 1          ; inkrementtivakio
 
         ; --- Otsikko: rivi 0, sarake 24 = 0xF818 ---
-        LOAD  R8, 0xF818
-        LOAD  R9, STR_TITLE
-        LOAD  R10, 0x4300     ; bold keltainen
+        READ  R8, 0xF818
+        READ  R9, STR_TITLE
+        READ  R10, 0x4300     ; bold keltainen
         CALL  write_str
 
         ; --- Viiva: rivi 1, sarake 24 = 0xF868 ---
-        LOAD  R8, 0xF868
-        LOAD  R9, STR_UNDER
-        LOAD  R10, 0x0700     ; valkoinen
+        READ  R8, 0xF868
+        READ  R9, STR_UNDER
+        READ  R10, 0x0700     ; valkoinen
         CALL  write_str
 
 ; --- AND: 0xFF0F & 0x0F0F = 0x0F0F ---
 ; Rivi 2, sarake 0 = 0xF8A0
 
-        LOAD  R8, 0xF8A0
-        LOAD  R9, STR_AND
-        LOAD  R10, 0x0600     ; syaani
+        READ  R8, 0xF8A0
+        READ  R9, STR_AND
+        READ  R10, 0x0600     ; syaani
         CALL  write_str       ; kirjoittaa otsikon, R8 osoittaa tulokselle
 
-        LOAD  R0, 0xFF0F
-        LOAD  R1, 0x0F0F
+        READ  R0, 0xFF0F
+        READ  R1, 0x0F0F
         AND   R0, R1          ; R0 = 0xFF0F & 0x0F0F = 0x0F0F
         CPY   R1, R0
-        LOAD  R10, 0x4200     ; bold vihreä (tulos)
+        READ  R10, 0x4200     ; bold vihreä (tulos)
         CALL  write_hex4
 
 ; --- OR: 0x00FF | 0xFF00 = 0xFFFF ---
 ; Rivi 3, sarake 0 = 0xF8F0
 
-        LOAD  R8, 0xF8F0
-        LOAD  R9, STR_OR
-        LOAD  R10, 0x0600
+        READ  R8, 0xF8F0
+        READ  R9, STR_OR
+        READ  R10, 0x0600
         CALL  write_str
 
-        LOAD  R0, 0x00FF
-        LOAD  R1, 0xFF00
+        READ  R0, 0x00FF
+        READ  R1, 0xFF00
         OR    R0, R1          ; R0 = 0x00FF | 0xFF00 = 0xFFFF
         CPY   R1, R0
-        LOAD  R10, 0x4200
+        READ  R10, 0x4200
         CALL  write_hex4
 
 ; --- XOR: 0xFF00 ^ 0xF0F0 = 0x0FF0 ---
 ; Rivi 4, sarake 0 = 0xF940
 
-        LOAD  R8, 0xF940
-        LOAD  R9, STR_XOR
-        LOAD  R10, 0x0600
+        READ  R8, 0xF940
+        READ  R9, STR_XOR
+        READ  R10, 0x0600
         CALL  write_str
 
-        LOAD  R0, 0xFF00
-        LOAD  R1, 0xF0F0
+        READ  R0, 0xFF00
+        READ  R1, 0xF0F0
         XOR   R0, R1          ; R0 = 0xFF00 ^ 0xF0F0 = 0x0FF0
         CPY   R1, R0
-        LOAD  R10, 0x4200
+        READ  R10, 0x4200
         CALL  write_hex4
 
 ; --- NOT: ~0x0F0F = 0xF0F0 ---
 ; Rivi 5, sarake 0 = 0xF990
 
-        LOAD  R8, 0xF990
-        LOAD  R9, STR_NOT
-        LOAD  R10, 0x0600
+        READ  R8, 0xF990
+        READ  R9, STR_NOT
+        READ  R10, 0x0600
         CALL  write_str
 
-        LOAD  R0, 0x0F0F
+        READ  R0, 0x0F0F
         NOT   R0              ; R0 = ~0x0F0F = 0xF0F0
         CPY   R1, R0
-        LOAD  R10, 0x4200
+        READ  R10, 0x4200
         CALL  write_hex4
 
 ; --- SHL: 0x0001 << 8 = 0x0100 ---
 ; Rivi 6, sarake 0 = 0xF9E0
 
-        LOAD  R8, 0xF9E0
-        LOAD  R9, STR_SHL
-        LOAD  R10, 0x0600
+        READ  R8, 0xF9E0
+        READ  R9, STR_SHL
+        READ  R10, 0x0600
         CALL  write_str
 
-        LOAD  R0, 0x0001
-        LOAD  R1, 8
+        READ  R0, 0x0001
+        READ  R1, 8
         SHL   R0, R1          ; R0 = 0x0001 << 8 = 0x0100
         CPY   R1, R0
-        LOAD  R10, 0x4200
+        READ  R10, 0x4200
         CALL  write_hex4
 
 ; --- SHR: 0x8000 >> 4 = 0x0800 ---
 ; Rivi 7, sarake 0 = 0xFA30
 
-        LOAD  R8, 0xFA30
-        LOAD  R9, STR_SHR
-        LOAD  R10, 0x0600
+        READ  R8, 0xFA30
+        READ  R9, STR_SHR
+        READ  R10, 0x0600
         CALL  write_str
 
-        LOAD  R0, 0x8000
-        LOAD  R1, 4
+        READ  R0, 0x8000
+        READ  R1, 4
         SHR   R0, R1          ; R0 = 0x8000 >> 4 = 0x0800
         CPY   R1, R0
-        LOAD  R10, 0x4200
+        READ  R10, 0x4200
         CALL  write_hex4
 
         HALT

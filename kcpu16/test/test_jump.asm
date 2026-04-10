@@ -5,12 +5,12 @@
 
         .origin 0x0200
 
-        LOAD  R0, 1
+        READ  R0, 1
         JUMP  skip            ; hyppää yli seuraavan käskyn
-        LOAD  R0, 99          ; tätä ei suoriteta
+        READ  R0, 99          ; tätä ei suoriteta
 
 skip:
-        LOAD  R1, 2
+        READ  R1, 2
         HALT
 
 .expect_reg   R0, 1           ; 99:ää ei kirjoitettu

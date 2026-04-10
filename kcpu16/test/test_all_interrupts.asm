@@ -30,37 +30,37 @@
 .origin 0x0200
 
 ; --- Aseta handlerit ---
-LOAD  R0, handler0
+READ  R0, handler0
 STORE [0x0000], R0     ; INT 0 (DIV_ZERO)
 
-LOAD  R0, handler1
+READ  R0, handler1
 STORE [0x0001], R0     ; INT 1 (INVALID_OPCODE)
 
-LOAD  R0, handler3
+READ  R0, handler3
 STORE [0x0003], R0     ; INT 3 (BREAKPOINT)
 
-LOAD  R0, handler4
+READ  R0, handler4
 STORE [0x0004], R0     ; INT 4 (PRIVILEGE_VIOLATION)
 
-LOAD  R0, handler5
+READ  R0, handler5
 STORE [0x0005], R0     ; INT 5 (MEMORY_ACCESS_FAULT)
 
-LOAD  R0, handler7
+READ  R0, handler7
 STORE [0x0007], R0     ; INT 7 (TIMER)
 
-LOAD  R0, exit_handler
+READ  R0, exit_handler
 STORE [0x0008], R0     ; INT 8 (PROCESS_EXIT) -> HALT
 
 ; Aseta muistisuojaus: MPR = 0x0300
 ; User-tila ei voi lukea/kirjoittaa alle 0x0300
-LOAD  R0, 0x0300
+READ  R0, 0x0300
 SMPR  R0
 
 ; -------------------------------------------------------
 ; INT 0: jako nollalla (DIV_ZERO)
 ; -------------------------------------------------------
-LOAD  R0, 100
-LOAD  R1, 0
+READ  R0, 100
+READ  R1, 0
 DIV   R0, R1           ; jakaja = 0 -> INT 0
 
 ; -------------------------------------------------------
@@ -79,92 +79,92 @@ INT   3
 ; INT 7: ajastinkeskeytys (TIMER)
 ; Handler poistaa ajastimen heti, joten se laukeaa kerran.
 ; -------------------------------------------------------
-LOAD  R0, 5
+READ  R0, 5
 STMR  R0               ; TMR = 5 (laukeaa joka 5. käsky)
 STI                    ; salli keskeytykset
-LOAD  R0, 0            ; #1
-LOAD  R0, 0            ; #2
-LOAD  R0, 0            ; #3
-LOAD  R0, 0            ; #4
-LOAD  R0, 0            ; #5
-LOAD  R0, 0            ; #6
-LOAD  R0, 0            ; #7
-LOAD  R0, 0            ; #8
-LOAD  R0, 0            ; #9
-LOAD  R0, 0            ; #10
-LOAD  R0, 0            ; #11
-LOAD  R0, 0            ; #12
-LOAD  R0, 0            ; #13
-LOAD  R0, 0            ; #14
-LOAD  R0, 0            ; #15
-LOAD  R0, 0            ; #16
-LOAD  R0, 0            ; #17
-LOAD  R0, 0            ; #18
-LOAD  R0, 0            ; #19
-LOAD  R0, 0            ; #20
+READ  R0, 0            ; #1
+READ  R0, 0            ; #2
+READ  R0, 0            ; #3
+READ  R0, 0            ; #4
+READ  R0, 0            ; #5
+READ  R0, 0            ; #6
+READ  R0, 0            ; #7
+READ  R0, 0            ; #8
+READ  R0, 0            ; #9
+READ  R0, 0            ; #10
+READ  R0, 0            ; #11
+READ  R0, 0            ; #12
+READ  R0, 0            ; #13
+READ  R0, 0            ; #14
+READ  R0, 0            ; #15
+READ  R0, 0            ; #16
+READ  R0, 0            ; #17
+READ  R0, 0            ; #18
+READ  R0, 0            ; #19
+READ  R0, 0            ; #20
 CLI                    ; estä lisäkeskeytykset
-LOAD  R0, 0
+READ  R0, 0
 STMR  R0               ; TMR = 0 (ajastin pois)
 
 ; -------------------------------------------------------
 ; Siirry user-tilaan (IRET P=0)
 ; -------------------------------------------------------
-LOAD  R0, user_code
+READ  R0, user_code
 PUSH  R0               ; PC = user_code
-LOAD  R0, 0            ; SR = 0 (P=0, I=0, user mode)
+READ  R0, 0            ; SR = 0 (P=0, I=0, user mode)
 PUSH  R0
 IRET                   ; -> user mode
 
 ; ---- HANDLERIT (kernel mode) ----
 
 handler0:
-        LOAD  R8, 0xA0         ; INT 0 merkki
+        READ  R8, 0xA0         ; INT 0 merkki
         ; Ohita DIV-käsky (3 sanaa)
         POP   R0
         POP   R1               ; old_PC (osoittaa DIV:iin)
-        LOAD  R2, 3
+        READ  R2, 3
         ADD   R1, R2
         PUSH  R1
         PUSH  R0
         IRET
 
 handler1:
-        LOAD  R9, 0xA1         ; INT 1 merkki
+        READ  R9, 0xA1         ; INT 1 merkki
         ; Palaa after_inv_opcode:iin (ei 0x0701 joka on 0x0000)
         POP   R0
         POP   R1               ; hylkää old_PC
-        LOAD  R1, after_inv_opcode
+        READ  R1, after_inv_opcode
         PUSH  R1
         PUSH  R0
         IRET
 
 handler3:
-        LOAD  R10, 0xA3        ; INT 3 merkki
+        READ  R10, 0xA3        ; INT 3 merkki
         IRET
 
 handler7:
-        LOAD  R11, 0xA7        ; INT 7 merkki
-        LOAD  R0, 0
+        READ  R11, 0xA7        ; INT 7 merkki
+        READ  R0, 0
         STMR  R0               ; poista ajastin heti (ei enempää laukaisuja)
         IRET
 
 handler4:
-        LOAD  R12, 0xA4        ; INT 4 merkki
+        READ  R12, 0xA4        ; INT 4 merkki
         ; Ohita HALT-käsky (1 sana) ja palaa user-tilaan
         POP   R0
         POP   R1               ; old_PC (osoittaa HALTiin)
-        LOAD  R2, 1
+        READ  R2, 1
         ADD   R1, R2           ; hyppää HALTin yli
         PUSH  R1
         PUSH  R0
         IRET                   ; palaa user-tilaan (SR:ssä P=0)
 
 handler5:
-        LOAD  R13, 0xA5        ; INT 5 merkki
+        READ  R13, 0xA5        ; INT 5 merkki
         ; Ohita LOAD reg,[addr] -käsky (3 sanaa) ja palaa user-tilaan
         POP   R0
         POP   R1               ; old_PC (osoittaa LOADiin)
-        LOAD  R2, 3
+        READ  R2, 3
         ADD   R1, R2           ; hyppää LOADin yli
         PUSH  R1
         PUSH  R0
@@ -181,7 +181,7 @@ HALT                           ; -> INT 4 (privileged in user mode)
 
 after_priv:
 ; INT 5: lue muistisuojattu osoite (0x0050 < MPR=0x0300)
-LOAD  R6, [0x0050]             ; -> INT 5 (memory access fault)
+READ  R6, [0x0050]             ; -> INT 5 (memory access fault)
 
 after_mem_fault:
 ; INT 8: prosessin lopetus (lopettaa ajon, handleri ei ehdi ajaa)

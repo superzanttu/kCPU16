@@ -8,18 +8,18 @@
 
         .origin 0x0200
 
-        LOAD  R0, 0x1234      ; kirjoitettava arvo
-        LOAD  R1, 10          ; tallennusosoite (sana 10)
+        READ  R0, 0x1234      ; kirjoitettava arvo
+        READ  R1, 10          ; tallennusosoite (sana 10)
 
         DWRITE R0, R1         ; storage[10] = 0x1234
-        LOAD   R2, 0          ; nollaa R2 ennen lukua
+        READ   R2, 0          ; nollaa R2 ennen lukua
         DREAD  R2, R1         ; R2 = storage[10]
 
         ; Kirjoita toinen arvo eri osoitteeseen
-        LOAD  R0, 0xABCD
-        LOAD  R1, 50
+        READ  R0, 0xABCD
+        READ  R1, 50
         DWRITE R0, R1         ; storage[50] = 0xABCD
-        LOAD   R3, 0
+        READ   R3, 0
         DREAD  R3, R1         ; R3 = storage[50]
 
         HALT

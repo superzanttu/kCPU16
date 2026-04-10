@@ -186,6 +186,21 @@ COLOR_NAMES = {
     7: "valkoinen",
 }
 
+# =============================================================================
+# GRAFIIKKATILAN REKISTERI (GFX_MODE_REG)
+# Sijaitsee muistiosoitteessa 0xFF80 (kernelin pinon alun ensimmäinen sana).
+# lib-gfx.asm käyttää tästä osoitteesta nimeä GFX_MODE_REG.
+# =============================================================================
+
+GFX_MODE_REG = 0xFF80  # Grafiikkatila-rekisterin muistiosoite
+GFX_MODE_A = 0  # Tila A — tekstitila  (80 × 24 merkkiä)
+GFX_MODE_B = 1  # Tila B — puoliblokkipikseli  (80 × 48 pikseliä)
+GFX_MODE_C = 2  # Tila C — braille          (160 × 96 pikseliä)
+# Kaksoisbufferoinnin flip-rekisteri (GFX_FLIP_REG)
+# Kirjoittaminen mitä tahansa arvoa tähän osoitteeseen käynnistää bufferif lipin:
+# näytön taustapuolelle piirretyt muutokset kopioidaan etupuskuriin ja
+# päivitetään näytölle kerralla. Rekisteri nollataan automaattisesti flipin jälkeen.
+GFX_FLIP_REG = 0xFF81  # Kaksoisbufferoinnin flip-rekisteri (kirjoitus = flip)
 # Kernel-pino: Kayttojarjestelman sisainen pino keskeytyksille yms.
 # Sijaitsee muistin lopussa, VRAM:n yläpuolella
 KERNEL_STACK_START = 0xFF80  # Kernelin pino alkaa VRAM:n jälkeen
@@ -340,6 +355,12 @@ ARCH_SYMBOLS: dict[str, int] = {
     "SR_FLAG_V": SR_FLAG_V,  # Overflow-lippu (3)
     "SR_FLAG_I": SR_FLAG_I,  # Interrupt Enable -lippu (4)
     "SR_FLAG_P": SR_FLAG_P,  # Privilege-lippu (5)
+    # ---- Grafiikkarekisterit ($FF80-$FF81) ----------------------------
+    "GFX_MODE_REG": GFX_MODE_REG,  # Grafiikkatila-rekisteri (0xFF80)
+    "GFX_MODE_A": GFX_MODE_A,  # Tekstitila (0)
+    "GFX_MODE_B": GFX_MODE_B,  # Puoliblokkipikseli (1)
+    "GFX_MODE_C": GFX_MODE_C,  # Braille (2)
+    "GFX_FLIP_REG": GFX_FLIP_REG,  # Kaksoisbufferoinnin flip-rekisteri (0xFF81)
     # ---- Suoritustilat -----------------------------------------------
     "MODE_KERNEL": MODE_KERNEL,  # Kernel-tila (1)
     "MODE_USER": MODE_USER,  # User-tila (0)

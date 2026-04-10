@@ -6,18 +6,18 @@
 
         .origin 0x0200
 
-        LOAD  R4,  10
-        LOAD  R5,  20
-        LOAD  R6,  30
-        LOAD  R7,  40
-        LOAD  R8,  50
-        LOAD  R9,  60
-        LOAD  R10, 70
-        LOAD  R11, 80
-        LOAD  R12, 90
-        LOAD  R13, 100
-        LOAD  R14, 200
-        LOAD  R15, 300
+        READ  R4,  10
+        READ  R5,  20
+        READ  R6,  30
+        READ  R7,  40
+        READ  R8,  50
+        READ  R9,  60
+        READ  R10, 70
+        READ  R11, 80
+        READ  R12, 90
+        READ  R13, 100
+        READ  R14, 200
+        READ  R15, 300
 
         HALT
 

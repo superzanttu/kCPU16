@@ -35,16 +35,16 @@
         ; -----------------------------------------------
         ; Alusta näyttö ja tulosta 'S' (Stack)
         ; -----------------------------------------------
-        LOAD  FP, 0xF860 ; FP = näyttöpointteri
-        LOAD  R3, 0xE053 ; R3 = 'S' (valkoinen)
+        READ  FP, 0xF860 ; FP = näyttöpointteri
+        READ  R3, 0xE053 ; R3 = 'S' (valkoinen)
         STORE [FP], R3  ; Kirjoita 'S' näytölle
 
         ; -----------------------------------------------
         ; Alusta rekisterit arvoilla 1, 2, 3
         ; -----------------------------------------------
-        LOAD  R0, 1     ; R0 = 1
-        LOAD  R1, 2     ; R1 = 2
-        LOAD  R2, 3     ; R2 = 3
+        READ  R0, 1     ; R0 = 1
+        READ  R1, 2     ; R1 = 2
+        READ  R2, 3     ; R2 = 3
 
         ; -----------------------------------------------
         ; PUSH-vaihe: Työnnä arvot pinoon järjestyksessä
@@ -55,7 +55,7 @@
         PUSH  R2        ; Työnnä 3 pinoon, pino: [1, 2, 3]
 
         ; Tulosta 'P' (Push tehty)
-        LOAD  R3, 0xE050 ; R3 = 'P'
+        READ  R3, 0xE050 ; R3 = 'P'
         STORE [0xF861], R3  ; Suora osoitus näyttöön
 
         ; -----------------------------------------------
@@ -67,7 +67,7 @@
         POP   R2        ; R2 = 1 (pinon pohja)
 
         ; Tulosta 'O' (Output ready)
-        LOAD  R3, 0xE04F ; R3 = 'O'
+        READ  R3, 0xE04F ; R3 = 'O'
         STORE [0xF862], R3
 
         ; -----------------------------------------------

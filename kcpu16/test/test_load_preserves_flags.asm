@@ -7,13 +7,13 @@
 .origin 0x0200
 
 ; Aseta C=1, V=1, Z=1, N=0 ADD:lla (0x8000 + 0x8000)
-LOAD  R0, 0x8000
-LOAD  R1, 0x8000
+READ  R0, 0x8000
+READ  R1, 0x8000
 ADD   R0, R1          ; C=1, V=1, Z=1, N=0
 
 ; LOAD ei saa muuttaa lippuja
-LOAD  R2, 42
-LOAD  R3, 0x8000
+READ  R2, 42
+READ  R3, 0x8000
 
 HALT
 

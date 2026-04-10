@@ -62,23 +62,23 @@
 ; ALUSTUS: Aseta Int 9 -käsittelijä ja pysyvät vakiorekisterit
 ; =============================================================================
 
-        LOAD  R0, clock_handler
+        READ  R0, clock_handler
         STORE [0x0009], R0    ; Int 9 -vektori → clock_handler
 
-        LOAD  R2, 0xFB8C      ; VRAM-kantaosoite: rivi 11, sarake 28
-        LOAD  R3, 1           ; osoittimen askel (1 sana kerrallaan)
-        LOAD  R4, 10          ; jakaja (kymmenjärjestelmä)
-        LOAD  R5, 0x0330      ; perusmerkki: '0' + keltainen (FG=3, BG=0)
+        READ  R2, 0xFB8C      ; VRAM-kantaosoite: rivi 11, sarake 28
+        READ  R3, 1           ; osoittimen askel (1 sana kerrallaan)
+        READ  R4, 10          ; jakaja (kymmenjärjestelmä)
+        READ  R5, 0x0330      ; perusmerkki: '0' + keltainen (FG=3, BG=0)
 
 ; Aseta blink_flag = 1 (kaksoispisteet näkyvissä alustuksessa)
-        LOAD  R0, 1
+        READ  R0, 1
         STORE [blink_flag], R0
 
 ; Ensimmäinen piirto ennen keskeytyksiä
         CALL  draw_clock
 
 ; Aseta kellokeskeytys 500 ms välein (→ 1 Hz vilkku)
-        LOAD  R0, 500
+        READ  R0, 500
         SCTMR R0
 
 ; Salli laitteistokeskeytykset
@@ -96,8 +96,8 @@ main_loop:
 ; =============================================================================
 clock_handler:
         ; Vaihda blink_flag: 0 → 1 tai 1 → 0
-        LOAD  R0, [blink_flag]
-        LOAD  R6, 1
+        READ  R0, [blink_flag]
+        READ  R6, 1
         XOR   R0, R6
         STORE [blink_flag], R0
 
@@ -114,57 +114,57 @@ draw_clock:
         CPY   R0, R2          ; R0 = VRAM-kantaosoite
 
         ; ------ DD: Päivä (01–31) ------
-        LOAD  R1, [CLOCK_DAY]
+        READ  R1, [CLOCK_DAY]
         CALL  write2
 
         ; '.' erottaja
-        LOAD  R6, 0x032E      ; '.' keltainen
+        READ  R6, 0x032E      ; '.' keltainen
         STORE [R0], R6
         ADD   R0, R3
 
         ; ------ MM: Kuukausi (01–12) ------
-        LOAD  R1, [CLOCK_MONTH]
+        READ  R1, [CLOCK_MONTH]
         CALL  write2
 
         ; '.' erottaja
-        LOAD  R6, 0x032E
+        READ  R6, 0x032E
         STORE [R0], R6
         ADD   R0, R3
 
         ; ------ YYYY: Vuosi (esim. 2026) ------
-        LOAD  R1, [CLOCK_YEAR]
+        READ  R1, [CLOCK_YEAR]
         CALL  write4
 
         ; ' ' välilyönti
-        LOAD  R6, 0x0320      ; ' ' keltainen (väriattribuutti + välilyönti)
+        READ  R6, 0x0320      ; ' ' keltainen (väriattribuutti + välilyönti)
         STORE [R0], R6
         ADD   R0, R3
 
         ; ------ HH: Tunti (00–23) ------
-        LOAD  R1, [CLOCK_HOUR]
+        READ  R1, [CLOCK_HOUR]
         CALL  write2
 
         ; ':' vilkkuva erottaja (HH:MM)
         CALL  write_colon
 
         ; ------ MM: Minuutti (00–59) ------
-        LOAD  R1, [CLOCK_MINUTE]
+        READ  R1, [CLOCK_MINUTE]
         CALL  write2
 
         ; ':' vilkkuva erottaja (MM:SS)
         CALL  write_colon
 
         ; ------ SS: Sekunti (00–59) ------
-        LOAD  R1, [CLOCK_SECOND]
+        READ  R1, [CLOCK_SECOND]
         CALL  write2
 
         ; '.' erottaja (ennen millisekunteja)
-        LOAD  R6, 0x032E      ; '.' keltainen
+        READ  R6, 0x032E      ; '.' keltainen
         STORE [R0], R6
         ADD   R0, R3
 
         ; ------ MSS: Millisekunti (000–999) ------
-        LOAD  R1, [CLOCK_MILLIS]
+        READ  R1, [CLOCK_MILLIS]
         CALL  write3
 
         RET
@@ -179,13 +179,13 @@ draw_clock:
 ; Muuttaa: R6
 ; =============================================================================
 write_colon:
-        LOAD  R6, [blink_flag]
+        READ  R6, [blink_flag]
         CMP   R6, R3          ; R3 = 1: Z=1 jos blink_flag == 1
         JZ    colon_visible
-        LOAD  R6, 0x0320      ; ' ' keltainen (kaksoispiste piilotettu)
+        READ  R6, 0x0320      ; ' ' keltainen (kaksoispiste piilotettu)
         JUMP  colon_store
 colon_visible:
-        LOAD  R6, 0x033A      ; ':' keltainen
+        READ  R6, 0x033A      ; ':' keltainen
 colon_store:
         STORE [R0], R6
         ADD   R0, R3
@@ -231,7 +231,7 @@ write2:
 ; Muuttaa: R6, R7, R8, R9, R10, R11
 ; =============================================================================
 write3:
-        LOAD  R10, 100
+        READ  R10, 100
         CPY   R6, R1
         DIV   R6, R10         ; R6 = sadat  (luku / 100)
         CPY   R11, R6
@@ -274,7 +274,7 @@ write3:
 ; Muuttaa: R6, R7, R8, R9, R10, R11
 ; =============================================================================
 write4:
-        LOAD  R10, 1000
+        READ  R10, 1000
         CPY   R6, R1
         DIV   R6, R10         ; R6 = tuhannet  (luku / 1000)
         CPY   R11, R6
@@ -282,7 +282,7 @@ write4:
         CPY   R7, R1
         SUB   R7, R11         ; R7 = jäännös
 
-        LOAD  R10, 100
+        READ  R10, 100
         CPY   R8, R7
         DIV   R8, R10         ; R8 = sadat  (jäännös / 100)
         CPY   R11, R8

@@ -59,7 +59,10 @@ _RICH_MARKUP_RE = re.compile(r"\[/?[^\[\]]+?\]")
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
+from textual import events
+from textual.message import Message
 from textual.screen import ModalScreen
+from textual.widget import Widget
 from textual.worker import get_current_worker
 from textual._work_decorator import work
 from textual.widgets import (
@@ -76,6 +79,10 @@ from .assembler import Assembler, MNEMONIC_TO_OPCODE
 from .constants import (
     ARCH_SYMBOLS,
     BOOT_RAM_START,
+    GFX_FLIP_REG,
+    GFX_MODE_REG,
+    GFX_MODE_B,
+    GFX_MODE_C,
     SR_FLAG_C,
     SR_FLAG_I,
     SR_FLAG_N,
@@ -438,6 +445,113 @@ class SaveConfirmDialog(ModalScreen):
 
 
 # ===========================================================================
+# SpeedSlider — liukusäädin SLOW-nopeuden säätöön
+# ===========================================================================
+
+_SLIDER_TRACK_W = 54  # raitaosa merkeissä (3× leveämpi)
+_SLIDER_MAX_IPS = 1000  # suurin sallittu IPS-arvo
+
+
+class SpeedSlider(Widget):
+    """Liukusäädin SLOW-suoritusnopeuden säätöön (1–1000 IPS).
+
+    Näyttää nykyisen IPS-arvon ja graafisen raidan. Raitaa voi klikata
+    tai raahata arvon muuttamiseksi. Hiiren rullalla säätää logaritmisesti.
+    Arvon muuttuessa lähetetään SpeedSlider.Changed -viesti.
+    """
+
+    DEFAULT_CSS = """
+    SpeedSlider {
+        width: 70;
+        height: 3;
+        padding: 0 1;
+        content-align: center middle;
+        color: $text-muted;
+    }
+    """
+
+    class Changed(Message):
+        """Lähetetään kun liukusäätimen arvo muuttuu."""
+
+        def __init__(self, value: int) -> None:
+            super().__init__()
+            self.value = value
+
+    def __init__(self, value: int = 10, *, id: str | None = None) -> None:
+        super().__init__(id=id)
+        self._value: int = max(1, min(_SLIDER_MAX_IPS, value))
+        self._multiplier: int = 1
+        self._dragging: bool = False
+
+    @property
+    def value(self) -> int:
+        return self._value
+
+    @value.setter
+    def value(self, val: int) -> None:
+        val = max(1, min(_SLIDER_MAX_IPS, val))
+        if val != self._value:
+            self._value = val
+            self.refresh()
+            self.post_message(self.Changed(self._value))
+
+    def render(self) -> str:
+        import math
+
+        # Logaritminen skala: pienet arvot saavat enemmän tilaa
+        log_val = math.log10(self._value)
+        log_max = math.log10(_SLIDER_MAX_IPS)
+        ratio = log_val / log_max
+        pos = round(ratio * (_SLIDER_TRACK_W - 1))
+        track = "═" * pos + "●" + "═" * (_SLIDER_TRACK_W - 1 - pos)
+        effective = self._value * self._multiplier
+        return f"IPS:{effective:5d} [{track}]"
+
+    def _x_to_value(self, x: int) -> int:
+        import math
+
+        # padding(1) + "IPS:NNNN ["(10) = offset 11
+        track_start = 11
+        rel = x - track_start
+        ratio = max(0.0, min(1.0, rel / (_SLIDER_TRACK_W - 1)))
+        # Logaritminen muunnos: ratio → IPS
+        val = round(10 ** (ratio * math.log10(_SLIDER_MAX_IPS)))
+        return max(1, min(_SLIDER_MAX_IPS, val))
+
+    def on_mouse_down(self, event: events.MouseDown) -> None:
+        self._dragging = True
+        self.capture_mouse()
+        new_val = self._x_to_value(event.x)
+        if new_val != self._value:
+            self._value = new_val
+            self.refresh()
+            self.post_message(self.Changed(self._value))
+
+    def on_mouse_move(self, event: events.MouseMove) -> None:
+        if self._dragging:
+            new_val = self._x_to_value(event.x)
+            if new_val != self._value:
+                self._value = new_val
+                self.refresh()
+                self.post_message(self.Changed(self._value))
+
+    def on_mouse_up(self, event: events.MouseUp) -> None:
+        if self._dragging:
+            self._dragging = False
+            self.release_mouse()
+
+    def on_mouse_scroll_up(self, event: events.MouseScrollUp) -> None:
+        # Logaritminen askel: +10% tai vähintään +1
+        step = max(1, round(self._value * 0.1))
+        self.value = self._value + step
+
+    def on_mouse_scroll_down(self, event: events.MouseScrollDown) -> None:
+        # Logaritminen askel: -10% tai vähintään -1
+        step = max(1, round(self._value * 0.1))
+        self.value = self._value - step
+
+
+# ===========================================================================
 # TUI-sovellus
 # ===========================================================================
 
@@ -521,6 +635,32 @@ class KCPU16TUI(App[None]):
         padding: 0 1;
         content-align: center middle;
         color: $text-muted;
+    }
+    #speed-control-group {
+        height: 3;
+        width: auto;
+        layout: horizontal;
+    }
+    SpeedSlider {
+        width: 70;
+        height: 3;
+        padding: 0 1;
+        content-align: center middle;
+        color: $text-muted;
+    }
+    #speed-mult-group {
+        height: 3;
+        width: auto;
+        layout: horizontal;
+    }
+    #speed-mult-group > Button {
+        min-width: 6;
+        height: 3;
+        margin: 0;
+    }
+    Button.mult-selected {
+        background: $accent;
+        color: $text;
     }
 
     /* ---- Content area ---- */
@@ -612,7 +752,8 @@ class KCPU16TUI(App[None]):
     BINDINGS = [
         Binding("ctrl+q", "quit", "Quit", priority=True),
         Binding("f2", "toggle_breakpoint", "BP F2", priority=True),
-        Binding("f5", "run_full_speed", "Full F5", priority=True),
+        Binding("f4", "run_max_speed", "Max F4", priority=True),
+        Binding("f5", "run_full_speed", "Fast F5", priority=True),
         Binding("f6", "run_slow_speed", "Slow F6", priority=True),
         Binding("f8", "stop_program", "Stop F8", priority=True),
         Binding("f7", "step_once", "Step F7", priority=True),
@@ -660,7 +801,11 @@ class KCPU16TUI(App[None]):
         self._output_buffer: list[str] = []
         self._disk_dirty: bool = False
         self._watched_mtime: int | None = None  # st_mtime_ns (kokonaisluku)
-        self._exec_mode: str = "stopped"  # "stopped" | "full" | "slow"
+        self._exec_mode: str = (
+            "stopped"  # "stopped" | "step" | "fast" | "max" | "slow" | "reset"
+        )
+        self._slow_ips: int = 10  # käskyä/sekuntti SLOW-tilassa (1–1000)
+        self._slow_multiplier: int = 1  # kerroin: 1, 10 tai 100
         # --asm listing caches (rebuilt each assemble)
         self._asm_addr_to_src: dict[int, str] = {}  # addr → raw source line
         self._asm_addr_to_label: dict[int, str] = {}  # addr → label name
@@ -693,7 +838,8 @@ class KCPU16TUI(App[None]):
             yield Button("Assemble ^B", id="btn-asm", variant="primary")
             yield Static(" ", classes="sep")
             yield Button("Step F7", id="btn-step", variant="primary")
-            yield Button("Full F5", id="btn-run-full", variant="success")
+            yield Button("Fast F5", id="btn-run-full", variant="success")
+            yield Button("Max F4", id="btn-run-max", variant="success")
             yield Button("Slow F6", id="btn-run-slow", variant="success")
             yield Button("Stop F8", id="btn-stop", variant="default")
             yield Button("Reset ^R", id="btn-reset", variant="error")
@@ -701,6 +847,13 @@ class KCPU16TUI(App[None]):
             yield Button("BP F2", id="btn-bp", variant="default")
             yield Button("Clear F9", id="btn-clear", variant="default")
             yield Button("Help F1", id="btn-help", variant="default")
+            yield Static(" ", classes="sep")
+            with Horizontal(id="speed-control-group"):
+                yield SpeedSlider(value=10, id="speed-slider")
+                with Horizontal(id="speed-mult-group"):
+                    yield Button("x1", id="btn-mult-x1", classes="mult-selected")
+                    yield Button("x10", id="btn-mult-x10")
+                    yield Button("x100", id="btn-mult-x100")
             yield Static("\u25a0 STOPPED", id="run-mode-label")
 
         # Content area: left panel (full width)
@@ -806,6 +959,7 @@ class KCPU16TUI(App[None]):
             "btn-asm": self.action_assemble_code,
             "btn-step": self.action_step_once,
             "btn-run-full": self.action_run_full_speed,
+            "btn-run-max": self.action_run_max_speed,
             "btn-run-slow": self.action_run_slow_speed,
             "btn-stop": self.action_stop_program,
             "btn-reset": self.action_reset_machine,
@@ -816,6 +970,28 @@ class KCPU16TUI(App[None]):
         action = actions.get(event.button.id)
         if action:
             action()
+            return
+
+        # Nopeudenkertoimen valinta
+        if event.button.id in ("btn-mult-x1", "btn-mult-x10", "btn-mult-x100"):
+            mult_map = {"btn-mult-x1": 1, "btn-mult-x10": 10, "btn-mult-x100": 100}
+            self._slow_multiplier = mult_map[event.button.id]
+            for bid in ("btn-mult-x1", "btn-mult-x10", "btn-mult-x100"):
+                try:
+                    self.query_one(f"#{bid}", Button).remove_class("mult-selected")
+                except Exception:
+                    pass
+            event.button.add_class("mult-selected")
+            try:
+                sl = self.query_one("#speed-slider", SpeedSlider)
+                sl._multiplier = self._slow_multiplier
+                sl.refresh()
+            except Exception:
+                pass
+
+    def on_speed_slider_changed(self, event: SpeedSlider.Changed) -> None:
+        """Päivitä SLOW-nopeus kun liukusäädin muuttuu."""
+        self._slow_ips = event.value
 
     # ------------------------------------------------------------------
     # Komentosyöte
@@ -850,63 +1026,143 @@ class KCPU16TUI(App[None]):
     # Actions (näppäinsidonnaisuudet)
     # ------------------------------------------------------------------
 
+    def _reload_and_run(self, mode: str) -> None:
+        """Lataa nykyinen tiedosto uudelleen ja aloita suoritus annetussa moodissa.
+
+        Kutsutaan kun CPU on pysähtynyt (HALT/EXIT) ja käyttäjä painaa
+        Step, Fast, Slow tai Stop. Jos tiedostoa ei ole ladattu, logitetaan ilmoitus.
+
+        Args:
+            mode: "step", "fast", "slow" tai "stop"
+        """
+        if not self.current_file:
+            self._log("[yellow]Ei ladattua ohjelmaa. Käytä 'load <tiedosto>'.[/yellow]")
+            return
+        self.workers.cancel_all()
+        self._exec_mode = "stopped"
+        self._do_assemble()  # cold_reset + lataa + assembloi
+        if not self.is_assembled:
+            return
+        self._log(f"[cyan]Uudelleenladattu: {self.current_file.name}[/cyan]")
+        if mode == "step":
+            try:
+                self.machine.step()
+            except Exception as exc:
+                self._show_cpu_crash(exc)
+                return
+            self._log_step_info()
+            self._exec_mode = "step"
+            self._update_run_mode_ui()
+            self._refresh_all(include_screen=True, force_screen=True)
+        elif mode == "fast":
+            self._exec_mode = "fast"
+            self._update_run_mode_ui()
+            self._log("[green]Running fast... (F5/F8 to stop)[/green]")
+            self._cpu_run_worker("fast")
+        elif mode == "max":
+            self._exec_mode = "max"
+            self._update_run_mode_ui()
+            self._log("[green]Running max... (F4/F8 to stop)[/green]")
+            self._cpu_run_worker("max")
+        elif mode == "slow":
+            self._exec_mode = "slow"
+            self._update_run_mode_ui()
+            self._log(
+                f"[green]Running slow ({self._slow_ips * self._slow_multiplier} IPS)... (F6/F8 to stop)[/green]"
+            )
+            self._cpu_run_worker("slow")
+        # mode == "stop": pelkkä uudelleenlataus riittää, _do_assemble hoiti
+
     def action_step_once(self) -> None:
         """Suorita yksi konekielikäsky (F7/F10 tai Step-painike).
 
-        Tarkistaa ensin onko CPU pysähtynyt (HALT/EXIT). Jos ei,
-        suorittaa yhden käskyn, logittaa käskyn tiedot ja päivittää näkymät.
+        Tarkistaa ensin onko CPU pysähtynyt (HALT/EXIT). Jos on,
+        ladataan ohjelma uudelleen ja suoritetaan ensimmäinen askel.
         """
         if self.machine.cpu.halted or self.machine.process_exited:
-            self._log("[yellow]CPU stopped. Reset to continue.[/yellow]")
-            self._refresh_all(include_screen=True)
+            self._reload_and_run("step")
             return
-        self.machine.step()
+        try:
+            self.machine.step()
+        except Exception as exc:
+            self._show_cpu_crash(exc)
+            return
         self._log_step_info()
-        self._refresh_all(include_screen=True)
+        self._exec_mode = "step"
+        self._update_run_mode_ui()
+        self._refresh_all(include_screen=True, force_screen=True)
 
     def action_run_full_speed(self) -> None:
         """Käynnistä CPU täydellä nopeudella (F5). Toinen painalus pysäyttää.
 
-        Ajo päättyy HALT-, EXIT-käskyyn, breakpointiin tai Stop-komentoon.
-        Käyttöliittymä päivittyy noin 5 kertaa sekunnissa ajon aikana.
+        Jos CPU on pysähtynyt (HALT/EXIT), ladataan ohjelma uudelleen ja
+        käynnistetään täydellä nopeudella.
         """
-        if self._exec_mode == "full":
+        if self._exec_mode == "fast":
             self.action_stop_program()
             return
         if self.machine.cpu.halted or self.machine.process_exited:
-            self._log("[yellow]CPU stopped. Reset to continue.[/yellow]")
+            self._reload_and_run("fast")
             return
         self.workers.cancel_all()
-        self._exec_mode = "full"
+        self._exec_mode = "fast"
         self._update_run_mode_ui()
-        self._log("[green]Running full speed... (F5/F8 to stop)[/green]")
-        self._cpu_run_worker("full")
+        self._log("[green]Running fast... (F5/F8 to stop)[/green]")
+        self._cpu_run_worker("fast")
+
+    def action_run_max_speed(self) -> None:
+        """Käynnistä CPU MAX-nopeudella (F4). Näyttöä ei päivitetä ajon aikana.
+
+        MAX-tilassa suoritus on maksimaalinen: näyttöä (VRAM) ei päivitetä
+        ajon aikana, vain pysähdyttäessä. Käyttöliittymä pysyy muutoin toimivana.
+        Toinen F4-painallus pysäyttää.
+        """
+        if self._exec_mode == "max":
+            self.action_stop_program()
+            return
+        if self.machine.cpu.halted or self.machine.process_exited:
+            self._reload_and_run("max")
+            return
+        self.workers.cancel_all()
+        self._exec_mode = "max"
+        self._update_run_mode_ui()
+        self._log("[green]Running max... (F4/F8 to stop)[/green]")
+        self._cpu_run_worker("max")
 
     def action_run_slow_speed(self) -> None:
         """Käynnistä CPU hidas suoritus (F6): ~10 IPS. Toinen painalus pysäyttää.
 
-        Joka käskyn jälkeen kaikki paneelit päivittyvät (rekisterit, liput,
-        disassembly, näyttö) joten prosessori "elää" ruudulla.
+        Jos CPU on pysähtynyt (HALT/EXIT), ladataan ohjelma uudelleen ja
+        käynnistetään hitaassa tilassa.
         """
         if self._exec_mode == "slow":
             self.action_stop_program()
             return
         if self.machine.cpu.halted or self.machine.process_exited:
-            self._log("[yellow]CPU stopped. Reset to continue.[/yellow]")
+            self._reload_and_run("slow")
             return
         self.workers.cancel_all()
         self._exec_mode = "slow"
         self._update_run_mode_ui()
-        self._log("[green]Running slow (10 IPS)... (F6/F8 to stop)[/green]")
+        self._log(
+            f"[green]Running slow ({self._slow_ips * self._slow_multiplier} IPS)... (F6/F8 to stop)[/green]"
+        )
         self._cpu_run_worker("slow")
 
     def action_stop_program(self) -> None:
-        """Pysäytä CPU:n suoritus (F8 tai Stop-painike)."""
+        """Pysäytä CPU:n suoritus (F8 tai Stop-painike).
+
+        Jos CPU on jo pysähtynyt (HALT/EXIT), ladataan ohjelma uudelleen
+        ja jäädään pysähtyneeseen tilaan (reset + lataus).
+        """
+        if self.machine.cpu.halted or self.machine.process_exited:
+            self._reload_and_run("stop")
+            return
         self.workers.cancel_all()
         self._exec_mode = "stopped"
         self._update_run_mode_ui()
         self._log("[yellow]Stopped.[/yellow]")
-        self._refresh_all(include_screen=True)
+        self._refresh_all(include_screen=True, force_screen=True)
 
     def action_reset_machine(self) -> None:
         """Resetoi kone alkutilaan (Ctrl+R tai Reset-painike).
@@ -915,7 +1171,7 @@ class KCPU16TUI(App[None]):
         sitten cold reset nollaa CPU:n, muistin ja laitteet.
         """
         self.workers.cancel_all()
-        self._exec_mode = "stopped"
+        self._exec_mode = "reset"
         self.machine.cold_reset()
         self.is_assembled = False
         self.addr_to_line = {}
@@ -925,7 +1181,7 @@ class KCPU16TUI(App[None]):
         self.dbg.snapshot_registers(self.machine.dump_registers())
         self._update_run_mode_ui()
         self._log("[green]Machine reset.[/green]")
-        self._refresh_all(include_screen=True)
+        self._refresh_all(include_screen=True, force_screen=True)
 
     def action_toggle_breakpoint(self) -> None:
         """Aseta tai poista breakpoint nykyiseen PC-osoitteeseen (F2).
@@ -1023,7 +1279,7 @@ class KCPU16TUI(App[None]):
         self._log("")
         self._log("[bold]Keyboard shortcuts:[/bold]")
         self._log("  Ctrl+O  Load file       Ctrl+B  Assemble code")
-        self._log("  F7/F10  Step 1 instr    F5      Full Speed run")
+        self._log("  F7/F10  Step 1 instr    F5      Fast run")
         self._log("  F6      Slow run (10 IPS)  F8      Stop execution")
         self._log("  Ctrl+R  Reset machine   F9      Clear VRAM")
         self._log("  F2      Toggle BP       F1      This help")
@@ -1037,14 +1293,15 @@ class KCPU16TUI(App[None]):
         self._log("  check                        Syntax check loaded file (no load)")
         self._log("[bold]CPU Control:[/bold]")
         self._log("  step [n]                     Step n instructions (default 1)")
+        self._log("  run  [n]                     Fast run to BP/halt (max n cycles)")
         self._log(
-            "  run  [n]                     Full speed run to BP/halt (max n cycles)"
-        )
-        self._log(
-            "  slow                         Slow run (~10 IPS), all panels update each instr"
+            "  slow [n]                     Slow run (1–1000 IPS), all panels update each instr"
         )
         self._log("  stop                         Stop running CPU")
         self._log("  restart                      Reassemble and restart from 0x0100")
+        self._log(
+            "  speed <1–1000>               Set SLOW run speed in IPS (default 10)"
+        )
         self._log("[bold]Breakpoints:[/bold]")
         self._log("  bp <addr>                    Toggle breakpoint at address")
         self._log("  bp list                      List all breakpoints")
@@ -1106,7 +1363,7 @@ class KCPU16TUI(App[None]):
         Terminaali ei tue näppäimennostotapahtumia, joten painallus ja
         vapautus lähetetään peräkkäin samasta tapahtumasta.
         """
-        if self._exec_mode == "stopped":
+        if self._exec_mode not in ("fast", "max", "slow"):
             return
         if self.machine.keyboard is None:
             return
@@ -1137,6 +1394,14 @@ class KCPU16TUI(App[None]):
             tabs.border_subtitle = f"{name} *" if name else "*"
         else:
             tabs.border_subtitle = name
+
+    def _sync_speed_slider(self) -> None:
+        """Synkronoi liukusäätimen arvo _slow_ips:n mukaan."""
+        try:
+            self.query_one("#speed-slider", SpeedSlider)._value = self._slow_ips
+            self.query_one("#speed-slider", SpeedSlider).refresh()
+        except Exception:
+            pass
 
     def _do_open(self, path: Path) -> None:
         """Avaa tiedosto, tallentaa polun ja kääntää sen automaattisesti.
@@ -1211,6 +1476,8 @@ class KCPU16TUI(App[None]):
                     f"[cyan].diskblock: {total_words} sanaa tallennettu "
                     f"levyblokkiin {blk}.[/cyan]"
                 )
+            self._exec_mode = "stopped"
+            self._update_run_mode_ui()
             self._refresh_all()
         except Exception as e:
             self._log(f"[red]Assembly error: {e}[/red]")
@@ -1309,7 +1576,11 @@ class KCPU16TUI(App[None]):
 
         cycles = 0
         while cycles < max_cycles:
-            self.machine.step()
+            try:
+                self.machine.step()
+            except Exception as exc:
+                self._show_cpu_crash(exc)
+                return "[bold red]CPU kaatui — ks. Output-paneeli.[/bold red]"
             cycles += 1
             if cpu.halted:
                 return f"[red]HALTED after {cycles} cycles.[/red]"
@@ -1331,34 +1602,46 @@ class KCPU16TUI(App[None]):
         try:
             label_text = {
                 "stopped": "\u25a0 STOPPED",
-                "full": "\u25b6 FULL",
+                "step": "\u25a0 STEP",
+                "fast": "\u25b6 FAST",
+                "max": "\u25b6 MAX",
                 "slow": "\u25b6 SLOW",
+                "reset": "\u25a0 RESET",
             }.get(self._exec_mode, "\u25a0 STOPPED")
             self.query_one("#run-mode-label", Static).update(label_text)
             btn_full = self.query_one("#btn-run-full", Button)
+            btn_max = self.query_one("#btn-run-max", Button)
             btn_slow = self.query_one("#btn-run-slow", Button)
             btn_stop = self.query_one("#btn-stop", Button)
-            if self._exec_mode == "full":
+            if self._exec_mode == "fast":
                 btn_full.variant = "warning"
+                btn_max.variant = "default"
+                btn_slow.variant = "default"
+                btn_stop.variant = "error"
+            elif self._exec_mode == "max":
+                btn_full.variant = "default"
+                btn_max.variant = "warning"
                 btn_slow.variant = "default"
                 btn_stop.variant = "error"
             elif self._exec_mode == "slow":
                 btn_full.variant = "default"
+                btn_max.variant = "default"
                 btn_slow.variant = "warning"
                 btn_stop.variant = "error"
-            else:  # stopped
+            else:  # stopped, step, reset
                 btn_full.variant = "success"
+                btn_max.variant = "success"
                 btn_slow.variant = "success"
                 btn_stop.variant = "default"
         except Exception:
             pass
 
     @work(thread=True, exclusive=True)
-    def _cpu_run_worker(self, mode: str = "full") -> None:
-        """Aja CPU:ta taustasäikeessä (F5=Full Speed, F6=Slow Speed).
+    def _cpu_run_worker(self, mode: str = "fast") -> None:
+        """Aja CPU:ta taustasäikeessä (F5=Fast Speed, F6=Slow Speed).
 
         Parametrit:
-            mode: "full" = max nopeus, UI päivittyy ~200ms välein.
+            mode: "fast" = max nopeus, UI päivittyy ~200ms välein.
                   "slow" = ~10 IPS, UI päivittyy jokaisen käskyn jälkeen.
 
         Suoritus päättyy kun:
@@ -1376,15 +1659,18 @@ class KCPU16TUI(App[None]):
             self._update_run_mode_ui()
             if msg:
                 self._log(msg)
-            self._refresh_all(include_screen=True)
+            self._refresh_all(include_screen=True, force_screen=True)
 
         if mode == "slow":
             # Hidas suoritus: yksi käsky kerrallaan, UI-päivitys joka käskyn jälkeen
-            SLOW_DELAY = 0.1  # sekuntia per käsky (10 IPS)
             while not worker.is_cancelled:
                 if cpu.halted or cpu.process_exit_requested:
                     break
-                self.machine.step()
+                try:
+                    self.machine.step()
+                except Exception as exc:
+                    self.call_from_thread(self._show_cpu_crash, exc)
+                    return
                 total_cycles += 1
                 if cpu.halted:
                     self.call_from_thread(
@@ -1403,10 +1689,11 @@ class KCPU16TUI(App[None]):
                         f"[red]Breakpoint at 0x{addr:04X} after {total_cycles} cycles.[/red]",
                     )
                     return
-                self.call_from_thread(self._refresh_all, True)
-                time.sleep(SLOW_DELAY)
-        else:
+                self.call_from_thread(self._refresh_all, True, True)
+                time.sleep(1.0 / max(1, self._slow_ips * self._slow_multiplier))
+        if mode in ("fast", "max"):
             # Täysi nopeus: eräsuoritus, UI päivittyy ~200ms välein
+            # MAX-tilassa näyttöä (VRAM) ei päivitetä ajon aikana
             BATCH = 5000
             REFRESH_INTERVAL = 0.2  # sekuntia
             last_refresh = time.monotonic()
@@ -1414,7 +1701,11 @@ class KCPU16TUI(App[None]):
                 for _ in range(BATCH):
                     if cpu.halted or cpu.process_exit_requested:
                         break
-                    self.machine.step()
+                    try:
+                        self.machine.step()
+                    except Exception as exc:
+                        self.call_from_thread(self._show_cpu_crash, exc)
+                        return
                     total_cycles += 1
                     if self.dbg.has_breakpoint(self.machine.regs.pc):
                         addr = self.machine.regs.pc
@@ -1427,7 +1718,11 @@ class KCPU16TUI(App[None]):
                 now = time.monotonic()
                 if now - last_refresh >= REFRESH_INTERVAL:
                     last_refresh = now
-                    self.call_from_thread(self._refresh_all, True)
+                    if mode == "max":
+                        # MAX-tilassa päivitetään vain Screen (VRAM), ei debug-paneeleja
+                        self.call_from_thread(self._refresh_screen_tab)
+                    else:
+                        self.call_from_thread(self._refresh_all, True)
                 if cpu.halted:
                     self.call_from_thread(
                         _done, f"[red]HALTED after {total_cycles} cycles.[/red]"
@@ -1446,7 +1741,7 @@ class KCPU16TUI(App[None]):
     # Näkymien päivitys
     # ------------------------------------------------------------------
 
-    def _refresh_all(self, include_screen: bool = False) -> None:
+    def _refresh_all(self, include_screen: bool = False, force_screen: bool = False) -> None:
         """Päivitä kaikki näkymäpaneelit kerralla.
 
         Kutsutaan jokaisen tilan muutoksen jälkeen (step, run, reset,
@@ -1455,13 +1750,15 @@ class KCPU16TUI(App[None]):
         Parametrit:
             include_screen: Jos True, päivittää myös VRAM-näytön (Screen-tab).
                             Käytä True stepissä ja suoritustilan vaihtuessa.
+            force_screen:   Jos True, ohitetaan kaksoisbufferointi ja renderöidään
+                            suoraan VRAMista (käytetään step/done/stop-tiloissa).
         """
         self._refresh_disassembly()
         self._refresh_registers()
         self._refresh_flags()
         self._refresh_cpu_status()
         if include_screen:
-            self._refresh_screen_tab()
+            self._refresh_screen_tab(force=force_screen)
         self._refresh_memory()
         self._refresh_stack()
 
@@ -1766,12 +2063,24 @@ class KCPU16TUI(App[None]):
         tmr_str = f"[green]{r.tmr}[/] cyc" if r.tmr > 0 else "[dim]off[/]"
         ctmr_str = f"[green]{r.ctmr}[/] ms" if r.ctmr > 0 else "[dim]off[/]"
 
+        # Graphics mode (GFX_MODE_REG)
+        gfx_val = self.machine.memory.read(GFX_MODE_REG)
+        if gfx_val == 0:
+            gfx_str = "[dim]A (text)[/]"
+        elif gfx_val == 1:
+            gfx_str = "[cyan]B (80×48)[/]"
+        elif gfx_val == 2:
+            gfx_str = "[cyan]C (160×96)[/]"
+        else:
+            gfx_str = f"[yellow]{gfx_val}[/]"
+
         content = (
             f"{' '.join(parts)}\n"
             f"Mode: {mode}\n"
             f"Uptime: {uptime_str}\n"
             f"TMR:  {tmr_str}\n"
-            f"CTMR: {ctmr_str}"
+            f"CTMR: {ctmr_str}\n"
+            f"GFX:  {gfx_str}"
         )
         self.query_one("#flags-content", Static).update(content)
 
@@ -1797,14 +2106,36 @@ class KCPU16TUI(App[None]):
             lines.append(f"[dim]BP: {bp_list}[/dim]")
         self.query_one("#cpu-content", Static).update("\n".join(lines))
 
-    def _refresh_screen_tab(self) -> None:
+    def _refresh_screen_tab(self, force: bool = False) -> None:
         """Päivitä Screen-näytön VRAM-renderöinti (1s timer).
 
-        Käyttää cachea: Static.update() kutsutaan vain kun VRAM-sisältö
-        on oikeasti muuttunut edellisestä kerrasta.
+        Kaksoisbufferointi on käytössä vain grafiikkatiloissa B ja C.
+        Tekstitilassa (A) renderöidään aina suoraan VRAMista.
+
+        Parametrit:
+            force: Jos True, ohitetaan etupuskuri ja renderöidään suoraan
+                   VRAMista (käytetään step- ja done-tiloissa).
         """
         try:
-            rendered = self.machine.screen.render_with_rich_colors(self.machine.memory)
+            screen = self.machine.screen
+            memory = self.machine.memory
+            mode = memory.read(GFX_MODE_REG)
+
+            if mode in (GFX_MODE_B, GFX_MODE_C):
+                # Grafiikkatilat B/C: kaksoisbufferointi käytössä.
+                # Etupuskuri renderöidään atomisesti CPU._write_word():ssä kun
+                # GFX_FLIP_REG kirjoitetaan — ei täältä, jotta vältytään race
+                # conditionilta (VRAM saattaa olla jo tyhjennetty/osittain piirretty).
+                if force or not screen.has_front_buffer:
+                    # Step-tila tai ensimmäinen kehys: renderöi suoraan VRAMista
+                    rendered = screen.render_auto(memory)
+                else:
+                    # Näytä viimeisin atomiesti flipattu kehys
+                    rendered = screen.get_front_buffer()
+            else:
+                # Tekstitila A: ei kaksoisbufferointia, renderöi aina suoraan VRAMista
+                rendered = screen.render_auto(memory)
+
             if rendered != self._last_screen_render:
                 self._last_screen_render = rendered
                 self.query_one("#screen-view-solo", Static).update(rendered)
@@ -1903,6 +2234,91 @@ class KCPU16TUI(App[None]):
         elif self.machine.process_exited:
             self._log("[bold yellow]Process exited (EXIT).[/bold yellow]")
 
+    def _show_cpu_crash(self, exc: Exception) -> None:
+        """Näytä yksityiskohtainen kaatumisraportti CPU-poikkeuksesta.
+
+        Kutsutaan kun machine.step() nostaa käsittelemättömän poikkeuksen.
+        Kirjoittaa Output-paneeliin:
+          - Virheen tyyppi ja viesti
+          - Vikaantunut käsky (PC + disassembloitu mnemoniikka)
+          - Tilaliput (Z/N/C/V/I/P) ja suoritustila
+          - Kaikki rekisteriarvot (R0–R15, FP, SP, PC, SR)
+          - Pinon yläosa (SP+1 … SP+5)
+
+        Pysäyttää CPU:n (halted=True) ja siirtää TUI:n stopped-tilaan.
+        """
+        r = self.machine.regs
+        cpu = self.machine.cpu
+        pc = r.pc
+
+        # Pysäytä CPU
+        cpu.halted = True
+        self._exec_mode = "stopped"
+
+        sep = "[bold red]━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[/bold red]"
+        self._log(sep)
+        self._log("[bold red]  CPU KAATUI — SUORITUSVIRHE[/bold red]")
+        self._log(f"[red]{type(exc).__name__}: {exc}[/red]")
+
+        # Vikaava käsky (disassembloitu)
+        try:
+            opcode = self.machine.memory.read(pc)
+            if opcode in OPCODE_TABLE:
+                _, op_count, _ = OPCODE_TABLE[opcode]
+                words = [opcode] + [
+                    self.machine.memory.read(pc + 1 + j) for j in range(op_count)
+                ]
+                raw = self.disassembler.disassemble(words, start_addr=pc)
+                instr = raw.split(":", 1)[1].strip() if ":" in raw else raw
+            else:
+                instr = f".word 0x{opcode:04X}"
+        except Exception:
+            instr = "???"
+        line_no = self.addr_to_line.get(pc)
+        line_str = f" [dim](rivi {line_no})[/dim]" if line_no else ""
+        self._log(f"PC=0x{pc:04X}:  [bold]{instr}[/bold]{line_str}")
+
+        # Tilaliput
+        flags = [
+            ("Z", r.get_flag(SR_FLAG_Z)),
+            ("N", r.get_flag(SR_FLAG_N)),
+            ("C", r.get_flag(SR_FLAG_C)),
+            ("V", r.get_flag(SR_FLAG_V)),
+            ("I", r.get_flag(SR_FLAG_I)),
+            ("P", r.get_flag(SR_FLAG_P)),
+        ]
+        flag_str = "  ".join(
+            f"[bold green]{n}:1[/]" if v else f"[dim]{n}:0[/]" for n, v in flags
+        )
+        mode_str = "[bold green]KERNEL[/]" if r.in_kernel_mode else "[yellow]USER[/]"
+        self._log(f"Liput:  {flag_str}  Mode: {mode_str}")
+
+        # Rekisteriarvot (R0–R15, FP, SP, PC, SR)
+        reg_pairs = [(f"R{i}", getattr(r, f"r{i}")) for i in range(16)]
+        reg_pairs += [("FP", r.fp), ("SP", r.sp), ("PC", r.pc), ("SR", r.sr)]
+        for i in range(0, len(reg_pairs), 4):
+            chunk = reg_pairs[i : i + 4]
+            row = "  ".join(f"[yellow]{n}[/]=0x{v:04X}" for n, v in chunk)
+            self._log(row)
+
+        # Pinon yläosa (SP+1 … SP+5, pino kasvaa alaspäin)
+        sp = r.sp
+        try:
+            items = []
+            for offset in range(1, 6):
+                addr = (sp + offset) & 0xFFFF
+                val = self.machine.memory.read(addr)
+                items.append(f"0x{addr:04X}→0x{val:04X}")
+            self._log(f"[dim]Pino (SP=0x{sp:04X}): {' | '.join(items)}[/dim]")
+        except Exception:
+            pass
+
+        self._log(sep)
+
+        # Päivitä UI
+        self._update_run_mode_ui()
+        self._refresh_all(include_screen=True, force_screen=True)
+
     # ------------------------------------------------------------------
     # Komentotulkki
     # ------------------------------------------------------------------
@@ -1973,7 +2389,13 @@ class KCPU16TUI(App[None]):
                 for _ in range(max(1, count)):
                     if self.machine.cpu.halted or self.machine.process_exited:
                         break
-                    self.machine.step()
+                    try:
+                        self.machine.step()
+                    except Exception as exc:
+                        self._show_cpu_crash(exc)
+                        return CommandResult(
+                            False, "[bold red]CPU kaatui — ks. Output-paneeli.[/bold red]"
+                        )
                 ic = self.machine.cpu.instruction_counter
                 return CommandResult(True, f"Stepped {max(1, count)}. IC={ic}")
 
@@ -1995,6 +2417,17 @@ class KCPU16TUI(App[None]):
 
             if op == "stop":
                 self.action_stop_program()
+                return CommandResult(True, "")
+
+            if op == "slow":
+                # slow [n] – aseta nopeus ja käynnistä hidas suoritus
+                if args:
+                    ips = int(args[0], 0)
+                    if not 1 <= ips <= 1000:
+                        return CommandResult(False, "Speed must be 1\u20131000")
+                    self._slow_ips = ips
+                    self._sync_speed_slider()
+                self.action_run_slow_speed()
                 return CommandResult(True, "")
 
             if op == "restart":
@@ -2049,6 +2482,19 @@ class KCPU16TUI(App[None]):
 
             if op == "version":
                 return CommandResult(True, f"kCPU16 v{__version__}")
+
+            if op == "speed":
+                if not args:
+                    return CommandResult(
+                        True,
+                        f"SLOW speed: {self._slow_ips} IPS (1–1000). Usage: speed <1–1000>",
+                    )
+                ips = int(args[0], 0)
+                if not 1 <= ips <= 1000:
+                    return CommandResult(False, "Speed must be 1–1000")
+                self._slow_ips = ips
+                self._sync_speed_slider()
+                return CommandResult(True, f"SLOW speed set to {ips} IPS.")
 
             return CommandResult(False, f"Unknown: {op}. Type 'help'.")
         except Exception as exc:

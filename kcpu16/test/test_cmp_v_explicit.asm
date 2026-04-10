@@ -6,8 +6,8 @@
 
         .origin 0x0200
 
-        LOAD  R0, 0x7FFF
-        LOAD  R1, 0xFFFF
+        READ  R0, 0x7FFF
+        READ  R1, 0xFFFF
         CMP   R0, R1          ; 0x7FFF-0xFFFF: V=1, C=1, N=1, Z=0
 
         HALT

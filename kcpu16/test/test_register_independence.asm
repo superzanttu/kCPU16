@@ -12,11 +12,11 @@
 .origin 0x0200
 
 ; Lataa kaikki rekisterit eri arvoilla
-LOAD  R0, 0x1111
-LOAD  R1, 0x2222
-LOAD  R2, 0x3333
-LOAD  R3, 0x4444
-LOAD  FP, 0x0500
+READ  R0, 0x1111
+READ  R1, 0x2222
+READ  R2, 0x3333
+READ  R3, 0x4444
+READ  FP, 0x0500
 
 ; ADD R0, R1: vain R0 muuttuu, R1/R2/R3/FP säilyvät
 ADD   R0, R1          ; R0 = 0x1111 + 0x2222 = 0x3333
@@ -28,7 +28,7 @@ SUB   R2, R1          ; R2 = 0x3333 - 0x2222 = 0x1111
 CPY   R3, R0          ; R3 = 0x3333
 
 ; LOAD R1 ei vaikuta muihin
-LOAD  R1, 0x9999      ; R1 = 0x9999, muut ennallaan
+READ  R1, 0x9999      ; R1 = 0x9999, muut ennallaan
 
 HALT
 

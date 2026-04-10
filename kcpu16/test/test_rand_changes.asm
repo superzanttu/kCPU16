@@ -9,10 +9,10 @@
 
         .origin 0x0200
 
-        LOAD  R2, 1              ; oleta OK
+        READ  R2, 1              ; oleta OK
 
-        LOAD  R0, [RAND_MMIO]   ; ensimmäinen satunnaisluku
-        LOAD  R1, [RAND_MMIO]   ; toinen satunnaisluku
+        READ  R0, [RAND_MMIO]   ; ensimmäinen satunnaisluku
+        READ  R1, [RAND_MMIO]   ; toinen satunnaisluku
 
         CMP   R0, R1
         JZ    fail               ; arvot samat — virhe
@@ -20,7 +20,7 @@
         HALT
 
 fail:
-        LOAD  R2, 0
+        READ  R2, 0
         HALT
 
 .expect_reg   R2, 1

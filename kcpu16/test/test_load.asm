@@ -6,10 +6,10 @@
 
         .origin 0x0200
 
-        LOAD  R0, 42          ; desimaali
-        LOAD  R1, 0xFF        ; heksadesimaali (255)
-        LOAD  R2, 0b1010      ; binääri (10)
-        LOAD  R3, 0           ; nolla — Z-lippu ei saa asettua
+        READ  R0, 42          ; desimaali
+        READ  R1, 0xFF        ; heksadesimaali (255)
+        READ  R2, 0b1010      ; binääri (10)
+        READ  R3, 0           ; nolla — Z-lippu ei saa asettua
 
         HALT
 

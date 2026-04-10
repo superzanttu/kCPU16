@@ -13,10 +13,10 @@
 .origin 0x0200
 
 ; Lue KBD_DATA ($0020) kun puskuri tyhjä -> 0
-LOAD  R0, [KBD_DATA]     ; R0 = mem[$0020] = 0 (tyhjä puskuri)
+READ  R0, [KBD_DATA]     ; R0 = mem[$0020] = 0 (tyhjä puskuri)
 
 ; Lue KBD_STATUS ($0021) kun puskuri tyhjä -> 0
-LOAD  R1, [KBD_STATUS]   ; R1 = mem[$0021] = 0 (tyhjä puskuri)
+READ  R1, [KBD_STATUS]   ; R1 = mem[$0021] = 0 (tyhjä puskuri)
 
 HALT
 

@@ -9,8 +9,8 @@
 
         .origin 0x0200
 
-        LOAD  R0, 2
-        LOAD  R1, 0x4000
+        READ  R0, 2
+        READ  R1, 0x4000
         MUL   R0, R1          ; 2 × 16384 = 32768 = 0x8000: V=1, N=1, C=0, Z=0
 
         HALT

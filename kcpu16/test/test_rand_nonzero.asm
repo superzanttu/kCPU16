@@ -9,18 +9,18 @@
 
         .origin 0x0200
 
-        LOAD  R1, 1              ; oleta OK
+        READ  R1, 1              ; oleta OK
 
-        LOAD  R0, [RAND_MMIO]   ; lue pseudosatunnaisluku
+        READ  R0, [RAND_MMIO]   ; lue pseudosatunnaisluku
 
-        LOAD  R2, 0
+        READ  R2, 0
         CMP   R0, R2
         JZ    fail               ; arvo oli 0 — virhe
 
         HALT
 
 fail:
-        LOAD  R1, 0
+        READ  R1, 0
         HALT
 
 .expect_reg   R1, 1

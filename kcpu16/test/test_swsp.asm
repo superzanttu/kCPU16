@@ -7,7 +7,7 @@
         .origin 0x0200
 
         ; Vaihda SP uuteen arvoon ja tallenna vanha arvo R1:een
-        LOAD  R0, 0x0400
+        READ  R0, 0x0400
         SWSP  R1, R0          ; R1 = vanha SP (0xFFFF), SP = 0x0400
 
         ; Palauta vanha SP ja vahvista että R2 saa nykyisen SP:n arvon

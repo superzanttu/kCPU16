@@ -5,13 +5,13 @@
 
         .origin 0x0200
 
-        LOAD  R0, 0xABCD
+        READ  R0, 0xABCD
         STORE [0x0300], R0  ; muisti[0x0300] = 0xABCD
-        LOAD R1, [0x0300]  ; R1 = muisti[0x0300]
+        READ R1, [0x0300]  ; R1 = muisti[0x0300]
 
-        LOAD  R2, 0x1234
+        READ  R2, 0x1234
         STORE [0x0301], R2  ; muisti[0x0301] = 0x1234
-        LOAD R3, [0x0301]  ; R3 = muisti[0x0301]
+        READ R3, [0x0301]  ; R3 = muisti[0x0301]
 
         HALT
 

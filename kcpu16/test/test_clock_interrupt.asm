@@ -15,13 +15,13 @@
 .origin 0x0200
 
 ; Aseta INT 9 handler (clock interrupt)
-LOAD  R0, clock_handler
+READ  R0, clock_handler
 STORE [0x0009], R0
 
-LOAD  R3, 0              ; R3 = 0 (handler asettaa 0xC10C)
+READ  R3, 0              ; R3 = 0 (handler asettaa 0xC10C)
 
 ; Aseta kellokeskeytys: 1 ms välein
-LOAD  R0, 1
+READ  R0, 1
 SCTMR R0
 
 ; Salli keskeytykset
@@ -29,18 +29,18 @@ STI
 
 ; Suorita silmukka (2000 kierrosta = noin 6000 käskyä, ~12 ms)
 ; jotta kellokeskeytys ehtii laueta.
-LOAD  R2, 2000           ; silmukan laskuri
-LOAD  R1, 1              ; vähennysarvo (ei muutu handlerin toimesta)
+READ  R2, 2000           ; silmukan laskuri
+READ  R1, 1              ; vähennysarvo (ei muutu handlerin toimesta)
 loop:
-        LOAD  R0, 0          ; tyhjä käsky (viiveen kasvatus)
+        READ  R0, 0          ; tyhjä käsky (viiveen kasvatus)
         SUB   R2, R1         ; R2 = R2 - 1; asettaa Z=1 kun R2=0
         JNZ   loop           ; jatka kunnes R2 = 0
 
 HALT
 
 clock_handler:
-        LOAD  R3, 0xC10C       ; merkki: kellokeskeytys laukesi
-        LOAD  R0, 0
+        READ  R3, 0xC10C       ; merkki: kellokeskeytys laukesi
+        READ  R0, 0
         SCTMR R0               ; poista kellokeskeytys käytöstä
         IRET
 

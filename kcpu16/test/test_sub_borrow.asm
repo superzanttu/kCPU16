@@ -6,8 +6,8 @@
 
         .origin 0x0200
 
-        LOAD  R0, 5
-        LOAD  R1, 10
+        READ  R0, 5
+        READ  R1, 10
         SUB   R0, R1          ; 5 − 10 = −5 → R0=0xFFFB, C=1
 
         HALT

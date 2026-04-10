@@ -16,54 +16,54 @@
 
         .origin 0x0200
 
-        LOAD  R0, 1           ; oleta OK
+        READ  R0, 1           ; oleta OK
 
         ; --- Kuukausi: 1..12 ---
-        LOAD  R1, [CLOCK_MONTH]
-        LOAD  R2, 1
+        READ  R1, [CLOCK_MONTH]
+        READ  R2, 1
         CMP   R1, R2
         JLT   fail            ; kuukausi < 1 -> virhe
-        LOAD  R2, 12
+        READ  R2, 12
         CMP   R1, R2
         JGT   fail            ; kuukausi > 12 -> virhe
 
         ; --- Päivä: 1..31 ---
-        LOAD  R1, [CLOCK_DAY]
-        LOAD  R2, 1
+        READ  R1, [CLOCK_DAY]
+        READ  R2, 1
         CMP   R1, R2
         JLT   fail
-        LOAD  R2, 31
+        READ  R2, 31
         CMP   R1, R2
         JGT   fail
 
         ; --- Tunti: 0..23 ---
-        LOAD  R1, [CLOCK_HOUR]
-        LOAD  R2, 23
+        READ  R1, [CLOCK_HOUR]
+        READ  R2, 23
         CMP   R1, R2
         JGT   fail
 
         ; --- Minuutti: 0..59 ---
-        LOAD  R1, [CLOCK_MINUTE]
-        LOAD  R2, 59
+        READ  R1, [CLOCK_MINUTE]
+        READ  R2, 59
         CMP   R1, R2
         JGT   fail
 
         ; --- Sekunti: 0..59 ---
-        LOAD  R1, [CLOCK_SECOND]
-        LOAD  R2, 59
+        READ  R1, [CLOCK_SECOND]
+        READ  R2, 59
         CMP   R1, R2
         JGT   fail
 
         ; --- Millisekunti: 0..999 ---
-        LOAD  R1, [CLOCK_MILLIS]
-        LOAD  R2, 999
+        READ  R1, [CLOCK_MILLIS]
+        READ  R2, 999
         CMP   R1, R2
         JGT   fail
 
         JUMP  done
 
 fail:
-        LOAD  R0, 0
+        READ  R0, 0
 
 done:
         HALT

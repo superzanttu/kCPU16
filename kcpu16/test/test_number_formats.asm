@@ -11,30 +11,30 @@
 .origin 0x0200
 
 ; Desimaali
-LOAD  R0, 100
+READ  R0, 100
 
 ; Heksadesimaali
-LOAD  R1, 0xAB
+READ  R1, 0xAB
 
 ; Binääri
-LOAD  R2, 0b11001100
+READ  R2, 0b11001100
 
 ; Oktaali (sama arvo eri muodossa)
-LOAD  R3, 0o62        ; 0o62 == 50 (desimaali)
+READ  R3, 0o62        ; 0o62 == 50 (desimaali)
 
 ; Muistioperaatiot eri formaateilla
 STORE [0x0300], R0  ; mem[0x0300] = 100 (hex-osoite)
-LOAD R1, [0x0300]  ; R1 = mem[0x0300] = 100
+READ R1, [0x0300]  ; R1 = mem[0x0300] = 100
 
 ; Nolla eri formaateissa
-LOAD  R0, 0
-LOAD  R2, 0x0000
-LOAD  R3, 0b0
+READ  R0, 0
+READ  R2, 0x0000
+READ  R3, 0b0
 
 ; Maksimiarvo
-LOAD  R0, 0xFFFF
-LOAD  R1, 65535        ; sama desimaalina
-LOAD  R2, 0b1111111111111111  ; sama binäärinä
+READ  R0, 0xFFFF
+READ  R1, 65535        ; sama desimaalina
+READ  R2, 0b1111111111111111  ; sama binäärinä
 
 HALT
 

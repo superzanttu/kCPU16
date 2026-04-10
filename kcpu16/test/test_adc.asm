@@ -7,13 +7,13 @@
         .origin 0x0200
 
         ; Vaihe 1: Aseta carry=1 kaatumalla yli 0xFFFF
-        LOAD  R0, 0xFFFF
-        LOAD  R1, 1
+        READ  R0, 0xFFFF
+        READ  R1, 1
         ADD   R0, R1          ; 0xFFFF + 1 → R0=0, C=1
 
         ; Vaihe 2: ADC käyttää C=1:n
-        LOAD  R2, 10
-        LOAD  R3, 5
+        READ  R2, 10
+        READ  R3, 5
         ADC   R2, R3          ; 10 + 5 + 1(carry) = 16
 
         HALT

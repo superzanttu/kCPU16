@@ -7,20 +7,20 @@
 
         .origin 0x0200
 
-        LOAD      FP, 0x0300     ; aseta Frame Pointer
+        READ      FP, 0x0300     ; aseta Frame Pointer
 
-        LOAD      R0, 77
+        READ      R0, 77
         STORE [FP+0], R0  ; muisti[FP+0] = muisti[0x0300] = 77
 
-        LOAD      R0, 88
+        READ      R0, 88
         STORE [FP+2], R0  ; muisti[FP+2] = muisti[0x0302] = 88
 
-        LOAD      R0, 255
+        READ      R0, 255
         STORE [FP+5], R0  ; muisti[FP+5] = muisti[0x0305] = 255
 
-        LOAD R1, [FP+0]  ; R1 = muisti[0x0300] = 77
-        LOAD R2, [FP+2]  ; R2 = muisti[0x0302] = 88
-        LOAD R3, [FP+5]  ; R3 = muisti[0x0305] = 255
+        READ R1, [FP+0]  ; R1 = muisti[0x0300] = 77
+        READ R2, [FP+2]  ; R2 = muisti[0x0302] = 88
+        READ R3, [FP+5]  ; R3 = muisti[0x0305] = 255
 
         HALT
 

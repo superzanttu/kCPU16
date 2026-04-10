@@ -6,7 +6,7 @@
 
         .origin 0x0200
 
-        LOAD      FP, 0x0300      ; FP = pinokehyksen kanta
+        READ      FP, 0x0300      ; FP = pinokehyksen kanta
 
         ; Kirjoita välitön arvo eri siirtymiin
         STORE [FP+0], 99  ; muisti[FP+0] = muisti[0x0300] = 99
@@ -15,10 +15,10 @@
         STORE [FP+5], 0xFFFF  ; muisti[FP+5] = muisti[0x0305] = 0xFFFF
 
         ; Lue takaisin READ_REL:llä ja tarkista
-        LOAD R0, [FP+0]  ; R0 = muisti[0x0300] = 99
-        LOAD R1, [FP+1]  ; R1 = muisti[0x0301] = 0xCAFE
-        LOAD R2, [FP+2]  ; R2 = muisti[0x0302] = 0
-        LOAD R3, [FP+5]  ; R3 = muisti[0x0305] = 0xFFFF
+        READ R0, [FP+0]  ; R0 = muisti[0x0300] = 99
+        READ R1, [FP+1]  ; R1 = muisti[0x0301] = 0xCAFE
+        READ R2, [FP+2]  ; R2 = muisti[0x0302] = 0
+        READ R3, [FP+5]  ; R3 = muisti[0x0305] = 0xFFFF
 
         HALT
 

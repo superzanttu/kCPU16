@@ -14,22 +14,22 @@
 .origin 0x0200
 
 ; Aseta INT 1 handler (invalid opcode)
-LOAD  R0, inv_handler
+READ  R0, inv_handler
 STORE [0x0001], R0
 
 ; Hyppää virheellisen opcoden kohdalle (0x0500)
 JUMP  0x0500
 
 after_trap:
-        LOAD  R1, 77
+        READ  R1, 77
         HALT
 
 inv_handler:
-        LOAD  R3, 0xFACE       ; merkki: INT 1 handler suoritettiin
+        READ  R3, 0xFACE       ; merkki: INT 1 handler suoritettiin
         ; Palaa after_trap:iin eikä 0x0501:een (joka on myös 0x0000)
         POP   R0               ; old_SR
         POP   R1               ; old_PC (hylkää)
-        LOAD  R1, after_trap   ; palautusosoite
+        READ  R1, after_trap   ; palautusosoite
         PUSH  R1
         PUSH  R0
         IRET

@@ -9,22 +9,22 @@
 .origin 0x0200
 
 ; Normaalikoodia
-LOAD  R0, 10
-LOAD  R1, 20
+READ  R0, 10
+READ  R1, 20
 ADD   R0, R1          ; R0 = 30
 
 ; Tallenna merkki R3:een ennen EXIT:iä
-LOAD  R3, 55
+READ  R3, 55
 
 ; Aseta EXIT-handler (INT 8) -> HALT
-LOAD  R2, exit_handler
+READ  R2, exit_handler
 STORE [0x0008], R2
 
 ; Kutsu EXIT
 EXIT
 
 ; Tätä EI suoriteta EXIT:n jälkeen
-LOAD  R3, 99
+READ  R3, 99
 HALT
 
 exit_handler:

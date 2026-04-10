@@ -27,24 +27,24 @@
         ; Kirjoita aloitusmerkki 'H' näytön alkuun
         ; 0xE048 = valkoinen 'H' (ASCII 0x48 = 72)
         ; -----------------------------------------------
-        LOAD  R3, 0xE048      ; R3 = 'H' (valkoisena)
+        READ  R3, 0xE048      ; R3 = 'H' (valkoisena)
         STORE [0xF800], R3  ; Kirjoita näytön vasempaan yläkulmaan
 
         ; -----------------------------------------------
         ; Vaihe 1: Yhteenlasku 10 + 5 = 15
         ; -----------------------------------------------
-        LOAD  R0, 10    ; R0 = 10
-        LOAD  R1, 5     ; R1 = 5
+        READ  R0, 10    ; R0 = 10
+        READ  R1, 5     ; R1 = 5
         ADD   R0, R1    ; R0 = R0 + R1 = 10 + 5 = 15
 
         ; Kirjoita '+' merkki näytölle
-        LOAD  R3, 0xE02B      ; R3 = '+' (ASCII 0x2B = 43)
+        READ  R3, 0xE02B      ; R3 = '+' (ASCII 0x2B = 43)
         STORE [0xF801], R3  ; Näyttöpaikka 2
 
         ; -----------------------------------------------
         ; Vaihe 2: Kertolasku 15 * 3 = 45
         ; -----------------------------------------------
-        LOAD  R2, 3     ; R2 = 3
+        READ  R2, 3     ; R2 = 3
         MUL   R0, R2    ; R0 = R0 * R2 = 15 * 3 = 45
 
         ; -----------------------------------------------
@@ -55,13 +55,13 @@
         ; -----------------------------------------------
         ; Kirjoita tulos "=42" näytölle
         ; -----------------------------------------------
-        LOAD  R3, 0xE03D      ; R3 = '=' (ASCII 0x3D = 61)
+        READ  R3, 0xE03D      ; R3 = '=' (ASCII 0x3D = 61)
         STORE [0xF802], R3  ; Näyttöpaikka 3
 
-        LOAD  R3, 0xE034      ; R3 = '4' (ASCII 0x34 = 52)
+        READ  R3, 0xE034      ; R3 = '4' (ASCII 0x34 = 52)
         STORE [0xF803], R3  ; Näyttöpaikka 4
 
-        LOAD  R3, 0xE032      ; R3 = '2' (ASCII 0x32 = 50)
+        READ  R3, 0xE032      ; R3 = '2' (ASCII 0x32 = 50)
         STORE [0xF804], R3  ; Näyttöpaikka 5
 
         ; -----------------------------------------------

@@ -21,13 +21,14 @@ SYNTAKSI:
     - Binääri:         0b1010, 0b11001100
     - Oktaali:         0o52
 - Label-viittaukset suoraan operandina: "JUMP loop"
-- Arkkitehtuurivakiot suoraan operandina: "LOAD R0, VRAM_START"
+- Arkkitehtuurivakiot suoraan operandina: "READ R0, VRAM_START"
 - Kommentit alkavat puolipisteella: "; tama on kommentti"
 - Direktiivit:
   - .origin OSOITE (esim. .origin 0x0200)
   - .const NIMI, ARVO (esim. .const MAX_VAL, 100 — käyttäjän vakio)
   - .macro NIMI ... .endmacro (esim. .macro LOAD_MANY ... .endmacro)
   - .db TAVU, TAVU, ... (esim. .db 0x41, 0x42, 255)
+  - .dw SANA, SANA, ... (esim. .dw 100, -50, 0x1234 — kokonaiset 16-bittiset sanat)
   - .dstr "TEKSTI" tai .dstr 'TEKSTI' (esim. .dstr "Hello!", null-terminoitu;
               escape-sekvenssit: \\\\ \\" \\' \\n \\t \\0)
   - .at OSOITE (esim. .at 0xF800, siirtyy uuteen muistiosoitteeseen)
@@ -55,9 +56,9 @@ ESIMERKKI:
     .origin 0x0200       ; Koodi alkaa osoitteesta 0x0200
 
     .macro LOAD_MANY
-        LOAD  R0, 10
-        LOAD  R1, 20
-        LOAD  R2, 30
+        READ  R0, 10
+        READ  R1, 20
+        READ  R2, 30
     .endmacro
 
     MSG:
@@ -67,7 +68,7 @@ ESIMERKKI:
 
     START:
         LOAD_MANY        ; Ekspandoi makroksi
-        LOAD  R0, MSG    ; R0 = datan aloitusosoite
+        READ  R0, MSG    ; R0 = datan aloitusosoite
         JUMP  START
         HALT
 
@@ -120,7 +121,6 @@ MNEMONIC_TO_OPCODE: dict[str, int] = {v[0]: k for k, v in OPCODE_TABLE.items()}
 # Mnemoniikat jotka on korvattu [..] syntaksilla — suorat viittaukset hylätään
 _DEPRECATED_MNEMONICS: frozenset[str] = frozenset(
     {
-        "READ",
         "READ_IND",
         "READ_REL",
         "STORE_IND",
@@ -144,7 +144,7 @@ class Assembler:
     Example:
         >>> asm = Assembler()
         >>> code = '''
-        ...     LOAD R0, 42
+        ...     READ R0, 42
         ...     HALT
         ... '''
         >>> segments = asm.assemble(code)
@@ -189,7 +189,7 @@ class Assembler:
             ValueError: Jos mnemonic on tuntematon tai label on duplikaatti
 
         Example:
-            >>> asm.assemble("LOAD R0, 10\\nHALT", start_addr=0x0200)
+            >>> asm.assemble("READ R0, 10\\nHALT", start_addr=0x0200)
             [(512, [1, 0, 10, 68])]
         """
         self._disk_block: int | None = None
@@ -597,6 +597,11 @@ class Assembler:
                 addr = int(parts[1], 0) & WORD_MASK
                 continue
 
+            # .dw direktiivi: tallenna kokonaisia 16-bittisiä sanoja muistiin
+            if line.lower().startswith(".dw"):
+                addr += len(self._parse_dw_values(line))
+                continue
+
             # .db direktiivi: tallenna raakoja tavuja muistiin
             if line.lower().startswith(".db"):
                 addr += len(self._parse_db_values(line))
@@ -623,7 +628,12 @@ class Assembler:
             if mnemonic in _DEPRECATED_MNEMONICS:
                 raise ValueError(
                     f"Vanhentunut mnemoniikka '{mnemonic}' — käytä [..] syntaksia: "
-                    f"LOAD reg, [osoite]  tai  STORE [osoite], reg/arvo"
+                    f"READ reg, [osoite]  tai  STORE [osoite], reg/arvo"
+                )
+            if mnemonic == "LOAD":
+                raise ValueError(
+                    "Mnemoniikka 'LOAD' ei ole sallittu assembler-koodissa — "
+                    "käytä 'READ' sen sijaan: READ reg, arvo  tai  READ reg, [osoite]"
                 )
             if mnemonic == "STORE" and len(parts) >= 2 and not parts[1].startswith("["):
                 raise ValueError(
@@ -639,7 +649,9 @@ class Assembler:
             # Erityiskasky: JMPI/CALLI — muuttuvanmittainen
             # Rakenne: opcode + reg + count + kohteet
             if mnemonic in ("JMPI", "CALLI"):
-                n_targets = len(parts) - 2  # kaikki osat paitsi mnemoniikka ja rekisteri
+                n_targets = (
+                    len(parts) - 2
+                )  # kaikki osat paitsi mnemoniikka ja rekisteri
                 addr += 3 + n_targets
             else:
                 # Kaskyn koko = 1 (opcode) + operandien maara
@@ -695,6 +707,14 @@ class Assembler:
                 current_words = []
                 continue
 
+            # .dw direktiivi: emittoi kokonaisia 16-bittisiä sanoja
+            if line.lower().startswith(".dw"):
+                self._source_map.append(
+                    (raw_line.strip(), current_start + len(current_words))
+                )
+                current_words.extend(self._parse_dw_values(line))
+                continue
+
             # .db direktiivi: emittoi raakoja tavuja
             if line.lower().startswith(".db"):
                 self._source_map.append(
@@ -727,8 +747,8 @@ class Assembler:
             # [..] syntaksi: LOAD reg, [expr]  ja  STORE [expr], src
             # ---------------------------------------------------------------
 
-            # LOAD reg, [expr]  → READ / READ_IND / READ_REL
-            if mnemonic == "LOAD" and len(parts) >= 3 and parts[2].startswith("["):
+            # READ reg, [expr]  → READ / READ_IND / READ_REL
+            if mnemonic == "READ" and len(parts) >= 3 and parts[2].startswith("["):
                 self._source_map.append(
                     (raw_line.strip(), current_start + len(current_words))
                 )
@@ -740,6 +760,20 @@ class Assembler:
                     current_words += [MNEMONIC_TO_OPCODE["READ_IND"], reg_dst, mode[1]]
                 elif mode[0] == "rel":
                     current_words += [MNEMONIC_TO_OPCODE["READ_REL"], reg_dst, mode[2]]
+                continue
+
+            # READ reg, arvo  → LOAD machine instruction (immediate/label load)
+            if mnemonic == "READ":
+                if len(parts) < 3:
+                    raise ValueError(
+                        "READ vaatii kaksi operandia: READ reg, arvo  tai  READ reg, [osoite]"
+                    )
+                self._source_map.append(
+                    (raw_line.strip(), current_start + len(current_words))
+                )
+                reg_dst = self._parse_operand(parts[1], labels)
+                imm = self._parse_operand(parts[2], labels)
+                current_words += [MNEMONIC_TO_OPCODE["LOAD"], reg_dst, imm]
                 continue
 
             # STORE [expr], src  → STORE / STOREI / STORE_IND / STOREI_IND /
@@ -795,7 +829,12 @@ class Assembler:
             if mnemonic in _DEPRECATED_MNEMONICS:
                 raise ValueError(
                     f"Vanhentunut mnemoniikka '{mnemonic}' — käytä [..] syntaksia: "
-                    f"LOAD reg, [osoite]  tai  STORE [osoite], reg/arvo"
+                    f"READ reg, [osoite]  tai  STORE [osoite], reg/arvo"
+                )
+            if mnemonic == "LOAD":
+                raise ValueError(
+                    "Mnemoniikka 'LOAD' ei ole sallittu assembler-koodissa — "
+                    "käytä 'READ' sen sijaan: READ reg, arvo  tai  READ reg, [osoite]"
                 )
             if mnemonic == "STORE" and len(parts) >= 2 and not parts[1].startswith("["):
                 raise ValueError(
@@ -919,6 +958,34 @@ class Assembler:
             raise ValueError(
                 f"Tuntematon operandi: '{token}' " f"(ei rekisteri, label eikä luku)"
             )
+
+    def _parse_dw_values(self, line: str) -> list[int]:
+        """
+        Parsi .dw-direktiivin arvot.
+
+        Hyväksyy pilkulla erotetun listan 16-bittisiä sanoja (desimaali, hex tai binääri).
+        Negatiiviset arvot muunnetaan 2-komplementiksi (& 0xFFFF).
+
+        Args:
+            line: Direktiiviriivi, esim. ".dw 100, -50, 0x1234"
+
+        Returns:
+            Lista kokonaislukuja, kukin väliltä 0–65535.
+
+        Example:
+            >>> asm._parse_dw_values(".dw 100, -50")
+            [100, 65486]
+        """
+        # Poista ".dw" etuliite
+        rest = line[3:].strip()
+        if not rest:
+            return []
+        values = []
+        for token in rest.split(","):
+            token = token.strip()
+            if token:
+                values.append(int(token, 0) & 0xFFFF)
+        return values
 
     def _parse_db_values(self, line: str) -> list[int]:
         """

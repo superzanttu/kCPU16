@@ -13,45 +13,45 @@
 .origin 0x0200
 
 ; Aseta INT 6 -handler
-LOAD  R0, kbd_handler
+READ  R0, kbd_handler
 STORE [INT_KEYBOARD], R0
 
 ; Alusta laskurit
-LOAD  R1, 0          ; viimeisin näppäinkoodi
-LOAD  R2, 0          ; painallustenlaskuri
-LOAD  R3, 1          ; inkrementti
+READ  R1, 0          ; viimeisin näppäinkoodi
+READ  R2, 0          ; painallustenlaskuri
+READ  R3, 1          ; inkrementti
 
 ; Salli keskeytykset
 STI
 
 ; Suorita tarpeeksi käskyjä jotta kaikki 3 keskeytystä ehtivät laueta.
 ; Jokainen käsky antaa INT-tarkistukselle mahdollisuuden laukaista.
-LOAD  R0, 0
-LOAD  R0, 0
-LOAD  R0, 0
-LOAD  R0, 0
-LOAD  R0, 0
-LOAD  R0, 0
-LOAD  R0, 0
-LOAD  R0, 0
-LOAD  R0, 0
-LOAD  R0, 0
-LOAD  R0, 0
-LOAD  R0, 0
-LOAD  R0, 0
-LOAD  R0, 0
-LOAD  R0, 0
+READ  R0, 0
+READ  R0, 0
+READ  R0, 0
+READ  R0, 0
+READ  R0, 0
+READ  R0, 0
+READ  R0, 0
+READ  R0, 0
+READ  R0, 0
+READ  R0, 0
+READ  R0, 0
+READ  R0, 0
+READ  R0, 0
+READ  R0, 0
+READ  R0, 0
 
 HALT
 
 kbd_handler:
-    LOAD  R0, [KBD_DATA]       ; lue tapahtuma
+    READ  R0, [KBD_DATA]       ; lue tapahtuma
     ; ohita vapautukset (bitti 7 = 1)
-    LOAD  R4, KBD_RELEASE_BIT
+    READ  R4, KBD_RELEASE_BIT
     AND   R4, R0
     JNZ   kh_skip              ; vapautus -> ohita, ei lasketa
     ; painallus: tallenna koodi ja kasvata laskuria
-    LOAD  R4, KBD_KEY_CODE_MASK
+    READ  R4, KBD_KEY_CODE_MASK
     AND   R0, R4               ; poista release-bitti varmuuden vuoksi
     CPY   R1, R0               ; R1 = viimeisin näppäinkoodi
     ADD   R2, R3               ; R2++

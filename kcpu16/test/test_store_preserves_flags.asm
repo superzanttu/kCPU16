@@ -7,20 +7,20 @@
 .origin 0x0200
 
 ; Aseta C=1, V=1, Z=1, N=0
-LOAD  R0, 0x8000
-LOAD  R1, 0x8000
+READ  R0, 0x8000
+READ  R1, 0x8000
 ADD   R0, R1          ; C=1, V=1, Z=1, N=0
 
 ; --- STORE [addr], reg ---
-LOAD  R0, 0xABCD
+READ  R0, 0xABCD
 STORE [0x0300], R0    ; kirjoita suoraan osoitteeseen; ei saa muuttaa lippuja
 
 ; --- STORE [reg], reg (epäsuora) ---
-LOAD  R1, 0x0301      ; R1 = kohdeosoite
+READ  R1, 0x0301      ; R1 = kohdeosoite
 STORE [R1], R0        ; kirjoita R1:n osoittamaan paikkaan; ei saa muuttaa lippuja
 
 ; --- STORE [FP+n], reg (suhteellinen) ---
-LOAD  FP, 0x0300
+READ  FP, 0x0300
 STORE [FP+2], R0      ; kirjoita [0x0302]; ei saa muuttaa lippuja
 
 HALT

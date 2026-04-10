@@ -7,13 +7,13 @@
         .origin 0x0200
 
         ; Vaihe 1: CMP tuottaa Z=1 (0→1)
-        LOAD  R0, 55
-        LOAD  R1, 55
+        READ  R0, 55
+        READ  R1, 55
         CMP   R0, R1          ; 55-55=0: Z=1, N=0, C=0, V=0
 
         ; Vaihe 2: CMP tuottaa Z=1 uudelleen → Z:1→1
-        LOAD  R0, 99
-        LOAD  R1, 99
+        READ  R0, 99
+        READ  R1, 99
         CMP   R0, R1          ; 99-99=0: Z=1 (1→1)
 
         HALT

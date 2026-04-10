@@ -82,7 +82,7 @@ STR_ALGO:
 ; ALIOHJELMA: write_str
 ; =============================================================================
 write_str:
-        LOAD  R11, [R9]
+        READ  R11, [R9]
         CMP   R11, R12
         JZ    ws_done
         OR    R11, R10
@@ -97,15 +97,15 @@ ws_done:
 ; ALIOHJELMA: write_nibble
 ; =============================================================================
 write_nibble:
-        LOAD  R6, 0x000F
+        READ  R6, 0x000F
         AND   R5, R6
-        LOAD  R6, 9
+        READ  R6, 9
         CMP   R5, R6
         JGT   wn_alpha
-        LOAD  R6, 0x0030
+        READ  R6, 0x0030
         JUMP  wn_store
 wn_alpha:
-        LOAD  R6, 0x0037
+        READ  R6, 0x0037
 wn_store:
         ADD   R5, R6
         OR    R5, R10
@@ -118,15 +118,15 @@ wn_store:
 ; =============================================================================
 write_hex4:
         CPY   R5, R1
-        LOAD  R6, 12
+        READ  R6, 12
         SHR   R5, R6
         CALL  write_nibble
         CPY   R5, R1
-        LOAD  R6, 8
+        READ  R6, 8
         SHR   R5, R6
         CALL  write_nibble
         CPY   R5, R1
-        LOAD  R6, 4
+        READ  R6, 4
         SHR   R5, R6
         CALL  write_nibble
         CPY   R5, R1
@@ -143,7 +143,7 @@ write_hex4:
 ; =============================================================================
 write_dec3:
         ; Sadat (hundreds): R1 / 100
-        LOAD  R6, 100
+        READ  R6, 100
         CPY   R2, R1          ; R2 = arvo
         DIV   R2, R6          ; R2 = sadat = arvo / 100
         CPY   R5, R2          ; R5 = sadat (backup)
@@ -151,7 +151,7 @@ write_dec3:
         SUB   R1, R2          ; R1 = arvo mod 100 (= kymmenet + ykköset)
 
         ; Kirjoita sadat
-        LOAD  R2, 0x0030      ; '0'
+        READ  R2, 0x0030      ; '0'
         OR    R5, R2
         OR    R5, R10
         STORE [R8], R5
@@ -164,14 +164,14 @@ write_dec3:
         MUL   R2, R4          ; R2 = kymmenet * 10
         SUB   R1, R2          ; R1 = ykköset
 
-        LOAD  R2, 0x0030
+        READ  R2, 0x0030
         OR    R5, R2
         OR    R5, R10
         STORE [R8], R5
         ADD   R8, R13
 
         ; Ykköset: R1
-        LOAD  R2, 0x0030
+        READ  R2, 0x0030
         OR    R1, R2
         OR    R1, R10
         STORE [R8], R1
@@ -209,26 +209,26 @@ gcd_done:
 ; PÄÄOHJELMA
 ; =============================================================================
 main:
-        LOAD  R12, 0          ; nollavakio
-        LOAD  R13, 1          ; inkrementtivakio
-        LOAD  R4, 10          ; desimaalijakaja write_dec3:lle
+        READ  R12, 0          ; nollavakio
+        READ  R13, 1          ; inkrementtivakio
+        READ  R4, 10          ; desimaalijakaja write_dec3:lle
 
         ; --- Otsikko: rivi 0, sarake 25 = 0xF819 ---
-        LOAD  R8, 0xF819
-        LOAD  R9, STR_TITLE
-        LOAD  R10, 0x4300     ; bold keltainen
+        READ  R8, 0xF819
+        READ  R9, STR_TITLE
+        READ  R10, 0x4300     ; bold keltainen
         CALL  write_str
 
         ; --- Viiva: rivi 1, sarake 25 = 0xF869 ---
-        LOAD  R8, 0xF869
-        LOAD  R9, STR_UNDER
-        LOAD  R10, 0x0700
+        READ  R8, 0xF869
+        READ  R9, STR_UNDER
+        READ  R10, 0x0700
         CALL  write_str
 
         ; --- Algoritmin kuvaus: rivi 9, sarake 20 = 0xFAF4 ---
-        LOAD  R8, 0xFAF4
-        LOAD  R9, STR_ALGO
-        LOAD  R10, 0x0300     ; keltainen
+        READ  R8, 0xFAF4
+        READ  R9, STR_ALGO
+        READ  R10, 0x0300     ; keltainen
         CALL  write_str
 
 ; =============================================================================
@@ -240,52 +240,52 @@ main:
 ; =============================================================================
 
         ; Etiketti: rivi 2, sarake 20 = 0xF8B4
-        LOAD  R8, 0xF8B4
-        LOAD  R9, STR_EX1
-        LOAD  R10, 0x0700     ; valkoinen
+        READ  R8, 0xF8B4
+        READ  R9, STR_EX1
+        READ  R10, 0x0700     ; valkoinen
         CALL  write_str       ; R8 osoittaa tulospaikalle
 
-        LOAD  R0, 48
-        LOAD  R1, 36
+        READ  R0, 48
+        READ  R1, 36
         CALL  gcd             ; R0 = gcd(48, 36) = 12
 
         CPY   R1, R0          ; siirrä tulosta R1:een (write_dec3 tarve: ei)
         ; write_dec3 käyttää R1 suoraan
-        LOAD  R10, 0x4200     ; bold vihreä
+        READ  R10, 0x4200     ; bold vihreä
         CALL  write_dec3      ; kirjoittaa "012" → desimaalinen 12
 
 ; =============================================================================
 ; Esimerkki 2: gcd(100, 75) = 25
 ; =============================================================================
 
-        LOAD  R8, 0xF904
-        LOAD  R9, STR_EX2
-        LOAD  R10, 0x0700
+        READ  R8, 0xF904
+        READ  R9, STR_EX2
+        READ  R10, 0x0700
         CALL  write_str
 
-        LOAD  R0, 100
-        LOAD  R1, 75
+        READ  R0, 100
+        READ  R1, 75
         CALL  gcd             ; R0 = gcd(100, 75) = 25
 
         CPY   R1, R0
-        LOAD  R10, 0x4200
+        READ  R10, 0x4200
         CALL  write_dec3
 
 ; =============================================================================
 ; Esimerkki 3: gcd(17, 13) = 1  (alkuluvut)
 ; =============================================================================
 
-        LOAD  R8, 0xF954
-        LOAD  R9, STR_EX3
-        LOAD  R10, 0x0700
+        READ  R8, 0xF954
+        READ  R9, STR_EX3
+        READ  R10, 0x0700
         CALL  write_str
 
-        LOAD  R0, 17
-        LOAD  R1, 13
+        READ  R0, 17
+        READ  R1, 13
         CALL  gcd             ; R0 = gcd(17, 13) = 1
 
         CPY   R1, R0
-        LOAD  R10, 0x4200
+        READ  R10, 0x4200
         CALL  write_dec3
 
         HALT

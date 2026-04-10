@@ -7,15 +7,15 @@
 .origin 0x0200
 
 ; ADD: 0 + 0 = 0 -> Z=1
-LOAD  R0, 0
-LOAD  R1, 0
+READ  R0, 0
+READ  R1, 0
 ADD   R0, R1
 ; Tarkista välissä: Z pitäisi olla 1
 ; (ei voi tarkistaa suoraan, joten jatketaan)
 
 ; SUB: 42 - 42 = 0 -> Z=1
-LOAD  R0, 42
-LOAD  R1, 42
+READ  R0, 42
+READ  R1, 42
 SUB   R0, R1          ; R0 = 0, Z=1
 
 HALT
