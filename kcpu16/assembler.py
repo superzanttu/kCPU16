@@ -28,6 +28,7 @@ SYNTAKSI:
   - .const NIMI, ARVO (esim. .const MAX_VAL, 100 — käyttäjän vakio)
   - .macro NIMI ... .endmacro (esim. .macro LOAD_MANY ... .endmacro)
   - .db TAVU, TAVU, ... (esim. .db 0x41, 0x42, 255)
+  - .dw SANA, SANA, ... (esim. .dw 100, -50, 0x1234 — kokonaiset 16-bittiset sanat)
   - .dstr "TEKSTI" tai .dstr 'TEKSTI' (esim. .dstr "Hello!", null-terminoitu;
               escape-sekvenssit: \\\\ \\" \\' \\n \\t \\0)
   - .at OSOITE (esim. .at 0xF800, siirtyy uuteen muistiosoitteeseen)
@@ -597,6 +598,11 @@ class Assembler:
                 addr = int(parts[1], 0) & WORD_MASK
                 continue
 
+            # .dw direktiivi: tallenna kokonaisia 16-bittisiä sanoja muistiin
+            if line.lower().startswith(".dw"):
+                addr += len(self._parse_dw_values(line))
+                continue
+
             # .db direktiivi: tallenna raakoja tavuja muistiin
             if line.lower().startswith(".db"):
                 addr += len(self._parse_db_values(line))
@@ -639,7 +645,9 @@ class Assembler:
             # Erityiskasky: JMPI/CALLI — muuttuvanmittainen
             # Rakenne: opcode + reg + count + kohteet
             if mnemonic in ("JMPI", "CALLI"):
-                n_targets = len(parts) - 2  # kaikki osat paitsi mnemoniikka ja rekisteri
+                n_targets = (
+                    len(parts) - 2
+                )  # kaikki osat paitsi mnemoniikka ja rekisteri
                 addr += 3 + n_targets
             else:
                 # Kaskyn koko = 1 (opcode) + operandien maara
@@ -693,6 +701,14 @@ class Assembler:
                     raise ValueError(f"Invalid .at syntax: {line}")
                 current_start = int(parts[1], 0) & WORD_MASK
                 current_words = []
+                continue
+
+            # .dw direktiivi: emittoi kokonaisia 16-bittisiä sanoja
+            if line.lower().startswith(".dw"):
+                self._source_map.append(
+                    (raw_line.strip(), current_start + len(current_words))
+                )
+                current_words.extend(self._parse_dw_values(line))
                 continue
 
             # .db direktiivi: emittoi raakoja tavuja
@@ -919,6 +935,34 @@ class Assembler:
             raise ValueError(
                 f"Tuntematon operandi: '{token}' " f"(ei rekisteri, label eikä luku)"
             )
+
+    def _parse_dw_values(self, line: str) -> list[int]:
+        """
+        Parsi .dw-direktiivin arvot.
+
+        Hyväksyy pilkulla erotetun listan 16-bittisiä sanoja (desimaali, hex tai binääri).
+        Negatiiviset arvot muunnetaan 2-komplementiksi (& 0xFFFF).
+
+        Args:
+            line: Direktiiviriivi, esim. ".dw 100, -50, 0x1234"
+
+        Returns:
+            Lista kokonaislukuja, kukin väliltä 0–65535.
+
+        Example:
+            >>> asm._parse_dw_values(".dw 100, -50")
+            [100, 65486]
+        """
+        # Poista ".dw" etuliite
+        rest = line[3:].strip()
+        if not rest:
+            return []
+        values = []
+        for token in rest.split(","):
+            token = token.strip()
+            if token:
+                values.append(int(token, 0) & 0xFFFF)
+        return values
 
     def _parse_db_values(self, line: str) -> list[int]:
         """
