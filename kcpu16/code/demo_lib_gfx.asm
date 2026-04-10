@@ -20,7 +20,7 @@
 ;     • Ristikko — vaaka- ja pystyviiva (gfx_line)
 ;     • Yksittäinen pikseli näytön keskelle (gfx_pixel)
 ;
-;   Lopuksi: tekstitila A palautetaan ja ohjelma päättyy.
+;   Toistetaan ikuisesti (ei lopu itsestään).
 ;
 ; KÄYTTÖ:
 ;   python main.py --run kcpu16/code/demo_lib_gfx.asm
@@ -51,19 +51,17 @@
 ; Data
 ; =============================================================================
 
-; Demo-vaihe:
+; Demo-vaihe (pyörii ikuisesti):
 ;   0 = tila B näkyvissä (odota ajastin)
 ;   1 = tila C näkyvissä (odota ajastin)
-;   2 = valmis
 phase:
         .db 0
 
 ; =============================================================================
 ; clock_handler — Kellokeskeytyksen käsittelijä (INT 9)
 ;
-; Kasvattaa demo-vaihetta yhdellä.
-; Jos uusi phase < 2, käynnistää 3 s ajastimen uudelleen.
-; Jos uusi phase == 2, pysäyttää ajastimen.
+; Pyörittää demo-vaihetta modulo 2 (0→1→0→...) ja käynnistää
+; 3 s ajastimen aina uudelleen (ikuinen looppi).
 ;
 ; Vaatii: Kernel-tila (INT:n kautta automaattisesti).
 ; Clobbers: R0, R1 (tallennetaan pinoon ja palautetaan ennen IRET:ä).
@@ -73,27 +71,21 @@ clock_handler:
         PUSH  R0
         PUSH  R1
 
-        ; phase++
+        ; phase = (phase + 1) % 2
         LOAD  R0, [phase]
         LOAD  R1, 1
         ADD   R0, R1
-        STORE [phase], R0
-
-        ; Jos phase >= 2, pysäytä ajastin
         LOAD  R1, 2
         CMP   R0, R1
-        JGE   _ch_stop
+        JLT   _ch_store
+        LOAD  R0, 0
+_ch_store:
+        STORE [phase], R0
 
-        ; phase < 2: käynnistä 3 s ajastin uudelleen
+        ; Käynnistä 3 s ajastin uudelleen (ikuinen looppi)
         LOAD  R0, 3000
         SCTMR R0
-        JUMP  _ch_done
 
-_ch_stop:
-        LOAD  R0, 0
-        SCTMR R0
-
-_ch_done:
         POP   R1
         POP   R0
         IRET
@@ -301,10 +293,12 @@ main:
         LOAD  R0, clock_handler
         STORE [INT_CLOCK], R0
 
+loop_forever:
         ; Piirrä tila B -kuvio
         CALL  draw_mode_b
 
-        ; Käynnistä 3 sekunnin kellokeskeytys
+        ; Käynnistä 3 sekunnin kellokeskeytys (vain ensimmäisellä kierroksella;
+        ; clock_handler käynnistää ajastimen aina uudelleen)
         LOAD  R0, 3000
         SCTMR R0
 
@@ -321,16 +315,11 @@ wait_phase_1:
         ; Piirrä tila C -kuvio
         CALL  draw_mode_c
 
-; Odota kunnes phase 1 → 2 (toinen kellokeskeytys laukeaa)
-wait_phase_2:
+; Odota kunnes phase 1 → 0 (toinen kellokeskeytys laukeaa) ja hyppää takaisin
+wait_phase_0:
         LOAD  R0, [phase]
-        LOAD  R1, 1
+        LOAD  R1, 0
         CMP   R0, R1
-        JZ    wait_phase_2
+        JNZ   wait_phase_0
 
-        ; Palauta tekstitila A
-        LOAD  R0, 0
-        LOAD  R1, GFX_MODE_REG
-        STORE [R1], R0
-
-        EXIT
+        JUMP  loop_forever

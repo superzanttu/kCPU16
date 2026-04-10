@@ -851,15 +851,48 @@ class KCPU16TUI(App[None]):
     # Actions (näppäinsidonnaisuudet)
     # ------------------------------------------------------------------
 
+    def _reload_and_run(self, mode: str) -> None:
+        """Lataa nykyinen tiedosto uudelleen ja aloita suoritus annetussa moodissa.
+
+        Kutsutaan kun CPU on pysähtynyt (HALT/EXIT) ja käyttäjä painaa
+        Step, Full, Slow tai Stop. Jos tiedostoa ei ole ladattu, logitetaan ilmoitus.
+
+        Args:
+            mode: "step", "full", "slow" tai "stop"
+        """
+        if not self.current_file:
+            self._log("[yellow]Ei ladattua ohjelmaa. Käytä 'load <tiedosto>'.[/yellow]")
+            return
+        self.workers.cancel_all()
+        self._exec_mode = "stopped"
+        self._do_assemble()  # cold_reset + lataa + assembloi
+        if not self.is_assembled:
+            return
+        self._log(f"[cyan]Uudelleenladattu: {self.current_file.name}[/cyan]")
+        if mode == "step":
+            self.machine.step()
+            self._log_step_info()
+            self._refresh_all(include_screen=True)
+        elif mode == "full":
+            self._exec_mode = "full"
+            self._update_run_mode_ui()
+            self._log("[green]Running full speed... (F5/F8 to stop)[/green]")
+            self._cpu_run_worker("full")
+        elif mode == "slow":
+            self._exec_mode = "slow"
+            self._update_run_mode_ui()
+            self._log("[green]Running slow (10 IPS)... (F6/F8 to stop)[/green]")
+            self._cpu_run_worker("slow")
+        # mode == "stop": pelkkä uudelleenlataus riittää, _do_assemble hoiti
+
     def action_step_once(self) -> None:
         """Suorita yksi konekielikäsky (F7/F10 tai Step-painike).
 
-        Tarkistaa ensin onko CPU pysähtynyt (HALT/EXIT). Jos ei,
-        suorittaa yhden käskyn, logittaa käskyn tiedot ja päivittää näkymät.
+        Tarkistaa ensin onko CPU pysähtynyt (HALT/EXIT). Jos on,
+        ladataan ohjelma uudelleen ja suoritetaan ensimmäinen askel.
         """
         if self.machine.cpu.halted or self.machine.process_exited:
-            self._log("[yellow]CPU stopped. Reset to continue.[/yellow]")
-            self._refresh_all(include_screen=True)
+            self._reload_and_run("step")
             return
         self.machine.step()
         self._log_step_info()
@@ -868,14 +901,14 @@ class KCPU16TUI(App[None]):
     def action_run_full_speed(self) -> None:
         """Käynnistä CPU täydellä nopeudella (F5). Toinen painalus pysäyttää.
 
-        Ajo päättyy HALT-, EXIT-käskyyn, breakpointiin tai Stop-komentoon.
-        Käyttöliittymä päivittyy noin 5 kertaa sekunnissa ajon aikana.
+        Jos CPU on pysähtynyt (HALT/EXIT), ladataan ohjelma uudelleen ja
+        käynnistetään täydellä nopeudella.
         """
         if self._exec_mode == "full":
             self.action_stop_program()
             return
         if self.machine.cpu.halted or self.machine.process_exited:
-            self._log("[yellow]CPU stopped. Reset to continue.[/yellow]")
+            self._reload_and_run("full")
             return
         self.workers.cancel_all()
         self._exec_mode = "full"
@@ -886,14 +919,14 @@ class KCPU16TUI(App[None]):
     def action_run_slow_speed(self) -> None:
         """Käynnistä CPU hidas suoritus (F6): ~10 IPS. Toinen painalus pysäyttää.
 
-        Joka käskyn jälkeen kaikki paneelit päivittyvät (rekisterit, liput,
-        disassembly, näyttö) joten prosessori "elää" ruudulla.
+        Jos CPU on pysähtynyt (HALT/EXIT), ladataan ohjelma uudelleen ja
+        käynnistetään hitaassa tilassa.
         """
         if self._exec_mode == "slow":
             self.action_stop_program()
             return
         if self.machine.cpu.halted or self.machine.process_exited:
-            self._log("[yellow]CPU stopped. Reset to continue.[/yellow]")
+            self._reload_and_run("slow")
             return
         self.workers.cancel_all()
         self._exec_mode = "slow"
@@ -902,7 +935,14 @@ class KCPU16TUI(App[None]):
         self._cpu_run_worker("slow")
 
     def action_stop_program(self) -> None:
-        """Pysäytä CPU:n suoritus (F8 tai Stop-painike)."""
+        """Pysäytä CPU:n suoritus (F8 tai Stop-painike).
+
+        Jos CPU on jo pysähtynyt (HALT/EXIT), ladataan ohjelma uudelleen
+        ja jäädään pysähtyneeseen tilaan (reset + lataus).
+        """
+        if self.machine.cpu.halted or self.machine.process_exited:
+            self._reload_and_run("stop")
+            return
         self.workers.cancel_all()
         self._exec_mode = "stopped"
         self._update_run_mode_ui()
