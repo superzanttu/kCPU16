@@ -204,3 +204,42 @@ Valittu nappi korostuu. Oletuksena `x1` on valittuna.
 - Very suuria kerroimen arvoja (x100 + säädin max) käyttäessä suoritusnopeus voi ylittää FULL-tilan nopeuden — tässä tilanteessa suoritus on silti yksikäskyinen eikä yhtä tehokas kuin FULL-tila (erä-suoritus).
 - Liukusäädin käyttää **logaritmista asteikkoa**, joten se antaa enemmän tarkkuutta pienillä nopeuksilla (esim. 1–10 IPS) ja suuremmilla harppauksin suurilla nopeuksilla.
 
+---
+
+# 8. Näppäimenpainallukset ja emulaattori
+
+TUI välittää näppäimenpainallukset emulaattorin näppäimistölaitteelle (KeyboardDevice) tietyissä olosuhteissa.
+
+## Milloin näppäimet välitetään
+
+Näppäimenpainallus välitetään emulaattorille **vain** kun kaikki seuraavat ehdot täyttyyvät:
+
+1. Suoritustila on **FAST**, **MAX** tai **SLOW** — CPU on siis käynnissä
+2. Emulaattorissa on näppäimistölaite (`keyboard`-laite määritelty)
+3. Käyttäjä ei kirjoita komentokenttään (`>`) — komentokenttä on aktiivinen
+4. Painettu merkki on tulostettava ASCII-merkki (kooditävälitä 32–126)
+
+## Mitä ei välitetä
+
+- Funktionaäppäimet (F1–F10), nuolinäppäimet, Ctrl-yhdistelmät — nämä ovat TUI:n omia pikavalin-
+  toja eivätkä kulje emulaattorille
+- Näppäimet **STOPPED**-, **STEP**- tai **RESET**-tiloissa — CPU ei ole käynnissä
+- Komentokenttään kirjoitettavat merkit — komento syöte käsitellään TUI:ssa
+
+## Toteutuksen rajoitteet
+
+Terminaali ei tue **näppäimennostoihin** (key release) perustuvia tapahtumia. Jokainen merkki
+ lähetetään emulaattorin jonoon sekä painalluksena että vapautuksena peräkkäin saman tapahtuman
+ käsittelyn yhteydessä. Tämä riittää useimmille käyttötapauksille, mutta **pitkistä näppäinten painalluksista** (key held down) ei emulaattori saa tietoa.
+
+## Yhteenveto eri suoritustiloissa
+
+| Tila      | Näppäimet emulaattorille |
+| --------- | ------------------------ |
+| `STOPPED` | Ei                       |
+| `STEP`    | Ei                       |
+| `FAST`    | Kyllä (ASCII 32–126)     |
+| `MAX`     | Kyllä (ASCII 32–126)     |
+| `SLOW`    | Kyllä (ASCII 32–126)     |
+| `RESET`   | Ei                       |
+
