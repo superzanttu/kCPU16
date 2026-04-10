@@ -6,8 +6,8 @@
 ;   Piirtää pyörivän wireframe-3D-kuution grafiikkanäytölle.
 ;   Pyörittää kuutiota samanaikaisesti kaikkien kolmen akselin ympäri:
 ;     Y: nopea  (64 askelta/kierros, joka kehys)
-;     X: hidas  (64 askelta/kierros, joka 4. kehys)
-;     Z: hitain (64 askelta/kierros, joka 7. kehys)
+;     X: hidas  (64 askelta/kierros, joka 3. kehys)
+;     Z: hitain (64 askelta/kierros, joka 5. kehys)
 ;
 ;   Vaihe 1 (20 s): Tila B — 80 × 48 pikseliä (kuution säde 12 pikseliä)
 ;   Vaihe 2 (20 s): Tila C — 160 × 96 pikseliä (säde skaalattu ×2 = 24 px)
@@ -141,10 +141,10 @@ angle:
         .db  0         ; Y-akselin rotaatiokulma (0–63, joka kehys)
 
 angle_x:
-        .db  0         ; X-akselin rotaatiokulma (0–63, joka 4. kehys)
+        .db  0         ; X-akselin rotaatiokulma (0–63, joka 3. kehys)
 
 angle_z:
-        .db  0         ; Z-akselin rotaatiokulma (0–63, joka 7. kehys)
+        .db  0         ; Z-akselin rotaatiokulma (0–63, joka 5. kehys)
 
 cnt_x:
         .db  0         ; kehyslaskuri angle_x:n päivitykseen
@@ -569,11 +569,11 @@ b_loop:
 _b_no_wrap:
         STORE [angle], R0
 
-        ; Kasvata angle_x (joka 4. kehys)
+        ; Kasvata angle_x (joka 3. kehys)
         READ  R0, [cnt_x]
         READ  R1, 1
         ADD   R0, R1
-        READ  R1, 4
+        READ  R1, 3
         CMP   R0, R1
         JNZ   _b_cnt_x_done
         READ  R0, 0
@@ -589,11 +589,11 @@ _b_ax_no_wrap:
 _b_cnt_x_done:
         STORE [cnt_x], R0
 
-        ; Kasvata angle_z (joka 7. kehys)
+        ; Kasvata angle_z (joka 5. kehys)
         READ  R0, [cnt_z]
         READ  R1, 1
         ADD   R0, R1
-        READ  R1, 7
+        READ  R1, 5
         CMP   R0, R1
         JNZ   _b_cnt_z_done
         READ  R0, 0
@@ -642,11 +642,11 @@ c_loop:
 _c_no_wrap:
         STORE [angle], R0
 
-        ; Kasvata angle_x (joka 4. kehys)
+        ; Kasvata angle_x (joka 3. kehys)
         READ  R0, [cnt_x]
         READ  R1, 1
         ADD   R0, R1
-        READ  R1, 4
+        READ  R1, 3
         CMP   R0, R1
         JNZ   _c_cnt_x_done
         READ  R0, 0
@@ -662,11 +662,11 @@ _c_ax_no_wrap:
 _c_cnt_x_done:
         STORE [cnt_x], R0
 
-        ; Kasvata angle_z (joka 7. kehys)
+        ; Kasvata angle_z (joka 5. kehys)
         READ  R0, [cnt_z]
         READ  R1, 1
         ADD   R0, R1
-        READ  R1, 7
+        READ  R1, 5
         CMP   R0, R1
         JNZ   _c_cnt_z_done
         READ  R0, 0
