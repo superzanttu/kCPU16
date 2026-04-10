@@ -6,9 +6,10 @@ nappaa nama poikkeukset ja muuntaa ne vastaaviksi keskeytyksiksi (INT).
 
 Poikkeushierarkia:
     KCPU16Error (kantaluokka)
-    |-- InvalidOpcodeError     -> INT 1
+    |-- InvalidOpcodeError      -> INT 1
     |-- PrivilegeViolationError -> INT 4
     |-- MemoryAccessFaultError  -> INT 5
+    |-- ReadOnlyMemoryError     -> INT 5
     |-- StackOverflowError      -> INT 2
 
 Ei-virhepohjaiset keskeytykset (eivat kayta poikkeusluokkia):
@@ -76,4 +77,21 @@ class StackOverflowError(KCPU16Error):
     koodi ei voi ylikirjoittaa jarjestelman muistia.
 
     Johtaa keskeytykseen INT 2 (Stack Overflow).
+    """
+
+
+class ReadOnlyMemoryError(KCPU16Error):
+    """
+    Heitetaan kun yritetaan kirjoittaa kirjoitussuojattuun muistiosoitteeseen.
+
+    Kirjoitussuojattuja alueita ovat:
+    - Kello-MMIO ($0010-$001A, $001C-$001F): lue-vain reaaliaikakellorekisterit
+    - Nappaimisto-MMIO ($0020-$0021): KBD_DATA ja KBD_STATUS ovat lue-vain
+    - Tulevaisuudessa: ROM-alueet (lisataan Memory.read_only_regions-listalle)
+
+    Kirjoittaminen KBD_DATA:han ($0020) tai KBD_STATUS:een ($0021) ei saa
+    mitaan aikaan - ne ovat laitteen tilaa heijastavia "ikkunoita", ei
+    rekistereja joihin kirjoitetaan. Kirjoitusyritys aiheuttaa taman virheen.
+
+    Johtaa keskeytykseen INT 5 (Memory Access Fault).
     """

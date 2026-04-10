@@ -35,7 +35,11 @@ SYNTAKSI:
   - .expect_flag LIPPU, ARVO (esim. .expect_flag Z, 0, testaukseen)
   - .expect_mem OSOITE, ARVO (esim. .expect_mem 0x0300, 0xFF, testaukseen)
   - .expect_storage OSOITE, ARVO (tallennuslaiteen testaus)
+  - .inject_key KOODI (esim. .inject_key 0x41, simuloi A-painallus; testaukseen)
+  - .inject_key_release KOODI (esim. .inject_key_release 0x41, simuloi A-vapautus; testaukseen)
   - .diskblock N (esim. .diskblock 0, tallenna konekieli levyblokkiin N)
+  - .include "TIEDOSTO" tai .include 'TIEDOSTO' (liitä toinen asm-tiedosto tähän
+              kohtaan; polku suhteessa nykyiseen tiedostoon; silmukkasuojaus)
 
 SYMBOLINIMIEN YKSILÖLLISYYS:
 -----------------------------
@@ -77,6 +81,8 @@ VRAM_DATA-symboli osoittaa 0xF800.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from .constants import ARCH_SYMBOLS, BOOT_RAM_START, STORAGE_BLOCK_SIZE, WORD_MASK
 from .instruction import OPCODE_TABLE
 
@@ -87,22 +93,22 @@ from .instruction import OPCODE_TABLE
 # =============================================================================
 
 REGISTER_TO_ID: dict[str, int] = {
-    "R0": 0,   # Yleiskayttoinen rekisteri 0
-    "R1": 1,   # Yleiskayttoinen rekisteri 1
-    "R2": 2,   # Yleiskayttoinen rekisteri 2
-    "R3": 3,   # Yleiskayttoinen rekisteri 3
-    "R4": 4,   # Yleiskayttoinen rekisteri 4
-    "R5": 5,   # Yleiskayttoinen rekisteri 5
-    "R6": 6,   # Yleiskayttoinen rekisteri 6
-    "R7": 7,   # Yleiskayttoinen rekisteri 7
-    "R8": 8,   # Yleiskayttoinen rekisteri 8
-    "R9": 9,   # Yleiskayttoinen rekisteri 9
-    "R10": 10, # Yleiskayttoinen rekisteri 10
-    "R11": 11, # Yleiskayttoinen rekisteri 11
-    "R12": 12, # Yleiskayttoinen rekisteri 12
-    "R13": 13, # Yleiskayttoinen rekisteri 13
-    "R14": 14, # Yleiskayttoinen rekisteri 14
-    "R15": 15, # Yleiskayttoinen rekisteri 15
+    "R0": 0,  # Yleiskayttoinen rekisteri 0
+    "R1": 1,  # Yleiskayttoinen rekisteri 1
+    "R2": 2,  # Yleiskayttoinen rekisteri 2
+    "R3": 3,  # Yleiskayttoinen rekisteri 3
+    "R4": 4,  # Yleiskayttoinen rekisteri 4
+    "R5": 5,  # Yleiskayttoinen rekisteri 5
+    "R6": 6,  # Yleiskayttoinen rekisteri 6
+    "R7": 7,  # Yleiskayttoinen rekisteri 7
+    "R8": 8,  # Yleiskayttoinen rekisteri 8
+    "R9": 9,  # Yleiskayttoinen rekisteri 9
+    "R10": 10,  # Yleiskayttoinen rekisteri 10
+    "R11": 11,  # Yleiskayttoinen rekisteri 11
+    "R12": 12,  # Yleiskayttoinen rekisteri 12
+    "R13": 13,  # Yleiskayttoinen rekisteri 13
+    "R14": 14,  # Yleiskayttoinen rekisteri 14
+    "R15": 15,  # Yleiskayttoinen rekisteri 15
     "FP": 16,  # Frame Pointer (indeksi 16)
     "SP": 17,  # Stack Pointer (indeksi 17)
 }
@@ -162,7 +168,10 @@ class Assembler:
         return self._labels
 
     def assemble(
-        self, source: str, start_addr: int = BOOT_RAM_START
+        self,
+        source: str,
+        start_addr: int = BOOT_RAM_START,
+        source_path: Path | None = None,
     ) -> list[tuple[int, list[int]]]:
         """
         Assembloi lahdekoodi konekieleksi segmentteina.
@@ -170,6 +179,7 @@ class Assembler:
         Args:
             source: Assembly-lahdekoodi merkkijonona
             start_addr: Ohjelman aloitusosoite muistissa (oletus: 0x0100)
+            source_path: Lahdetiedoston polku (tarvitaan .include-direktiiville)
 
         Returns:
             Lista (aloitusosoite, sanat) -pareista. Yleensa yksi segmentti,
@@ -185,6 +195,9 @@ class Assembler:
         self._disk_block: int | None = None
         self._source_map: list[tuple[str, int]] = []  # (lahderivi, abs_osoite)
         self._labels: dict[str, int] = {}
+        # Esikäsittely: laajenna .include-direktiivit rekursiivisesti
+        base_dir = source_path.parent if source_path is not None else None
+        source = self._expand_includes(source, base_dir, frozenset())
         # Pass 0: Makrojen ekspansointi, .origin ja .diskblock käsittely
         expanded_source, start_addr, user_constants = (
             self._pass0_expand_macros_and_origin(source, start_addr)
@@ -202,7 +215,169 @@ class Assembler:
                     f".diskblock: koodi on liian suuri blokkiin "
                     f"({total} sanaa, max {STORAGE_BLOCK_SIZE})"
                 )
+        # Tarkista ettei segmentit mene päällekkäin
+        self._check_segment_overlaps(segments)
         return segments
+
+    @staticmethod
+    def _collect_defined_symbols(source: str) -> set[str]:
+        """
+        Kerää lähdekoodi-merkkijonosta kaikki siinä määritellyt symbolit:
+        makrojen nimet (.macro), käyttäjän vakioiden nimet (.const) ja labelit.
+
+        Tätä käytetään .include-konfliktien ennakotarkistukseen: ennen kuin
+        liitettävä tiedosto lisätään, tarkistetaan etteivät sen symbolit
+        törmää jo tiedettyihin symboleihin.
+
+        Args:
+            source: Assembly-lähdekoodi merkkijonona
+
+        Returns:
+            Joukko (set) symboleita isokirjaimisina merkkijonoina
+        """
+        symbols: set[str] = set()
+        for raw_line in source.splitlines():
+            line = raw_line.split(";", 1)[0].strip()
+            if not line:
+                continue
+            sl = line.lower()
+            # Makron nimi
+            if sl.startswith(".macro"):
+                parts = line.split()
+                if len(parts) >= 2:
+                    symbols.add(parts[1].upper())
+            # .const-vakion nimi
+            elif sl.startswith(".const"):
+                rest = line[len(".const") :].strip().replace(",", " ")
+                parts = rest.split()
+                if parts:
+                    symbols.add(parts[0].upper())
+            # Label (päättyy kaksoispisteeseen)
+            elif line.endswith(":"):
+                label = line[:-1].strip()
+                if label:
+                    symbols.add(label.upper())
+        return symbols
+
+    @staticmethod
+    def _expand_includes(
+        source: str,
+        base_dir: Path | None,
+        include_stack: frozenset[Path],
+        known_symbols: set[str] | None = None,
+    ) -> str:
+        """
+        Laajenna .include-direktiivit rekursiivisesti ennen kaantamista.
+
+        Korvaa jokaisen '.include "tiedosto.asm"' -rivin tiedoston sisallolla.
+        Silmukkasuojaus: jos sama tiedosto on jo includeketjussa, heitetaan virhe.
+        Symbolikonfliktisuojaus: jos liitettava tiedosto maarittaa jo tunnetun
+        symbolin (label, .const tai .macro), heitetaan virhe ja lopetetaan kaantaminen.
+
+        Args:
+            source: Assembly-lahdekoodi
+            base_dir: Hakemisto josta includet haetaan (tai None jos ei tiedostopolkua)
+            include_stack: Nykyinen include-ketju (silmukoiden havaitsemiseen)
+            known_symbols: Yhteinen mutaabeli joukko jo maaritellyista symboleista
+                           (None = luodaan tama kutsuvaiheessa)
+
+        Returns:
+            Laajennettu lahdekoodi merkkijonona
+
+        Raises:
+            ValueError: Syklistä includea, puuttuvaa tiedostoa tai symbolitormaysta havaitessa
+        """
+        if known_symbols is None:
+            # Juuri-taso: keraa ensin paatiedoston omat symbolit
+            known_symbols = Assembler._collect_defined_symbols(source)
+
+        result_lines: list[str] = []
+        for raw_line in source.splitlines():
+            stripped = raw_line.split(";", 1)[0].strip()
+            sl = stripped.lower()
+            if sl.startswith(".include"):
+                # Parsi tiedostonimi: .include "nimi.asm" tai .include 'nimi.asm'
+                rest = stripped[len(".include") :].strip()
+                if len(rest) < 2 or rest[0] not in ('"', "'"):
+                    raise ValueError(
+                        f".include: puuttuvat lainausmerkit tai nimi: {stripped!r}"
+                    )
+                quote = rest[0]
+                end = rest.find(quote, 1)
+                if end == -1:
+                    raise ValueError(
+                        f".include: sulkematon lainausmerkki: {stripped!r}"
+                    )
+                filename = rest[1:end]
+                if not filename:
+                    raise ValueError(f".include: tiedostonimi on tyhjä: {stripped!r}")
+
+                # Muodosta absoluuttinen polku
+                if base_dir is not None:
+                    inc_path = (base_dir / filename).resolve()
+                else:
+                    inc_path = Path(filename).resolve()
+
+                # Silmukkasuojaus
+                if inc_path in include_stack:
+                    raise ValueError(
+                        f".include: syklinen include havaittu: '{inc_path}' "
+                        f"on jo includeketjussa"
+                    )
+
+                # Lue tiedosto
+                if not inc_path.exists():
+                    raise ValueError(f".include: tiedostoa ei löydy: '{inc_path}'")
+                inc_source = inc_path.read_text(encoding="utf-8")
+
+                # Rekursiivinen laajennus liitettavaan tiedostoon (kayttaa samaa
+                # known_symbols-joukkoa, joten myos sen alaincludet tarkistetaan)
+                new_stack = include_stack | {inc_path}
+                # Tarkista symbolitormays ennen laajennusta
+                # (laajennetaan ensin rekursiivisesti, jotta saadaan myos
+                # alaincludejen symbolit tarkistettua)
+                inc_expanded = Assembler._expand_includes(
+                    inc_source, inc_path.parent, new_stack, known_symbols=None
+                )
+                # Keraa kaikki symbolit laajennetusta sisallosta (sis. alaincludet)
+                inc_symbols = Assembler._collect_defined_symbols(inc_expanded)
+                conflicts = inc_symbols & known_symbols
+                if conflicts:
+                    names = ", ".join(sorted(conflicts))
+                    raise ValueError(
+                        f".include '{inc_path.name}': tiedosto maarittaa jo "
+                        f"tunnetun symbolin: {names}"
+                    )
+                # Lisaa liitettavan tiedoston symbolit tunnettuihin
+                known_symbols.update(inc_symbols)
+
+                result_lines.extend(inc_expanded.splitlines())
+            else:
+                result_lines.append(raw_line)
+        return "\n".join(result_lines)
+
+    @staticmethod
+    def _check_segment_overlaps(segments: list[tuple[int, list[int]]]) -> None:
+        """
+        Tarkista ettei segmentit mene päällekkäin muistissa.
+
+        Args:
+            segments: Lista (aloitusosoite, sanat) -pareista
+
+        Raises:
+            ValueError: Jos kaksi segmenttia kayttaa samaa muistiosoitetta
+        """
+        ranges: list[tuple[int, int]] = [
+            (start, start + len(words) - 1) for start, words in segments if words
+        ]
+        for i, (a_start, a_end) in enumerate(ranges):
+            for b_start, b_end in ranges[i + 1 :]:
+                if a_start <= b_end and b_start <= a_end:
+                    raise ValueError(
+                        f"Segmentit menevät päällekkäin muistissa: "
+                        f"0x{a_start:04X}–0x{a_end:04X} ja "
+                        f"0x{b_start:04X}–0x{b_end:04X}"
+                    )
 
     def _pass0_expand_macros_and_origin(
         self, source: str, start_addr: int
@@ -436,6 +611,10 @@ class Assembler:
             if line.lower().startswith(".expect_"):
                 continue
 
+            # .inject_key*-direktiivit: testaukseen, ei tuota koodia
+            if line.lower().startswith(".inject_key"):
+                continue
+
             # Muuten tama on kasky - laske sen koko
             # "ADD R0, R1" -> ["ADD", "R0", "R1"]
             parts = line.replace(",", " ").split()
@@ -457,8 +636,14 @@ class Assembler:
                 raise ValueError(f"Unknown mnemonic: {mnemonic}")
 
             _, operand_count, _ = OPCODE_TABLE[opcode]
-            # Kaskyn koko = 1 (opcode) + operandien maara
-            addr += 1 + operand_count
+            # Erityiskasky: JMPI/CALLI — muuttuvanmittainen
+            # Rakenne: opcode + reg + count + kohteet
+            if mnemonic in ("JMPI", "CALLI"):
+                n_targets = len(parts) - 2  # kaikki osat paitsi mnemoniikka ja rekisteri
+                addr += 3 + n_targets
+            else:
+                # Kaskyn koko = 1 (opcode) + operandien maara
+                addr += 1 + operand_count
 
         return symbols
 
@@ -528,6 +713,10 @@ class Assembler:
 
             # .expect_*-direktiivit: testaukseen, ei tuota koodia
             if line.lower().startswith(".expect_"):
+                continue
+
+            # .inject_key*-direktiivit: testaukseen, ei tuota koodia
+            if line.lower().startswith(".inject_key"):
                 continue
 
             # Parsi kasky: "ADD R0, R1" -> ["ADD", "R0", "R1"]
@@ -617,6 +806,21 @@ class Assembler:
             opcode = MNEMONIC_TO_OPCODE.get(mnemonic)
             if opcode is None:
                 raise ValueError(f"Unknown mnemonic: {mnemonic}")
+
+            # Erityiskasky: JMPI/CALLI — muuttuvanmittainen indeksoitu hyppy/kutsu
+            # Syntaksi:  JMPI reg, kohde0, kohde1, ...
+            # Koodaus:   opcode | reg_id | count | addr[0] | ... | addr[count-1]
+            if mnemonic in ("JMPI", "CALLI"):
+                self._source_map.append(
+                    (raw_line.strip(), current_start + len(current_words))
+                )
+                reg_id = self._parse_operand(parts[1], labels)
+                targets = [self._parse_operand(t, labels) for t in parts[2:]]
+                current_words.append(opcode)
+                current_words.append(reg_id)
+                current_words.append(len(targets))
+                current_words.extend(targets)
+                continue
 
             # Lisaa opcode tulosteeseen
             self._source_map.append(

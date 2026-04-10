@@ -11,27 +11,55 @@ MUISTIAVARUUS:
 
 MUISTIKARTTA:
 -------------
-$0000 - $0008   Keskeytysvektoritaulukko
-$0009 - $00FF   Varattu kayttojarjestelmalle
+$0000 - $000F   Keskeytysvektoritaulukko (16 vektoria)
+$0010 - $001A   Kello-MMIO, lue-vain (vuosi, kk, pv, tunti, min, sek, ms, uptime)
+$001B           CLOCK_INT_INTERVAL: kello-MMIO, kirjoitettavissa (SCTMR-kasky)
+$001C - $001F   Kello-MMIO, varattua, lue-vain
+$0020           KBD_DATA:   nappaimisto-MMIO, lue-vain (pops puskurista)
+$0021           KBD_STATUS: nappaimisto-MMIO, lue-vain (puskurin koko)
+$0022 - $00FF   Varattu kayttojarjestelmalle
 $0100 - $01FF   Bootloaderin latausalue
 $0200 - $F7FF   Vapaa RAM (ohjelmat ja data)
-$F800 - $FFCF   Video RAM (nayttomuisti, 80x25)
-$FFD0 - $FFFF   Kernel Stack
+$F800 - $FF7F   Video RAM (nayttomuisti, 80x24 = 1920 sanaa)
+$FF80 - $FFFF   Kernel Stack
 
 MUISTISUOJAUS:
 --------------
-User-tilassa (P=0) muistikaytto on rajoitettu:
-- Luku/kirjoitus sallittu vain osoitteisiin >= MPR
-- POIKKEUS: VRAM ($F800-$FF7F) on aina kirjoitettavissa
-  (mahdollistaa kayttajan ohjelman paivittavan nayton)
+Kaksi erillistako kirjoitussuojaustasoa:
+
+1. Kayttajatilan MPR-suojaus (User mode):
+   - Luku/kirjoitus sallittu vain osoitteisiin >= MPR
+   - POIKKEUS: VRAM ($F800-$FF7F) on aina kirjoitettavissa
+   - Rikkomus -> MemoryAccessFaultError -> INT 5
+
+2. Kirjoitussuojatut MMIO-alueet (kaikki tilat):
+   - Listattu Memory.read_only_regions -listalla
+   - Sisaltaa oletuksena kello-MMIO ja nappaimisto-MMIO
+   - Extensible: ROM-alueet lisataan samaan listaan
+   - Rikkomus -> ReadOnlyMemoryError -> INT 5
+
+HUOM: KBD_DATA ($0020) ja KBD_STATUS ($0021) ovat lue-vain.
+Kirjoittaminen niihin ei vaikuta laitteen tilaan ja laukaisee
+ReadOnlyMemoryError -> INT 5. Nappaimiston hallinta tapahtuu
+ainoastaan keskeytyksen (INT 6) kautta lukemalla KBD_DATA.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from .constants import MEMORY_WORDS, VRAM_END, VRAM_START, WORD_MASK
-from .exceptions import MemoryAccessFaultError
+from .constants import (
+    CLOCK_INT_INTERVAL,
+    CLOCK_MMIO_END,
+    CLOCK_MMIO_START,
+    KBD_MMIO_END,
+    KBD_MMIO_START,
+    MEMORY_WORDS,
+    VRAM_END,
+    VRAM_START,
+    WORD_MASK,
+)
+from .exceptions import MemoryAccessFaultError, ReadOnlyMemoryError
 
 
 @dataclass
@@ -48,6 +76,25 @@ class Memory:
 
     # Muistitaulukko: 65536 sanaa, alustetaan nollilla
     words: list[int] = field(default_factory=lambda: [0] * MEMORY_WORDS)
+
+    # Kirjoitussuojatut muistialueet: lista (alkuosoite, loppuosoite) -pareista.
+    # Kirjoitus naalle alueille laukaisee ReadOnlyMemoryError -> INT 5.
+    #
+    # Oletuksena sisaltaa laitteiston MMIO-alueet:
+    #   $0010-$001A  Kello-MMIO (lue-vain reaaliaikakellorekisterit)
+    #   $001C-$001F  Kello-MMIO (varattua, lue-vain)
+    #   $0020-$0021  Nappaimisto-MMIO (KBD_DATA, KBD_STATUS - lue-vain)
+    #
+    # ROM-emulointi: Lisaa ROM-alue listaan kasin latauksen jalkeen:
+    #   mem.read_only_regions.append((ROM_START, ROM_END))
+    # Lataus ennen suojausta: kirjoita suoraan mem.words[addr] = value
+    read_only_regions: list[tuple[int, int]] = field(
+        default_factory=lambda: [
+            (CLOCK_MMIO_START, CLOCK_INT_INTERVAL - 1),  # $0010-$001A, kello (lue-vain)
+            (CLOCK_INT_INTERVAL + 1, CLOCK_MMIO_END),  # $001C-$001F, kello varattua
+            (KBD_MMIO_START, KBD_MMIO_END),  # $0020-$0021, nappaimisto (lue-vain)
+        ]
+    )
 
     def reset(self) -> None:
         """
@@ -82,11 +129,42 @@ class Memory:
             addr: Muistiosoite (0x0000 - 0xFFFF)
             value: Kirjoitettava arvo (maskataan 16-bittiseksi)
 
+        Raises:
+            ReadOnlyMemoryError: Jos osoite on kirjoitussuojattu
+                (MMIO-rekisteri tai ROM-alue, lisatty read_only_regions:iin)
+
         Note:
             Seka osoite etta arvo maskataan automaattisesti,
             joten ylivuodot kierrataan.
         """
+        self.check_write_protected(addr)
         self.words[addr & WORD_MASK] = value & WORD_MASK
+
+    def check_write_protected(self, addr: int) -> None:
+        """
+        Tarkista onko osoite kirjoitussuojattu.
+
+        Kaydaan lapi read_only_regions-lista. Jos osoite osuu jollekin
+        alueelle, heitetaan ReadOnlyMemoryError.
+
+        Args:
+            addr: Tarkistettava muistiosoite
+
+        Raises:
+            ReadOnlyMemoryError: Jos osoite on kirjoitussuojattu
+
+        Example:
+            >>> mem = Memory()
+            >>> mem.check_write_protected(0x0020)  # KBD_DATA -> ReadOnlyMemoryError
+            >>> mem.check_write_protected(0x0200)  # RAM -> OK
+        """
+        masked = addr & WORD_MASK
+        for start, end in self.read_only_regions:
+            if start <= masked <= end:
+                raise ReadOnlyMemoryError(
+                    f"Kirjoitus kirjoitussuojattuun osoitteeseen ${masked:04X} "
+                    f"(suojattu alue ${start:04X}-${end:04X})"
+                )
 
     @staticmethod
     def check_user_access(addr: int, mpr: int) -> None:

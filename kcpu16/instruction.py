@@ -249,6 +249,8 @@ OPCODE_TABLE: dict[int, tuple[str, int, bool]] = {
     _op(0, 5, 6, 1): ("JGT", 1, False),  # JGT  addr   Hyppa jos Z=0 ja N=V
     _op(0, 5, 7, 1): ("JLE", 1, False),  # JLE  addr   Hyppa jos Z=1 tai N!=V
     _op(0, 5, 8, 1): ("JGE", 1, False),  # JGE  addr   Hyppa jos N=V
+    _op(0, 5, 9, 0): ("JMPI", 0, False),  # JMPI reg, addr...  Indeksoitu epäsuora hyppy
+    _op(0, 5, 10, 0): ("CALLI", 0, False),  # CALLI reg, addr... Indeksoitu epäsuora kutsu
     # -------------------------------------------------------------------------
     # GRP 6: KESKEYTYKSET (Interrupts)
     #   User-kaskyt:   INT  0x6040  (P=0, GRP=6)
@@ -260,7 +262,7 @@ OPCODE_TABLE: dict[int, tuple[str, int, bool]] = {
     _op(1, 6, 3, 0): ("CLI", 0, True),  # CLI         Esta keskeytykset        [KERNEL]
     # -------------------------------------------------------------------------
     # GRP 7: JARJESTELMA JA IO (System)
-    #   User-kaskyt:   EXIT/KGET/TSL/NOP  0x7500-0x7F00  (P=0, GRP=7)
+    #   User-kaskyt:   EXIT/TSL/NOP  0x7500-0x7F00  (P=0, GRP=7)
     #   Kernel-kaskyt: HALT/DREAD/...     0xF000-0xF440  (P=1, GRP=7)
     # -------------------------------------------------------------------------
     _op(1, 7, 0, 0): (
@@ -298,11 +300,6 @@ OPCODE_TABLE: dict[int, tuple[str, int, bool]] = {
         0,
         False,
     ),  # EXIT               Hallittu lopetus         [USER]
-    _op(0, 7, 6, 1): (
-        "KGET",
-        1,
-        False,
-    ),  # KGET   reg         Lue nappaimisto          [USER]
     _op(0, 7, 7, 2): (
         "TSL",
         2,

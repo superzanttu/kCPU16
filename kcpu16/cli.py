@@ -112,7 +112,7 @@ def _print_asm(path: Path) -> int:
     source = path.read_text(encoding="utf-8")
     asm = Assembler()
     try:
-        segments = asm.assemble(source)
+        segments = asm.assemble(source, source_path=path)
     except Exception as exc:
         print(f"Virhe tiedostossa {path}:")
         print(f"  {exc}")
@@ -202,7 +202,7 @@ def _check_syntax(path: Path) -> int:
     source = path.read_text(encoding="utf-8")
     asm = Assembler()
     try:
-        asm.assemble(source)
+        asm.assemble(source, source_path=path)
     except Exception as exc:
         print(f"Virhe tiedostossa {path}:")
         print(f"  {exc}")
