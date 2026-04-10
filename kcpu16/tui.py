@@ -1045,7 +1045,11 @@ class KCPU16TUI(App[None]):
             return
         self._log(f"[cyan]Uudelleenladattu: {self.current_file.name}[/cyan]")
         if mode == "step":
-            self.machine.step()
+            try:
+                self.machine.step()
+            except Exception as exc:
+                self._show_cpu_crash(exc)
+                return
             self._log_step_info()
             self._exec_mode = "step"
             self._update_run_mode_ui()
@@ -1078,7 +1082,11 @@ class KCPU16TUI(App[None]):
         if self.machine.cpu.halted or self.machine.process_exited:
             self._reload_and_run("step")
             return
-        self.machine.step()
+        try:
+            self.machine.step()
+        except Exception as exc:
+            self._show_cpu_crash(exc)
+            return
         self._log_step_info()
         self._exec_mode = "step"
         self._update_run_mode_ui()
@@ -1568,7 +1576,11 @@ class KCPU16TUI(App[None]):
 
         cycles = 0
         while cycles < max_cycles:
-            self.machine.step()
+            try:
+                self.machine.step()
+            except Exception as exc:
+                self._show_cpu_crash(exc)
+                return "[bold red]CPU kaatui — ks. Output-paneeli.[/bold red]"
             cycles += 1
             if cpu.halted:
                 return f"[red]HALTED after {cycles} cycles.[/red]"
@@ -1654,7 +1666,11 @@ class KCPU16TUI(App[None]):
             while not worker.is_cancelled:
                 if cpu.halted or cpu.process_exit_requested:
                     break
-                self.machine.step()
+                try:
+                    self.machine.step()
+                except Exception as exc:
+                    self.call_from_thread(self._show_cpu_crash, exc)
+                    return
                 total_cycles += 1
                 if cpu.halted:
                     self.call_from_thread(
@@ -1685,7 +1701,11 @@ class KCPU16TUI(App[None]):
                 for _ in range(BATCH):
                     if cpu.halted or cpu.process_exit_requested:
                         break
-                    self.machine.step()
+                    try:
+                        self.machine.step()
+                    except Exception as exc:
+                        self.call_from_thread(self._show_cpu_crash, exc)
+                        return
                     total_cycles += 1
                     if self.dbg.has_breakpoint(self.machine.regs.pc):
                         addr = self.machine.regs.pc
@@ -2102,15 +2122,15 @@ class KCPU16TUI(App[None]):
             mode = memory.read(GFX_MODE_REG)
 
             if mode in (GFX_MODE_B, GFX_MODE_C):
-                # Grafiikkatilat B/C: kaksoisbufferointi käytössä
-                flip_val = memory.read(GFX_FLIP_REG)
-                if flip_val != 0:
-                    rendered = screen.render_auto(memory)
-                    screen.set_front_buffer(rendered)
-                    memory.write(GFX_FLIP_REG, 0)
-                elif force or not screen.has_front_buffer:
+                # Grafiikkatilat B/C: kaksoisbufferointi käytössä.
+                # Etupuskuri renderöidään atomisesti CPU._write_word():ssä kun
+                # GFX_FLIP_REG kirjoitetaan — ei täältä, jotta vältytään race
+                # conditionilta (VRAM saattaa olla jo tyhjennetty/osittain piirretty).
+                if force or not screen.has_front_buffer:
+                    # Step-tila tai ensimmäinen kehys: renderöi suoraan VRAMista
                     rendered = screen.render_auto(memory)
                 else:
+                    # Näytä viimeisin atomiesti flipattu kehys
                     rendered = screen.get_front_buffer()
             else:
                 # Tekstitila A: ei kaksoisbufferointia, renderöi aina suoraan VRAMista
@@ -2214,6 +2234,91 @@ class KCPU16TUI(App[None]):
         elif self.machine.process_exited:
             self._log("[bold yellow]Process exited (EXIT).[/bold yellow]")
 
+    def _show_cpu_crash(self, exc: Exception) -> None:
+        """Näytä yksityiskohtainen kaatumisraportti CPU-poikkeuksesta.
+
+        Kutsutaan kun machine.step() nostaa käsittelemättömän poikkeuksen.
+        Kirjoittaa Output-paneeliin:
+          - Virheen tyyppi ja viesti
+          - Vikaantunut käsky (PC + disassembloitu mnemoniikka)
+          - Tilaliput (Z/N/C/V/I/P) ja suoritustila
+          - Kaikki rekisteriarvot (R0–R15, FP, SP, PC, SR)
+          - Pinon yläosa (SP+1 … SP+5)
+
+        Pysäyttää CPU:n (halted=True) ja siirtää TUI:n stopped-tilaan.
+        """
+        r = self.machine.regs
+        cpu = self.machine.cpu
+        pc = r.pc
+
+        # Pysäytä CPU
+        cpu.halted = True
+        self._exec_mode = "stopped"
+
+        sep = "[bold red]━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[/bold red]"
+        self._log(sep)
+        self._log("[bold red]  CPU KAATUI — SUORITUSVIRHE[/bold red]")
+        self._log(f"[red]{type(exc).__name__}: {exc}[/red]")
+
+        # Vikaava käsky (disassembloitu)
+        try:
+            opcode = self.machine.memory.read(pc)
+            if opcode in OPCODE_TABLE:
+                _, op_count, _ = OPCODE_TABLE[opcode]
+                words = [opcode] + [
+                    self.machine.memory.read(pc + 1 + j) for j in range(op_count)
+                ]
+                raw = self.disassembler.disassemble(words, start_addr=pc)
+                instr = raw.split(":", 1)[1].strip() if ":" in raw else raw
+            else:
+                instr = f".word 0x{opcode:04X}"
+        except Exception:
+            instr = "???"
+        line_no = self.addr_to_line.get(pc)
+        line_str = f" [dim](rivi {line_no})[/dim]" if line_no else ""
+        self._log(f"PC=0x{pc:04X}:  [bold]{instr}[/bold]{line_str}")
+
+        # Tilaliput
+        flags = [
+            ("Z", r.get_flag(SR_FLAG_Z)),
+            ("N", r.get_flag(SR_FLAG_N)),
+            ("C", r.get_flag(SR_FLAG_C)),
+            ("V", r.get_flag(SR_FLAG_V)),
+            ("I", r.get_flag(SR_FLAG_I)),
+            ("P", r.get_flag(SR_FLAG_P)),
+        ]
+        flag_str = "  ".join(
+            f"[bold green]{n}:1[/]" if v else f"[dim]{n}:0[/]" for n, v in flags
+        )
+        mode_str = "[bold green]KERNEL[/]" if r.in_kernel_mode else "[yellow]USER[/]"
+        self._log(f"Liput:  {flag_str}  Mode: {mode_str}")
+
+        # Rekisteriarvot (R0–R15, FP, SP, PC, SR)
+        reg_pairs = [(f"R{i}", getattr(r, f"r{i}")) for i in range(16)]
+        reg_pairs += [("FP", r.fp), ("SP", r.sp), ("PC", r.pc), ("SR", r.sr)]
+        for i in range(0, len(reg_pairs), 4):
+            chunk = reg_pairs[i : i + 4]
+            row = "  ".join(f"[yellow]{n}[/]=0x{v:04X}" for n, v in chunk)
+            self._log(row)
+
+        # Pinon yläosa (SP+1 … SP+5, pino kasvaa alaspäin)
+        sp = r.sp
+        try:
+            items = []
+            for offset in range(1, 6):
+                addr = (sp + offset) & 0xFFFF
+                val = self.machine.memory.read(addr)
+                items.append(f"0x{addr:04X}→0x{val:04X}")
+            self._log(f"[dim]Pino (SP=0x{sp:04X}): {' | '.join(items)}[/dim]")
+        except Exception:
+            pass
+
+        self._log(sep)
+
+        # Päivitä UI
+        self._update_run_mode_ui()
+        self._refresh_all(include_screen=True, force_screen=True)
+
     # ------------------------------------------------------------------
     # Komentotulkki
     # ------------------------------------------------------------------
@@ -2284,7 +2389,13 @@ class KCPU16TUI(App[None]):
                 for _ in range(max(1, count)):
                     if self.machine.cpu.halted or self.machine.process_exited:
                         break
-                    self.machine.step()
+                    try:
+                        self.machine.step()
+                    except Exception as exc:
+                        self._show_cpu_crash(exc)
+                        return CommandResult(
+                            False, "[bold red]CPU kaatui — ks. Output-paneeli.[/bold red]"
+                        )
                 ic = self.machine.cpu.instruction_counter
                 return CommandResult(True, f"Stepped {max(1, count)}. IC={ic}")
 

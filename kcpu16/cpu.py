@@ -46,6 +46,7 @@ from .constants import (
     CLOCK_MONTH,
     CLOCK_SECOND,
     CLOCK_YEAR,
+    GFX_FLIP_REG,
     INT_CLOCK,
     INT_DIV_ZERO,
     INT_INVALID_OPCODE,
@@ -128,6 +129,11 @@ class CPU:
     halted: bool = False  # Onko kone pysahtynyt (HALT)?
     instruction_counter: int = 0  # Suoritettujen kaskyjen maara
     process_exit_requested: bool = False  # Onko EXIT kutsuttu?
+
+    # Valinnainen hook: kutsutaan atomisesti kun CPU kirjoittaa GFX_FLIP_REG:iin
+    # (arvo != 0). Machine asettaa tämän renderoimaan VRAMin etupuskuriin
+    # juuri sillä hetkellä kun kehys on valmis — ennen kuin gfx_clear tyhjentää sen.
+    flip_callback: object = field(default=None, init=False, repr=False)
 
     # Kellonseuranta: reaaliaikaiset pisteet (time.monotonic())
     _clock_start: float = field(default_factory=time.monotonic, init=False)
@@ -216,25 +222,51 @@ class CPU:
 
         # ----------------------------------------------------------------------
         # VIRHEENKASITTELY: Muunna poikkeukset keskeytyksiksi
+        # Jos keskeytyksen laukaisu epäonnistuu (esim. pino törmäsi MMIO:hon),
+        # pysäytä CPU ja anna poikkeuksen nousta TUI:lle kaatumisraporttia varten.
         # ----------------------------------------------------------------------
         except PrivilegeViolationError:
             # User yritti ajaa Kernel-kaskya -> INT 4
-            self._trigger_interrupt(INT_PRIVILEGE_VIOLATION)
+            try:
+                self._trigger_interrupt(INT_PRIVILEGE_VIOLATION)
+            except Exception:
+                self.halted = True
+                raise
         except MemoryAccessFaultError:
             # User yritti lukea/kirjoittaa suojattua muistia -> INT 5
-            self._trigger_interrupt(INT_MEMORY_ACCESS_FAULT)
+            try:
+                self._trigger_interrupt(INT_MEMORY_ACCESS_FAULT)
+            except Exception:
+                self.halted = True
+                raise
         except ReadOnlyMemoryError:
             # Kirjoitus kirjoitussuojattuun osoitteeseen (MMIO/ROM) -> INT 5
-            self._trigger_interrupt(INT_MEMORY_ACCESS_FAULT)
+            try:
+                self._trigger_interrupt(INT_MEMORY_ACCESS_FAULT)
+            except Exception:
+                self.halted = True
+                raise
         except InvalidOpcodeError:
             # Tuntematon opcode -> INT 1
-            self._trigger_interrupt(INT_INVALID_OPCODE)
+            try:
+                self._trigger_interrupt(INT_INVALID_OPCODE)
+            except Exception:
+                self.halted = True
+                raise
         except ZeroDivisionError:
             # DIV-kaskyn jakaja oli 0 -> INT 0
-            self._trigger_interrupt(INT_DIV_ZERO)
+            try:
+                self._trigger_interrupt(INT_DIV_ZERO)
+            except Exception:
+                self.halted = True
+                raise
         except StackOverflowError:
-            # Pino meni MPR:n alle -> INT 2
-            self._trigger_interrupt(INT_STACK_OVERFLOW)
+            # Pino meni MPR:n alle (tai kirjoitussuojattuun alueeseen) -> INT 2
+            try:
+                self._trigger_interrupt(INT_STACK_OVERFLOW)
+            except Exception:
+                self.halted = True
+                raise
 
     def run(self, max_cycles: int | None = None) -> None:
         """
@@ -1007,6 +1039,14 @@ class CPU:
         if addr == RAND_MMIO:
             self._lfsr = value if value != 0 else 1
             return
+        # GFX_FLIP_REG (0xFF81): kirjoitus value!=0 laukaisee kaksoisbufferoinnin flipin.
+        # Kutsuu flip_callback:in välittömästi (ennen kuin CPU jatkaa ja tyhjentää VRAMin),
+        # jolloin callback renderoi täysin piirretyn kehyksen etupuskuriin atomisesti.
+        # Rekisteria ei kirjoiteta muistiin — se on puhdas MMIO-osoite.
+        if addr == GFX_FLIP_REG:
+            if value != 0 and self.flip_callback is not None:
+                self.flip_callback()  # type: ignore[operator]
+            return
         self.memory.write(addr, value)
 
     def _read_clock_mmio(self, addr: int) -> int:
@@ -1083,7 +1123,12 @@ class CPU:
         Raises:
             StackOverflowError: Jos SP menee MPR:n alle User-tilassa
         """
-        self.memory.write(self.regs.sp, value)
+        try:
+            self.memory.write(self.regs.sp, value)
+        except ReadOnlyMemoryError:
+            raise StackOverflowError(
+                f"Pino törmäsi kirjoitussuojattuun osoitteeseen SP=0x{self.regs.sp:04X}"
+            )
         self.regs.sp = (self.regs.sp - 1) & WORD_MASK
 
         # Tarkista pinon ylivuoto User-tilassa

@@ -48,13 +48,7 @@ Tehtävät on merkitty hakasulkeilla, ja niiden tilaa voidaan päivittää seura
 [X] Varmista että assebler sallii vain LOAD ja STORE käskyt, eikä salli käskyjen erilaisten osoitusmuotojen käyttöä. Myöskään LOAD-käskyn käyttäminen assembler koodissa ei ole sallittu. Tarkoituksena on että ohjelmoija käyttää vain READ ja STORE käskyjä, ja että assembler hoitaa oikeiden LOAD/STORE-käskyjen generoinnin eri osoitusmuodoille. Tämä auttaa pitämään assembler-koodin selkeänä ja yksinkertaisena, ja varmistaa että kaikki muistiviittaukset tapahtuvat turvallisesti ja oikein.
 [X] Lisää dokumentaatioon kuvaus siitä, että assembler sallii vain READ ja STORE käytön.
 [X] Lisää KCPU16:n näyttöön kaksoisbufferionti, joka mahdollistaa näytön päivittämisen ilman välkkymistä. Tämä tarkoittaa, että kaikki näytölle piirretyt muutokset tehdään ensin taustalla olevaan bufferiin, ja sitten koko buffer kopioidaan kerralla näytölle. Tämä parantaa suorituskykyä ja tekee näytön päivityksestä sujuvampaa, erityisesti silloin, kun piirretään paljon pikseleitä tai tehdään suuria muutoksia näytölle. Säilytä kuitenkin mahdollisuus olla käyttämättä kaksoisbufferointia, jos käyttäjä haluaa nähdä jokaisen käskyn vaikutuksen näytöllä välittömästi.
-    - START: 2026-04-10 00:00:00
-    - END: 2026-04-10
-    - Toteutus: GFX_FLIP_REG (0xFF81) — ohjelma kirjoittaa ≠0, TUI flippaa ja nollaa. Vain tila B/C.
 [X] Lisää dokumentaatioon kuvaus siitä, miten kaksoisbufferointi toimii ja miten se parantaa näytön päivitystä.
-    - START: 2026-04-10 00:00:00
-    - END: 2026-04-10
-    - Toteutus: docs/tui.md kohta 9.
 [ ] Määritä kaikille käskyille suorituajat, jotka kuvaavat kuinka kauan kunkin käskyn suorittaminen kestää. Nämä ajat voivat perustua esimerkiksi käskyjen monimutkaisuuteen tai siihen, kuinka paljon muistiviittauksia ne tekevät. Käskyjen suoritusajat voidaan määrittää esimerkiksi mikrosekunteina tai millisekunteina, ja ne voivat vaihdella käskyittäin. Tämä auttaa tekemään ohjelman suorituksesta realistisempaa ja antaa käyttäjälle paremman käsityksen siitä, kuinka kauan ohjelman suorituminen kestää.
 [ ] Lisää dokumentaatioon kuvaus siitä, miten käskyjen suoritusajat määritetään ja miten ne vaikuttavat ohjelman suoritukseen.
 [ ] Muuta toimintaa niin että uptime-laskurin arvon kasvattamiseen käytetään konekielisille käskyille määriteltyjä suoritusaikoja.
@@ -80,3 +74,5 @@ Tehtävät on merkitty hakasulkeilla, ja niiden tilaa voidaan päivittää seura
 [ ] Analysoi kaikki muistialueet-, -rekisterit ja -varaukset päälekkäisyyksien varalta, ja varmista että niissä ei ole päällekkäisyyksiä, jotka voisivat aiheuttaa ongelmia ohjelman suorituksessa. Tämä tarkoittaa, että jokaisella muistialueella, rekisterillä ja varauksella on oma selkeä osoitealueensa, eikä mikään niistä ylitä toisen alueen rajoja. Tämä auttaa varmistamaan, että ohjelma toimii oikein ja että muistiviittaukset tapahtuvat turvallisesti ja oikein.
 [ ] Assemblerin antaessa virheilmoitus, on näytettävä virheen aiheuttavan rivin numero, itse rivi ja kuvaus virheestä. Tämä auttaa ohjelmoijaa ymmärtämään, mikä osa koodista aiheuttaa ongelman, ja antaa selkeän viestin siitä, mitä virhe on, jotta se voidaan korjata tehokkaasti.
 [ ] Lisää dokumentaatioon kuvaus siitä, että assemblerin virheilmoitukset sisältävät rivin numeron, itse rivin ja kuvauksen virheestä, ja että tämä auttaa ohjelmoijaa ymmärtämään ja korjaamaan virheet tehokkaasti.
+[ ] Varmista ettö FILL-komennon kohteena oleva muisti alue on kokonaisuudessa kirjoitettavissa, ennen kuin varsinainen kirjoitus aloitetaan. Mikäli kohdealue ei ole kokonaisuutenaa, annetaan virheilmoitus.
+[ ] Lisää dokumentaatioon kuvaus siitä, että FILL-komennon kohteena olevan muistialueen on oltava kokonaisuudessaan kirjoitettavissa ennen kuin kirjoitus aloitetaan, ja että virheilmoitus annetaan, jos alue ei ole kokonaisuudessaan kirjoitettavissa.

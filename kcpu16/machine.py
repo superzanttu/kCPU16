@@ -90,6 +90,20 @@ class KCPU16Machine:
             storage=self.storage,
             keyboard=self.keyboard,
         )
+        # Yhdistä kaksoisbufferoinnin flip-hook: renderoi VRAM → etupuskuri
+        # välittömästi kun CPU kirjoittaa GFX_FLIP_REG:iin, jolloin VRAM
+        # on vielä täysin piirretty eikä gfx_clear ole vielä päässyt poistamaan sitä.
+        self.cpu.flip_callback = self._on_gfx_flip
+
+    def _on_gfx_flip(self) -> None:
+        """Atominen flip: renderoi nykyinen VRAM etupuskuriin.
+
+        Kutsutaan suoraan CPU._write_word():stä samassa säikkeessä kuin CPU:n
+        suoritus, juuri ennen kuin ohjelman seuraava käsky suoritetaan.
+        Tämä takaa että VRAMissa on täydellinen kehys ilman repeytymiä.
+        """
+        rendered = self.screen.render_auto(self.memory)
+        self.screen.set_front_buffer(rendered)
 
     def cold_reset(self) -> None:
         """

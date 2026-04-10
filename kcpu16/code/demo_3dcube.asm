@@ -449,6 +449,9 @@ b_loop:
         CALL  gfx_clear
         CALL  draw_cube_frame
 
+        ; Kehys valmis — flipaa kaksoisbufferointi
+        CALL  gfx_flip
+
         ; Kasvata rotaatiokulmaa (0–63), nollaa kierroksen jälkeen
         READ  R0, [angle]
         READ  R1, 1
@@ -478,6 +481,9 @@ _b_no_wrap:
 c_loop:
         CALL  gfx_clear
         CALL  draw_cube_frame
+
+        ; Kehys valmis — flipaa kaksoisbufferointi
+        CALL  gfx_flip
 
         ; Kasvata rotaatiokulmaa
         READ  R0, [angle]

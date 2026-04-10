@@ -12,6 +12,7 @@
 ;
 ; TOIMINNOT:
 ;   gfx_clear         — Tyhjennä näyttö (nollaa koko VRAM)
+;   gfx_flip          — Flipaa kaksoisbufferointi (triggeroi näytönpäivitys)
 ;   gfx_set_draw_mode — Aseta piirtotila (R0 = piirtotila)
 ;   gfx_pixel         — Piirra pikseli (R0=x, R1=y)
 ;   gfx_line          — Piirrä viiva (R0=x0, R1=y0, R2=x1, R3=y1)
@@ -23,30 +24,34 @@
 ;
 ; REKISTERIKÄYTTÖ (clobbers):
 ;   gfx_clear:         R0–R2  (käyttää FILL-käskyä, ei enää R3:a)
+;   gfx_flip:          R0
 ;   gfx_set_draw_mode: —
 ;   gfx_pixel:         R0–R7
 ;   gfx_line:          R0–R12  (kutsuu gfx_pixel sisäisesti)
 ;
 ; KÄYTTÖESIMERKKI:
 ;   ; Aseta tila B
-;   LOAD R0, 1
-;   LOAD R1, GFX_MODE_REG
+;   READ  R0, GFX_MODE_B
+;   READ  R1, GFX_MODE_REG
 ;   STORE [R1], R0
 ;
-;   ; Tyhjennä näyttö
-;   CALL gfx_clear
+;   ; Tyhjennä näyttö (kirjoittaa VRAMiin = taustapuskuri)
+;   CALL  gfx_clear
 ;
 ;   ; Piirrä pikseli (10, 5)
-;   LOAD R0, 10
-;   LOAD R1, 5
-;   CALL gfx_pixel
+;   READ  R0, 10
+;   READ  R1, 5
+;   CALL  gfx_pixel
 ;
 ;   ; Piirrä viiva (0,0)→(79,47)
-;   LOAD R0, 0
-;   LOAD R1, 0
-;   LOAD R2, 79
-;   LOAD R3, 47
-;   CALL gfx_line
+;   READ  R0, 0
+;   READ  R1, 0
+;   READ  R2, 79
+;   READ  R3, 47
+;   CALL  gfx_line
+;
+;   ; Kehys valmis — flipaa etupuskuriin (tiloissa B ja C)
+;   CALL  gfx_flip
 ;
 ; VIRHEKÄSITTELY:
 ;   Jos $FF80 = 0 (tekstitila A), jokainen funktio laukaisee INT INT_BREAKPOINT.
@@ -102,6 +107,26 @@ gfx_draw_mode:
 
 gfx_set_draw_mode:
         STORE [gfx_draw_mode], R0
+        RET
+
+; =============================================================================
+; gfx_flip — Flipaa kaksoisbufferointi (triggeroi näytönpäivitys)
+;
+; Sisään:  —
+; Ulos:    —
+; Clobbers: R0
+;
+; Kirjoittaa GFX_FLIP_REG:iin (0xFF81) arvon 1, jolloin TUI renderöi
+; nykyisen VRAMin etupuskuriin ja päivittää näytön atomisesti. Rekisteri
+; nollataan automaattisesti flipin jälkeen.
+;
+; Kutsu tämä kun koko kehys on piirretty (gfx_clear + piirtokäskyt).
+; Ei vaikutusta tekstitilassa A — kaksoisbufferointi on vain tiloissa B ja C.
+; =============================================================================
+
+gfx_flip:
+        READ  R0, 1
+        STORE [GFX_FLIP_REG], R0
         RET
 
 ; =============================================================================

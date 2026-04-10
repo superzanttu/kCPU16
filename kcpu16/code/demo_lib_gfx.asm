@@ -182,7 +182,8 @@ draw_mode_b:
         READ  R0, 40
         READ  R1, 24
         CALL  gfx_pixel
-
+        ; Kehys valmis — flipaa kaksoisbufferointi
+        CALL  gfx_flip
         RET
 
 ; =============================================================================
@@ -279,6 +280,9 @@ draw_mode_c:
         READ  R0, 80
         READ  R1, 48
         CALL  gfx_pixel
+
+        ; Kehys valmis — flipaa kaksoisbufferointi
+        CALL  gfx_flip
 
         RET
 
