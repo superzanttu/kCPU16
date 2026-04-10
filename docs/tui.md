@@ -9,7 +9,7 @@ Se on inspiroitu MARS/RARS-, GDB TUI-, Turbo Debugger- ja emu8086-ohjelmistoista
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────────────────────────────┐
-│ Toolbar: Load | Assemble ^B | Step F7 | Full F5 | Slow F6 | Stop F8 | Reset ^R | BP F2 | ...    │
+| Toolbar: Load | Assemble ^B | Step F7 | Fast F5 | Slow F6 | Stop F8 | Reset ^R | BP F2 | ...    |
 ├────────────────────────────┬─────────────────────────────────────────────────────────────────────┤
 │ Screen (80×24 VRAM)        │ [Disassembly | Memory | Stack]                                      │
 │                            │ ●=breakpoint  ▶=nykyinen PC                                        │
@@ -59,8 +59,8 @@ Sisältö skrollautuu pystysuunnassa. Alareunassa komentorivisyöte (`>`).
 | -------- | ------------------------------------ |
 | F1       | Ohje                                 |
 | F2       | Vaihda breakpoint nykyisellä rivillä |
-| F5       | Aja täydellä nopeudella              |
-| F6       | Aja hitaalla nopeudella              |
+| F5       | Aja nopeasti (FAST)                  |
+| F6       | Aja hitaasti (SLOW)                  |
 | F7 / F10 | Step (1 käsky kerrallaan)            |
 | F8       | Pysäytä ajo                          |
 | F9       | Tyhjennä VRAM                        |
@@ -131,7 +131,7 @@ Ohjelman suoritustila näytetään toolbarin oikeassa yläkulmassa. Tila päivit
 | `STOPPED` | ■      | CPU pysähtyneenä. Muisti ja rekisterit säilyvät. Askel tai ajo mahdollinen.            | Ohjelma pysäytetty (F8 / `stop`) |
 | `STEP`    | ■      | Yksi käsky suoritettu. CPU odottaa seuraavaa komentoa.                                 | F7 / F10 tai `step`-komento      |
 | `FULL`    | ▶      | CPU ajaa maksimiteholla. UI päivittyy noin 200 ms välein.                              | F5 tai `run`-komento             |
-| `SLOW`    | ▶      | CPU ajaa hitaasti (~10 käskyä/s). UI päivittyy jokaisen käskyn jälkeen.                | F6 tai `slow`-komento            |
+| `SLOW`    | ▶      | CPU ajaa hitaasti (säädettävä nopeus). UI päivittyy jokaisen käskyn jälkeen.           | F6 tai `slow`-komento            |
 | `RESET`   | ■      | Kone on juuri nollattu. Muisti, rekisterit ja laitteet nollattu. Ei ladattua ohjelmaa. | Ctrl+R tai `reset`-komento       |
 
 ## Tilasiirtymät
@@ -142,17 +142,63 @@ RESET ──────────────────► STOPPED
   ▲                           │
   │ Ctrl+R / reset            │ F7 / step
   │                           ▼
-STOPPED ◄──── F8 / stop ── STEP ──► (F5→FULL, F6→SLOW)
+STOPPED ◄──── F8 / stop ── STEP ──► (F5→FAST, F6→SLOW)
                            │
                     CPU HALT/EXIT ──► (auto uudelleenlataus seuraavalla askeleella)
 
-FULL / SLOW ──► (HALT/EXIT/BP) ──► STOPPED
+FAST / SLOW ──► (HALT/EXIT/BP) ──► STOPPED
 ```
 
 ## Huomioita
 
-- **FULL**- ja **SLOW**-tiloissa F5 tai F6 toimii myös pysäytyksenä (toggle): toinen painallus pysäyttää.
-- Kun CPU on saavuttanut `HALT`- tai `EXIT`-käskyn, seuraava Step/Full/Slow-painallus **lataa ohjelman uudelleen** (reassembloi) ja aloittaa alusta.
-- Näppäimistösyöte välitetään emulaattorille vain **FULL**- ja **SLOW**-tiloissa.
+- **FAST**- ja **SLOW**-tiloissa F5 tai F6 toimii myös pysäytyksenä (toggle): toinen painallus pysäyttää.
+- Kun CPU on saavuttanut `HALT`- tai `EXIT`-käskyn, seuraava Step/Fast/Slow-painallus **lataa ohjelman uudelleen** (reassembloi) ja aloittaa alusta.
+- Näppäimistösyöte välitetään emulaattorille vain **FAST**- ja **SLOW**-tiloissa.
 - **RESET**-tila siirtyy **STOPPED**-tilaan kun tiedosto ladataan tai assembloidaan (`load`, `asm`, Ctrl+O, Ctrl+B).
+
+---
+
+# 7. Suoritusnopeuden säätö (SLOW-tila)
+
+SLOW-tilassa suoritusnopeutta voidaan säätää portaattomasti käyttöliittymän liukusäätimellä ja kerroinnapeilla.
+
+## Liukusäädin
+
+Toolbarin oikeassa reunassa näkyy **IPS-liukusäädin** (Instructions Per Second):
+
+```
+IPS: 1000 [════════════════════════════════════════════════════════●══]  x1  x10  x100
+```
+
+- **IPS-arvo** näyttää tehollisen suoritusnopeuden (liukusäädin × kerroin)
+- **Liukusäätimen alue**: 1–1000 käskyä/sekunti (logaritminen skala)
+- **Raitaa** voi klikata tai raahata arvon muuttamiseksi
+- **Hiiren rullalla** säädetään logaritmisesti (±10 % per nykäisy)
+
+## Kerroinnappitapit (x1 / x10 / x100)
+
+Liukusäätimen oikealla puolella on kolme nappia, jotka kertovat liukusäätimen arvon:
+
+| Nappi  | Kerroin | Esimerkki (säädin=50) | Tehokas alue |
+| ------ | ------- | --------------------- | ------------ |
+| `x1`   | 1       | 50 IPS                | 1–1 000      |
+| `x10`  | 10      | 500 IPS               | 10–10 000    |
+| `x100` | 100     | 5 000 IPS             | 100–100 000  |
+
+Valittu nappi korostuu. Oletuksena `x1` on valittuna.
+
+## Komentoriviltä
+
+| Komento          | Kuvaus                                    |
+| ---------------- | ----------------------------------------- |
+| `slow`           | Näytä nykyinen nopeus                     |
+| `slow <1–1000>`  | Aseta liukusäätimen arvo (kerroin säilyy) |
+| `speed`          | Näytä nykyinen nopeus                     |
+| `speed <1–1000>` | Aseta liukusäätimen arvo (kerroin säilyy) |
+
+## Huomioita
+
+- Nopeuden muutos vaikuttaa **heti** jos CPU on käynnissä SLOW-tilassa — uudelleenkäynnistystä ei tarvita.
+- Very suuria kerroimen arvoja (x100 + säädin max) käyttäessä suoritusnopeus voi ylittää FULL-tilan nopeuden — tässä tilanteessa suoritus on silti yksikäskyinen eikä yhtä tehokas kuin FULL-tila (erä-suoritus).
+- Liukusäädin käyttää **logaritmista asteikkoa**, joten se antaa enemmän tarkkuutta pienillä nopeuksilla (esim. 1–10 IPS) ja suuremmilla harppauksin suurilla nopeuksilla.
 

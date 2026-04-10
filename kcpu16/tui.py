@@ -749,7 +749,7 @@ class KCPU16TUI(App[None]):
     BINDINGS = [
         Binding("ctrl+q", "quit", "Quit", priority=True),
         Binding("f2", "toggle_breakpoint", "BP F2", priority=True),
-        Binding("f5", "run_full_speed", "Full F5", priority=True),
+        Binding("f5", "run_full_speed", "Fast F5", priority=True),
         Binding("f6", "run_slow_speed", "Slow F6", priority=True),
         Binding("f8", "stop_program", "Stop F8", priority=True),
         Binding("f7", "step_once", "Step F7", priority=True),
@@ -798,7 +798,7 @@ class KCPU16TUI(App[None]):
         self._disk_dirty: bool = False
         self._watched_mtime: int | None = None  # st_mtime_ns (kokonaisluku)
         self._exec_mode: str = (
-            "stopped"  # "stopped" | "step" | "full" | "slow" | "reset"
+            "stopped"  # "stopped" | "step" | "fast" | "slow" | "reset"
         )
         self._slow_ips: int = 10  # käskyä/sekuntti SLOW-tilassa (1–1000)
         self._slow_multiplier: int = 1  # kerroin: 1, 10 tai 100
@@ -834,7 +834,7 @@ class KCPU16TUI(App[None]):
             yield Button("Assemble ^B", id="btn-asm", variant="primary")
             yield Static(" ", classes="sep")
             yield Button("Step F7", id="btn-step", variant="primary")
-            yield Button("Full F5", id="btn-run-full", variant="success")
+            yield Button("Fast F5", id="btn-run-full", variant="success")
             yield Button("Slow F6", id="btn-run-slow", variant="success")
             yield Button("Stop F8", id="btn-stop", variant="default")
             yield Button("Reset ^R", id="btn-reset", variant="error")
@@ -1024,10 +1024,10 @@ class KCPU16TUI(App[None]):
         """Lataa nykyinen tiedosto uudelleen ja aloita suoritus annetussa moodissa.
 
         Kutsutaan kun CPU on pysähtynyt (HALT/EXIT) ja käyttäjä painaa
-        Step, Full, Slow tai Stop. Jos tiedostoa ei ole ladattu, logitetaan ilmoitus.
+        Step, Fast, Slow tai Stop. Jos tiedostoa ei ole ladattu, logitetaan ilmoitus.
 
         Args:
-            mode: "step", "full", "slow" tai "stop"
+            mode: "step", "fast", "slow" tai "stop"
         """
         if not self.current_file:
             self._log("[yellow]Ei ladattua ohjelmaa. Käytä 'load <tiedosto>'.[/yellow]")
@@ -1044,11 +1044,11 @@ class KCPU16TUI(App[None]):
             self._exec_mode = "step"
             self._update_run_mode_ui()
             self._refresh_all(include_screen=True)
-        elif mode == "full":
-            self._exec_mode = "full"
+        elif mode == "fast":
+            self._exec_mode = "fast"
             self._update_run_mode_ui()
-            self._log("[green]Running full speed... (F5/F8 to stop)[/green]")
-            self._cpu_run_worker("full")
+            self._log("[green]Running fast... (F5/F8 to stop)[/green]")
+            self._cpu_run_worker("fast")
         elif mode == "slow":
             self._exec_mode = "slow"
             self._update_run_mode_ui()
@@ -1083,13 +1083,13 @@ class KCPU16TUI(App[None]):
             self.action_stop_program()
             return
         if self.machine.cpu.halted or self.machine.process_exited:
-            self._reload_and_run("full")
+            self._reload_and_run("fast")
             return
         self.workers.cancel_all()
-        self._exec_mode = "full"
+        self._exec_mode = "fast"
         self._update_run_mode_ui()
-        self._log("[green]Running full speed... (F5/F8 to stop)[/green]")
-        self._cpu_run_worker("full")
+        self._log("[green]Running fast... (F5/F8 to stop)[/green]")
+        self._cpu_run_worker("fast")
 
     def action_run_slow_speed(self) -> None:
         """Käynnistä CPU hidas suoritus (F6): ~10 IPS. Toinen painalus pysäyttää.
@@ -1241,7 +1241,7 @@ class KCPU16TUI(App[None]):
         self._log("")
         self._log("[bold]Keyboard shortcuts:[/bold]")
         self._log("  Ctrl+O  Load file       Ctrl+B  Assemble code")
-        self._log("  F7/F10  Step 1 instr    F5      Full Speed run")
+        self._log("  F7/F10  Step 1 instr    F5      Fast run")
         self._log("  F6      Slow run (10 IPS)  F8      Stop execution")
         self._log("  Ctrl+R  Reset machine   F9      Clear VRAM")
         self._log("  F2      Toggle BP       F1      This help")
@@ -1255,9 +1255,7 @@ class KCPU16TUI(App[None]):
         self._log("  check                        Syntax check loaded file (no load)")
         self._log("[bold]CPU Control:[/bold]")
         self._log("  step [n]                     Step n instructions (default 1)")
-        self._log(
-            "  run  [n]                     Full speed run to BP/halt (max n cycles)"
-        )
+        self._log("  run  [n]                     Fast run to BP/halt (max n cycles)")
         self._log(
             "  slow [n]                     Slow run (1–1000 IPS), all panels update each instr"
         )
@@ -1327,7 +1325,7 @@ class KCPU16TUI(App[None]):
         Terminaali ei tue näppäimennostotapahtumia, joten painallus ja
         vapautus lähetetään peräkkäin samasta tapahtumasta.
         """
-        if self._exec_mode not in ("full", "slow"):
+        if self._exec_mode not in ("fast", "slow"):
             return
         if self.machine.keyboard is None:
             return
@@ -1571,7 +1569,7 @@ class KCPU16TUI(App[None]):
             btn_full = self.query_one("#btn-run-full", Button)
             btn_slow = self.query_one("#btn-run-slow", Button)
             btn_stop = self.query_one("#btn-stop", Button)
-            if self._exec_mode == "full":
+            if self._exec_mode == "fast":
                 btn_full.variant = "warning"
                 btn_slow.variant = "default"
                 btn_stop.variant = "error"
@@ -1587,11 +1585,11 @@ class KCPU16TUI(App[None]):
             pass
 
     @work(thread=True, exclusive=True)
-    def _cpu_run_worker(self, mode: str = "full") -> None:
-        """Aja CPU:ta taustasäikeessä (F5=Full Speed, F6=Slow Speed).
+    def _cpu_run_worker(self, mode: str = "fast") -> None:
+        """Aja CPU:ta taustasäikeessä (F5=Fast Speed, F6=Slow Speed).
 
         Parametrit:
-            mode: "full" = max nopeus, UI päivittyy ~200ms välein.
+            mode: "fast" = max nopeus, UI päivittyy ~200ms välein.
                   "slow" = ~10 IPS, UI päivittyy jokaisen käskyn jälkeen.
 
         Suoritus päättyy kun:
@@ -1637,7 +1635,7 @@ class KCPU16TUI(App[None]):
                     return
                 self.call_from_thread(self._refresh_all, True)
                 time.sleep(1.0 / max(1, self._slow_ips * self._slow_multiplier))
-        else:
+        if mode != "slow":
             # Täysi nopeus: eräsuoritus, UI päivittyy ~200ms välein
             BATCH = 5000
             REFRESH_INTERVAL = 0.2  # sekuntia
