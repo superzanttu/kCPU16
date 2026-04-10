@@ -243,3 +243,73 @@ Terminaali ei tue **näppäimennostoihin** (key release) perustuvia tapahtumia. 
 | `SLOW`    | Kyllä (ASCII 32–126)     |
 | `RESET`   | Ei                       |
 
+---
+
+# 9. Kaksoisbufferointi (grafiikkatilat B ja C)
+
+## Mikä on kaksoisbufferointi?
+
+Kaksoisbufferointi (double buffering) on tekniikka, jolla estetään näytön
+välkkyminen grafiikkaohjelmissa. Ohjelma piirtää ensin taustamuistiin (back
+buffer = VRAM), minkä jälkeen se kutsuu flippausoperaation, joka siirtää
+valmiin kuvan näytölle kerralla.
+
+**Huom:** kaksoisbufferointi on käytössä **vain grafiikkatiloissa B ja C**.
+Tekstitilassa (tila A) näyttö renderöidään aina suoraan VRAMista eikä
+GFX_FLIP_REG:llä ole vaikutusta.
+
+## GFX_FLIP_REG — flippirekisteri
+
+| Ominaisuus | Arvo |
+| ---------- | ---- |
+| Osoite     | `0xFF81` (`GFX_FLIP_REG`) |
+| Koko       | 1 sana (16 bittiä) |
+| Kirjoitus  | Mikä tahansa nollasta poikkeava arvo käynnistää flipin |
+| Lukeminen  | Aina 0 flipin jälkeen (TUI nollaa automaattisesti) |
+
+## Toimintaperiaate
+
+```
+Ohjelma                          TUI / näyttöpäivitys
+───────                          ──────────────────────
+Piirretään VRAM:iin              Tarkistaa GFX_FLIP_REG 1 s välein tai päivityssyklissä
+STORE R0, GFX_FLIP_REG  ──►  flip havaittu → renderöi VRAM → tallentaa etupuskuriin
+                                 → nollaa GFX_FLIP_REG
+                                 → päivittää näytölle etupuskurin sisällön
+                                 Seuraavissa tarkistuksissa: ei flippauskomentoa
+                                 → näytetään etupuskuri sellaisenaan (ei välkkymistä)
+```
+
+## Assembly-esimerkki
+
+```asm
+; Grafiikkatila B tai C täytyi asettaa aiemmin:
+;   STORE R0, GFX_MODE_REG   ; 1 = tila B, 2 = tila C
+
+; ... piirretään VRAM-muistiin (0xF800–0xFF7F) ...
+
+; Flip: pyydä TUI:ta päivittämään näyttö piirretystä VRAM:sta
+READ  R0, 1             ; arvo 1 (mitä tahansa != 0 käy)
+STORE R0, GFX_FLIP_REG  ; käynnistää flipin
+
+; Ohjelma voi nyt jatkaa piirtämistä seuraavaa ruutua varten
+; — näytöllä pysyy edellinen valmis ruutu kunnes seuraava flip
+```
+
+## Käyttäytyminen eri suoritustiloissa
+
+| Tila   | Käyttäytyminen |
+| ------ | -------------- |
+| FAST   | Flip havaitaan ~200 ms päivityssyklissä |
+| MAX    | Flip havaitaan ~200 ms päivityssyklissä |
+| SLOW   | Flip havaitaan jokaisen käskyn jälkeen (force-renderöinti) |
+| STEP   | Etupuskuri ohitetaan, VRAM renderöidään suoraan (näet jokaisen käskyn vaikutuksen) |
+| RESET  | Etupuskuri tyhjennetään — seuraava päivitys renderöi VRAMista |
+
+## Muistiosoitteet
+
+| Symboli        | Osoite   | Kuvaus |
+| -------------- | -------- | ------ |
+| `GFX_MODE_REG` | `0xFF80` | Grafiikkatila: 0=A (teksti), 1=B (puoliblokkipikseli), 2=C (braille) |
+| `GFX_FLIP_REG` | `0xFF81` | Kirjoita ≠ 0 → flip; luetaan aina 0 flipin jälkeen |
+

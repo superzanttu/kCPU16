@@ -69,20 +69,19 @@
 ;
 ; =============================================================================
 
-; Näyttötilarekisterin osoite ($FF80)
-.const GFX_MODE_REG, 0xFF80
-
-; Grafiikkatilakoodit
-.const GFX_MODE_B, 1       ; Tila B — puoliblokkipikseli 80×48
-.const GFX_MODE_C, 2       ; Tila C — braille 160×96
+; Näyttötilarekisterin osoite ($FF80) ja grafiikkatilakoodit ovat
+; arkkitehtuurivakioita (ARCH_SYMBOLS) — ei tarvita .const-määrittelyjä:
+;   GFX_MODE_REG = 0xFF80,  GFX_MODE_A = 0,  GFX_MODE_B = 1,  GFX_MODE_C = 2
+;   GFX_FLIP_REG = 0xFF81   (kaksoisbufferoinnin flip-rekisteri)
 
 ; Piirtotilat (käytetään gfx_set_draw_mode-funktiolle)
 .const GFX_DRAW_XOR, 0     ; XOR-tila: vaihtaa pikselin tilaa (oletus)
 .const GFX_DRAW_FG,  1     ; Etuväri:   asettaa pikselin päälle
 .const GFX_DRAW_BG,  2     ; Taustaväri: nollaa pikselin
 
-; Huom: VRAM_START (0xF800), VRAM_WORDS (1920) ja INT_BREAKPOINT (3) ovat
-; arkkitehtuurivakioita jotka assembler injektoi automaattisesti (ARCH_SYMBOLS).
+; Huom: VRAM_START (0xF800), VRAM_WORDS (1920), INT_BREAKPOINT (3),
+; GFX_MODE_REG, GFX_MODE_A/B/C ja GFX_FLIP_REG ovat arkkitehtuurivakioita
+; jotka assembler injektoi automaattisesti (ARCH_SYMBOLS).
 ; Niitä ei tarvitse määritellä .const-direktiivillä.
 
 ; =============================================================================

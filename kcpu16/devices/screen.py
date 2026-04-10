@@ -40,7 +40,7 @@ Kaava: osoite = VRAM_START + (rivi * 80) + sarake
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from ..constants import (
     COLOR_BLACK,
@@ -93,6 +93,32 @@ class ScreenDevice:
 
     cols: int = SCREEN_COLS  # Sarakkeet (80)
     rows: int = SCREEN_ROWS  # Rivit (24)
+
+    # Kaksoisbufferointi: etupuskuri (front buffer)
+    # Kun ohjelma kirjoittaa GFX_FLIP_REG:iin, TUI renderöi VRAMin ja tallentaa
+    # tuloksen tähän puskuriin. Seuraavissa päivityksissä näytetään puskurin sisältö
+    # (näyttö ei välky). Puskuri tyhjennetään cold_reset/reset_for_test:ssä.
+    _front_rendered: str = field(default="", init=False, repr=False)
+    _has_front_buffer: bool = field(default=False, init=False, repr=False)
+
+    def set_front_buffer(self, rendered: str) -> None:
+        """Tallenna renderöintitulos etupuskuriin (kutsutaan flip-rekisterin kirjoituksessa)."""
+        self._front_rendered = rendered
+        self._has_front_buffer = True
+
+    def get_front_buffer(self) -> str:
+        """Palauta etupuskurin sisältö."""
+        return self._front_rendered
+
+    @property
+    def has_front_buffer(self) -> bool:
+        """True, jos etupuskurissa on sisältöä (flip on tapahtunut ainakin kerran)."""
+        return self._has_front_buffer
+
+    def clear_front_buffer(self) -> None:
+        """Tyhjennä etupuskuri (kutsutaan resetissä)."""
+        self._front_rendered = ""
+        self._has_front_buffer = False
 
     def render_text(self, memory: Memory) -> str:
         """
@@ -237,8 +263,7 @@ class ScreenDevice:
         addr = VRAM_START
         for _ in range(self.rows):
             row = "".join(
-                chr(0x2800 | (memory.read(addr + c) & 0xFF))
-                for c in range(self.cols)
+                chr(0x2800 | (memory.read(addr + c) & 0xFF)) for c in range(self.cols)
             )
             lines.append(f"[white on black]{row}[/]")
             addr += self.cols

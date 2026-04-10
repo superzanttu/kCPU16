@@ -79,7 +79,10 @@ from .assembler import Assembler, MNEMONIC_TO_OPCODE
 from .constants import (
     ARCH_SYMBOLS,
     BOOT_RAM_START,
+    GFX_FLIP_REG,
     GFX_MODE_REG,
+    GFX_MODE_B,
+    GFX_MODE_C,
     SR_FLAG_C,
     SR_FLAG_I,
     SR_FLAG_N,
@@ -1046,7 +1049,7 @@ class KCPU16TUI(App[None]):
             self._log_step_info()
             self._exec_mode = "step"
             self._update_run_mode_ui()
-            self._refresh_all(include_screen=True)
+            self._refresh_all(include_screen=True, force_screen=True)
         elif mode == "fast":
             self._exec_mode = "fast"
             self._update_run_mode_ui()
@@ -1079,7 +1082,7 @@ class KCPU16TUI(App[None]):
         self._log_step_info()
         self._exec_mode = "step"
         self._update_run_mode_ui()
-        self._refresh_all(include_screen=True)
+        self._refresh_all(include_screen=True, force_screen=True)
 
     def action_run_full_speed(self) -> None:
         """Käynnistä CPU täydellä nopeudella (F5). Toinen painalus pysäyttää.
@@ -1151,7 +1154,7 @@ class KCPU16TUI(App[None]):
         self._exec_mode = "stopped"
         self._update_run_mode_ui()
         self._log("[yellow]Stopped.[/yellow]")
-        self._refresh_all(include_screen=True)
+        self._refresh_all(include_screen=True, force_screen=True)
 
     def action_reset_machine(self) -> None:
         """Resetoi kone alkutilaan (Ctrl+R tai Reset-painike).
@@ -1170,7 +1173,7 @@ class KCPU16TUI(App[None]):
         self.dbg.snapshot_registers(self.machine.dump_registers())
         self._update_run_mode_ui()
         self._log("[green]Machine reset.[/green]")
-        self._refresh_all(include_screen=True)
+        self._refresh_all(include_screen=True, force_screen=True)
 
     def action_toggle_breakpoint(self) -> None:
         """Aseta tai poista breakpoint nykyiseen PC-osoitteeseen (F2).
@@ -1644,7 +1647,7 @@ class KCPU16TUI(App[None]):
             self._update_run_mode_ui()
             if msg:
                 self._log(msg)
-            self._refresh_all(include_screen=True)
+            self._refresh_all(include_screen=True, force_screen=True)
 
         if mode == "slow":
             # Hidas suoritus: yksi käsky kerrallaan, UI-päivitys joka käskyn jälkeen
@@ -1670,7 +1673,7 @@ class KCPU16TUI(App[None]):
                         f"[red]Breakpoint at 0x{addr:04X} after {total_cycles} cycles.[/red]",
                     )
                     return
-                self.call_from_thread(self._refresh_all, True)
+                self.call_from_thread(self._refresh_all, True, True)
                 time.sleep(1.0 / max(1, self._slow_ips * self._slow_multiplier))
         if mode in ("fast", "max"):
             # Täysi nopeus: eräsuoritus, UI päivittyy ~200ms välein
@@ -1718,7 +1721,7 @@ class KCPU16TUI(App[None]):
     # Näkymien päivitys
     # ------------------------------------------------------------------
 
-    def _refresh_all(self, include_screen: bool = False) -> None:
+    def _refresh_all(self, include_screen: bool = False, force_screen: bool = False) -> None:
         """Päivitä kaikki näkymäpaneelit kerralla.
 
         Kutsutaan jokaisen tilan muutoksen jälkeen (step, run, reset,
@@ -1727,13 +1730,15 @@ class KCPU16TUI(App[None]):
         Parametrit:
             include_screen: Jos True, päivittää myös VRAM-näytön (Screen-tab).
                             Käytä True stepissä ja suoritustilan vaihtuessa.
+            force_screen:   Jos True, ohitetaan kaksoisbufferointi ja renderöidään
+                            suoraan VRAMista (käytetään step/done/stop-tiloissa).
         """
         self._refresh_disassembly()
         self._refresh_registers()
         self._refresh_flags()
         self._refresh_cpu_status()
         if include_screen:
-            self._refresh_screen_tab()
+            self._refresh_screen_tab(force=force_screen)
         self._refresh_memory()
         self._refresh_stack()
 
@@ -2081,14 +2086,36 @@ class KCPU16TUI(App[None]):
             lines.append(f"[dim]BP: {bp_list}[/dim]")
         self.query_one("#cpu-content", Static).update("\n".join(lines))
 
-    def _refresh_screen_tab(self) -> None:
+    def _refresh_screen_tab(self, force: bool = False) -> None:
         """Päivitä Screen-näytön VRAM-renderöinti (1s timer).
 
-        Käyttää cachea: Static.update() kutsutaan vain kun VRAM-sisältö
-        on oikeasti muuttunut edellisestä kerrasta.
+        Kaksoisbufferointi on käytössä vain grafiikkatiloissa B ja C.
+        Tekstitilassa (A) renderöidään aina suoraan VRAMista.
+
+        Parametrit:
+            force: Jos True, ohitetaan etupuskuri ja renderöidään suoraan
+                   VRAMista (käytetään step- ja done-tiloissa).
         """
         try:
-            rendered = self.machine.screen.render_auto(self.machine.memory)
+            screen = self.machine.screen
+            memory = self.machine.memory
+            mode = memory.read(GFX_MODE_REG)
+
+            if mode in (GFX_MODE_B, GFX_MODE_C):
+                # Grafiikkatilat B/C: kaksoisbufferointi käytössä
+                flip_val = memory.read(GFX_FLIP_REG)
+                if flip_val != 0:
+                    rendered = screen.render_auto(memory)
+                    screen.set_front_buffer(rendered)
+                    memory.write(GFX_FLIP_REG, 0)
+                elif force or not screen.has_front_buffer:
+                    rendered = screen.render_auto(memory)
+                else:
+                    rendered = screen.get_front_buffer()
+            else:
+                # Tekstitila A: ei kaksoisbufferointia, renderöi aina suoraan VRAMista
+                rendered = screen.render_auto(memory)
+
             if rendered != self._last_screen_render:
                 self._last_screen_render = rendered
                 self.query_one("#screen-view-solo", Static).update(rendered)

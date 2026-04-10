@@ -103,6 +103,7 @@ class KCPU16Machine:
         """
         self.memory.reset()
         self.cpu.reset()
+        self.screen.clear_front_buffer()
 
     def reset_for_test(self) -> None:
         """
@@ -120,6 +121,7 @@ class KCPU16Machine:
         """
         self.memory.reset()
         self.cpu.reset()
+        self.screen.clear_front_buffer()
 
     def boot_from_storage(self) -> None:
         """
