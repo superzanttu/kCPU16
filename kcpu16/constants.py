@@ -186,6 +186,17 @@ COLOR_NAMES = {
     7: "valkoinen",
 }
 
+# =============================================================================
+# GRAFIIKKATILAN REKISTERI (GFX_MODE_REG)
+# Sijaitsee muistiosoitteessa 0xFF80 (kernelin pinon alun ensimmäinen sana).
+# lib-gfx.asm käyttää tästä osoitteesta nimeä GFX_MODE_REG.
+# =============================================================================
+
+GFX_MODE_REG = 0xFF80  # Grafiikkatila-rekisterin muistiosoite
+GFX_MODE_A = 0         # Tila A — tekstitila  (80 × 24 merkkiä)
+GFX_MODE_B = 1         # Tila B — puoliblokkipikseli  (80 × 48 pikseliä)
+GFX_MODE_C = 2         # Tila C — braille          (160 × 96 pikseliä)
+
 # Kernel-pino: Kayttojarjestelman sisainen pino keskeytyksille yms.
 # Sijaitsee muistin lopussa, VRAM:n yläpuolella
 KERNEL_STACK_START = 0xFF80  # Kernelin pino alkaa VRAM:n jälkeen

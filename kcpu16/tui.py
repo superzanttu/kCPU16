@@ -76,6 +76,7 @@ from .assembler import Assembler, MNEMONIC_TO_OPCODE
 from .constants import (
     ARCH_SYMBOLS,
     BOOT_RAM_START,
+    GFX_MODE_REG,
     SR_FLAG_C,
     SR_FLAG_I,
     SR_FLAG_N,
@@ -1766,12 +1767,24 @@ class KCPU16TUI(App[None]):
         tmr_str = f"[green]{r.tmr}[/] cyc" if r.tmr > 0 else "[dim]off[/]"
         ctmr_str = f"[green]{r.ctmr}[/] ms" if r.ctmr > 0 else "[dim]off[/]"
 
+        # Graphics mode (GFX_MODE_REG)
+        gfx_val = self.machine.memory.read(GFX_MODE_REG)
+        if gfx_val == 0:
+            gfx_str = "[dim]A (text)[/]"
+        elif gfx_val == 1:
+            gfx_str = "[cyan]B (80×48)[/]"
+        elif gfx_val == 2:
+            gfx_str = "[cyan]C (160×96)[/]"
+        else:
+            gfx_str = f"[yellow]{gfx_val}[/]"
+
         content = (
             f"{' '.join(parts)}\n"
             f"Mode: {mode}\n"
             f"Uptime: {uptime_str}\n"
             f"TMR:  {tmr_str}\n"
-            f"CTMR: {ctmr_str}"
+            f"CTMR: {ctmr_str}\n"
+            f"GFX:  {gfx_str}"
         )
         self.query_one("#flags-content", Static).update(content)
 
@@ -1804,7 +1817,7 @@ class KCPU16TUI(App[None]):
         on oikeasti muuttunut edellisestä kerrasta.
         """
         try:
-            rendered = self.machine.screen.render_with_rich_colors(self.machine.memory)
+            rendered = self.machine.screen.render_auto(self.machine.memory)
             if rendered != self._last_screen_render:
                 self._last_screen_render = rendered
                 self.query_one("#screen-view-solo", Static).update(rendered)

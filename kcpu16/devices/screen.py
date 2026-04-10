@@ -51,6 +51,9 @@ from ..constants import (
     COLOR_RED,
     COLOR_WHITE,
     COLOR_YELLOW,
+    GFX_MODE_REG,
+    GFX_MODE_B,
+    GFX_MODE_C,
     SCREEN_COLS,
     SCREEN_ROWS,
     VRAM_START,
@@ -189,3 +192,68 @@ class ScreenDevice:
             lines.append("".join(row_parts))
 
         return "\n".join(lines)
+
+    # Tila B: puoliblokkipikseli (80 × 48 pikseliä)
+    # bitti 1 = ylempi pikseli, bitti 0 = alempi pikseli
+    _MODE_B_CHARS = [" ", "▄", "▀", "█"]  # indeksi = word & 0x03
+
+    def render_mode_b(self, memory: Memory) -> str:
+        """Renderoi tila B (puoliblokkipikseli 80 × 48) Rich-tekstiksi.
+
+        Jokainen VRAM-sana tuottaa yhden terminaalimerkin (80 × 24 merkkiä).
+        Merkki valitaan word & 0x03 perusteella:
+          0b00 → ' '  (molemmat pikselit pois)
+          0b01 → '▄'  (alempi pikseli päällä)
+          0b10 → '▀'  (ylempi pikseli päällä)
+          0b11 → '█'  (molemmat pikselit päällä)
+        """
+        lines: list[str] = []
+        addr = VRAM_START
+        for _ in range(self.rows):
+            row = "".join(
+                self._MODE_B_CHARS[memory.read(addr + c) & 0x03]
+                for c in range(self.cols)
+            )
+            lines.append(f"[white on black]{row}[/]")
+            addr += self.cols
+        return "\n".join(lines)
+
+    def render_mode_c(self, memory: Memory) -> str:
+        """Renderoi tila C (braille 160 × 96) Rich-tekstiksi.
+
+        Jokainen VRAM-sana tuottaa yhden braille-merkin (80 × 24 merkkiä
+        terminaalissa, mutta 160 × 96 kCPU16-pikseliä).
+
+        Braille-bittijärjestys (word & 0xFF):
+          bitti 0 = piste 1 (vasen ylä)    bitti 3 = piste 4 (oikea ylä)
+          bitti 1 = piste 2 (vasen keski)  bitti 4 = piste 5 (oikea keski)
+          bitti 2 = piste 3 (vasen ala)    bitti 5 = piste 6 (oikea ala)
+          bitti 6 = piste 7 (vasen pohja)  bitti 7 = piste 8 (oikea pohja)
+
+        Tämä vastaa suoraan Unicode braille -koodipisteiden bittijärjestystä
+        (U+2800–U+28FF), joten chr(0x2800 | (word & 0xFF)) antaa oikean merkin.
+        """
+        lines: list[str] = []
+        addr = VRAM_START
+        for _ in range(self.rows):
+            row = "".join(
+                chr(0x2800 | (memory.read(addr + c) & 0xFF))
+                for c in range(self.cols)
+            )
+            lines.append(f"[white on black]{row}[/]")
+            addr += self.cols
+        return "\n".join(lines)
+
+    def render_auto(self, memory: Memory) -> str:
+        """Valitse renderöintitapa GFX_MODE_REG:n (0xFF80) mukaan.
+
+        Tila A (0): tekstitila väreillä
+        Tila B (1): puoliblokkipikseli
+        Tila C (2): braille
+        """
+        mode = memory.read(GFX_MODE_REG)
+        if mode == GFX_MODE_B:
+            return self.render_mode_b(memory)
+        if mode == GFX_MODE_C:
+            return self.render_mode_c(memory)
+        return self.render_with_rich_colors(memory)
