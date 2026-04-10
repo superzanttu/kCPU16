@@ -4,6 +4,8 @@ Tässä tiedostossa on kokoelma tehtäviä, jotka liittyvät KCPU16-projektiin. 
 
 ## Ohjeet
 
+Tehtävät ovat tärkeysjärjestyksessä ylhäältä alas.
+
 Tehtävät on merkitty hakasulkeilla, ja niiden tilaa voidaan päivittää seuraavasti:
 - [ ] Tehtävä ei ole aloitettu 
 - [W] Tehtävä on aloitettu, mutta ei vielä valmis
@@ -13,6 +15,9 @@ Tehtävät on merkitty hakasulkeilla, ja niiden tilaa voidaan päivittää seura
   
 ## Tehtävät
 
+
+[ ] Lisää prosessorille käsky, jolla muistialueen voi täyttää nopeasti annetulla arvolla. Tämä voisi olla esimerkiksi "FILL" -käsky, joka ottaa kolme operandia: alku- ja loppuosoitteet sekä täytettävän arvon. Tämä käsky voisi olla hyödyllinen esimerkiksi taulukkojen alustamiseen tai muistialueiden nollaamiseen nopeasti.
+[ ] Lisää dokumentaatioon kuvaus uudesta FILL-käskystä, sen synt
 [ ] Tarkista direktiivien .db (masked arvolla 0xFF) ja .dw (masked arvolla 0xFFFF) toiminta ja varmista että ne toimivat oikein.
 [ ] Varmista että .db ja .dw direktiivit toimivat oikein 0-65535 arvoilla ja etumerkillisillä arvoilla 
 [ ] Päivitä .db ja .dw direktiiveihin liittyvä dokumentaatio.
