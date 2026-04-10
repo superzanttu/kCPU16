@@ -423,10 +423,11 @@ main:
         STI
 
 restart_loop:
-        ; Nollaa tilamuuttujat
-        LOAD  R0, 0
-        STORE [phase], R0
-        STORE [angle], R0
+        ; Nollaa tilamuuttujat — phase ja angle ovat vierekkäisiä sanoja muistissa
+        LOAD  R0, phase
+        LOAD  R1, angle
+        LOAD  R2, 0
+        FILL  R0, R1, R2
 
         ; Aseta piirtotila: etuväri (pikselit piirretään päälle, ei XOR)
         LOAD  R0, GFX_DRAW_FG

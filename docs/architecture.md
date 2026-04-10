@@ -342,19 +342,20 @@ Käskyn koko sanoina on `1 + OPS` (opcode-sana + operandisanat).
 
 ## 7.4 Tiedonsiirtokäskyt
 
-| Opcode | Käsky      | Operandit  | Tila | Liput | Kuvaus              |
-| ------ | ---------- | ---------- | ---- | ----- | ------------------- |
-| 0x1080 | LOAD       | reg, imm   | U    | —     | `reg ← imm`         |
-| 0x1180 | CPY        | regD, regS | U    | —     | `regD ← regS`       |
-| 0x1280 | READ       | reg, addr  | U    | —     | `reg ← [addr]`      |
-| 0x1380 | STORE      | reg, addr  | U    | —     | `[addr] ← reg`      |
-| 0x1480 | READ_IND   | regD, regS | U    | —     | `regD ← [regS]`     |
-| 0x1580 | STORE_IND  | regD, regS | U    | —     | `[regD] ← regS`     |
-| 0x1680 | READ_REL   | reg, imm   | U    | —     | `reg ← [FP + imm]`  |
-| 0x1780 | STORE_REL  | reg, imm   | U    | —     | `[FP + imm] ← reg`  |
-| 0x1880 | STOREI     | imm, addr  | U    | —     | `[addr] ← imm`      |
-| 0x1980 | STOREI_IND | regD, imm  | U    | —     | `[regD] ← imm`      |
-| 0x1A80 | STOREI_REL | imm, offs  | U    | —     | `[FP + offs] ← imm` |
+| Opcode | Käsky      | Operandit  | Tila | Liput | Kuvaus                             |
+| ------ | ---------- | ---------- | ---- | ----- | ---------------------------------- |
+| 0x1080 | LOAD       | reg, imm   | U    | —     | `reg ← imm`                        |
+| 0x1180 | CPY        | regD, regS | U    | —     | `regD ← regS`                      |
+| 0x1280 | READ       | reg, addr  | U    | —     | `reg ← [addr]`                     |
+| 0x1380 | STORE      | reg, addr  | U    | —     | `[addr] ← reg`                     |
+| 0x1480 | READ_IND   | regD, regS | U    | —     | `regD ← [regS]`                    |
+| 0x1580 | STORE_IND  | regD, regS | U    | —     | `[regD] ← regS`                    |
+| 0x1680 | READ_REL   | reg, imm   | U    | —     | `reg ← [FP + imm]`                 |
+| 0x1780 | STORE_REL  | reg, imm   | U    | —     | `[FP + imm] ← reg`                 |
+| 0x1880 | STOREI     | imm, addr  | U    | —     | `[addr] ← imm`                     |
+| 0x1980 | STOREI_IND | regD, imm  | U    | —     | `[regD] ← imm`                     |
+| 0x1A80 | STOREI_REL | imm, offs  | U    | —     | `[FP + offs] ← imm`                |
+| 0x1BC0 | FILL       | rS, rE, rV | U    | —     | `[rS..rE] ← rV` (täytä muistialue) |
 
 > **Huom:** Assemblerissa käytetään `LOAD`- ja `STORE`-käskyistä `[...]`-hakasulkunotaatiota. Assembler valitsee oikean konekielikäskyn (READ/STORE/READ_IND/STORE_IND/READ_REL/STORE_REL/STOREI jne.) automaattisesti syntaksin perusteella. Suoria `READ_IND`, `STORE_REL` jne. -mnemoniikkita ei suositella kirjoittaa käsin.
 
@@ -373,6 +374,22 @@ Käskyn koko sanoina on `1 + OPS` (opcode-sana + operandisanat).
 **READ_REL** lukee muistista kehysosoittimen (FP) suhteen: osoite lasketaan summana FP + imm. Käytetään aliohjelmien paikallisten muuttujien ja parametrien käsittelyyn pinokehyksessä.
 
 **STORE_REL** kirjoittaa rekisterin arvon FP-suhteelliseen muistiosoitteeseen (FP + imm). Käytetään paikallisten muuttujien tallentamiseen aliohjelman pinokehykseen.
+
+**FILL** täyttää muistialueen `[rS..rE]` (inklusiivinen molemmista päistä) rekisterin `rV` arvolla. Täyttö etenee osoitteesta `rS` osoitteeseen `rE` yksi sana kerrallaan. Jos `rS > rE`, täyttö kiertää muistin yli: ensin `rS → 0xFFFF`, sitten `0x0000 → rE`. Lippuja ei muokata. Käytetään taulukkojen alustamiseen, muistialueiden nollaamiseen ja Video-RAM:n tyhjentämiseen nopeasti.
+
+```asm
+; Täytä taulukko 0x0400–0x043F arvolla 0xFFFF
+LOAD  R0, 0x0400     ; alkuosoite
+LOAD  R1, 0x043F     ; loppuosoite (inklusiivinen)
+LOAD  R2, 0xFFFF     ; täytettävä arvo
+FILL  R0, R1, R2
+
+; Tyhjennä VRAM (arvo 0x0000 = tyhjä merkki, musta tausta)
+LOAD  R0, VRAM_START ; 0xF800
+LOAD  R1, VRAM_END   ; 0xFF7F
+LOAD  R2, 0
+FILL  R0, R1, R2
+```
 
 ## 7.5 Aritmetiikkakäskyt
 
@@ -629,6 +646,7 @@ Assembly-kielen syntaksi, direktiivit, arkkitehtuurivakiot ja käyttöesimerkit 
 | 0x1880  | STOREI     | 3     | Kirjoita välitön arvo absoluuttiseen osoitteeseen   |
 | 0x1980  | STOREI_IND | 3     | Kirjoita välitön arvo epäsuoraan osoitteeseen       |
 | 0x1A80  | STOREI_REL | 3     | Kirjoita välitön arvo FP-suhteelliseen osoitteeseen |
+| 0x1BC0  | FILL       | 4     | Täytä muistialue [rS..rE] arvolla rV                |
 | 0xE200  | STI        | 1     | Salli keskeytykset (I = 1, Kernel-tila)             |
 | 0xF440  | STMR       | 2     | Aseta ajastinrekisteri (Kernel-tila)                |
 | 0x2180  | SUB        | 3     | Vähennyslasku: regD = regD - regS                   |
@@ -653,6 +671,7 @@ Assembly-kielen syntaksi, direktiivit, arkkitehtuurivakiot ja käyttöesimerkit 
 | STOREI     | 0x1880 | Kirjoita välitön arvo absoluuttiseen osoitteeseen                  |
 | STOREI_IND | 0x1980 | Kirjoita välitön arvo epäsuoraan osoitteeseen (rekisterin kautta)  |
 | STOREI_REL | 0x1A80 | Kirjoita välitön arvo FP-suhteelliseen osoitteeseen                |
+| FILL       | 0x1BC0 | Täytä muistialue [rS..rE] inklusiivisesti arvolla rV               |
 
 ### Aritmetiikka
 

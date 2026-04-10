@@ -22,7 +22,7 @@
 ;   GFX_DRAW_BG  (2) — Taustaväri: nollaa pikselin
 ;
 ; REKISTERIKÄYTTÖ (clobbers):
-;   gfx_clear:         R0–R3
+;   gfx_clear:         R0–R2  (käyttää FILL-käskyä, ei enää R3:a)
 ;   gfx_set_draw_mode: —
 ;   gfx_pixel:         R0–R7
 ;   gfx_line:          R0–R12  (kutsuu gfx_pixel sisäisesti)
@@ -110,9 +110,9 @@ gfx_set_draw_mode:
 ;
 ; Sisään:  —
 ; Ulos:    —
-; Clobbers: R0–R3
+; Clobbers: R0–R2
 ;
-; Nollaa kaikki 1920 VRAM-sanaa ($F800–$FF7F).
+; Nollaa kaikki 1920 VRAM-sanaa ($F800–$FF7F) FILL-käskyllä.
 ; Huom: toiminto ohittaa gfx_draw_mode — tyhjentää aina taustaan.
 ; Laukaisee INT INT_BREAKPOINT (INT 3) jos näyttötila on A ($FF80 = 0).
 ; =============================================================================
@@ -125,16 +125,11 @@ gfx_clear:
         JNZ   _gfx_clear_ok
         INT   INT_BREAKPOINT          ; Virhe: käyttö tekstitilassa A
 _gfx_clear_ok:
-        ; --- Nollaa koko VRAM ---
-        LOAD  R0, VRAM_START          ; R0 = kirjoitusosoitin
-        LOAD  R1, VRAM_WORDS          ; R1 = jäljellä olevat sanat (1920)
-        LOAD  R2, 0                   ; R2 = nollaustäyte
-        LOAD  R3, 1                   ; R3 = askeleen koko
-_gfx_clear_loop:
-        STORE [R0], R2                ; kirjoita 0
-        ADD   R0, R3                  ; osoitin++
-        SUB   R1, R3                  ; laskuri--
-        JNZ   _gfx_clear_loop
+        ; --- Nollaa koko VRAM FILL-käskyllä ---
+        LOAD  R0, VRAM_START          ; R0 = alkuosoite ($F800)
+        LOAD  R1, VRAM_END            ; R1 = loppuosoite ($FF7F, inklusiivinen)
+        LOAD  R2, 0                   ; R2 = täyttöarvo (nolla)
+        FILL  R0, R1, R2              ; täytä [VRAM_START..VRAM_END] nollilla
         RET
 
 ; =============================================================================
