@@ -104,7 +104,7 @@ proj_x:
 proj_y:
         .dw    0,   0,   0,   0,   0,   0,   0,   0
 
-; Rotaation jälkeiset 3D-koordinaatit (X-vaiheen jälkeen) piiloviivapoistoon
+; Rotaation 3D-välikoordinaatit (X-vaiheen jälkeen, ennen Z-vaihetta) piiloviivapoistoon
 rot_x:
         .dw    0,   0,   0,   0,   0,   0,   0,   0
 

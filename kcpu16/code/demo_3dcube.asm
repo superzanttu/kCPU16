@@ -284,7 +284,7 @@ _smul_done:
 ;     R9  = vy (scratch)
 ;     R10 = vz (scratch)
 ;     R11 = ay
-;     R12 = az (ei tarvita X-rotaation jälkeen)
+;     R12 = ei käytössä X→Z-rotaatiossa
 ;     R14 = grafiikkatila (koskematon)
 ;     R15 = kärkipiste-indeksi (koskematon)
 ;
@@ -353,18 +353,7 @@ _dcf_vertex_loop:
         CALL  smul_div100     ; R0 = vz·sin_x/100
         SUB   R11, R0         ; R11 = ay
 
-        ; az = (vy·sin_x + vz·cos_x) / 100
-        CPY   R0, R9
-        READ  R1, [sin_cache_x]
-        CALL  smul_div100     ; R0 = vy·sin_x/100
-        CPY   R12, R0         ; R12 = vy·sin_x/100
-
-        CPY   R0, R10
-        READ  R1, [cos_cache_x]
-        CALL  smul_div100     ; R0 = vz·cos_x/100
-        ADD   R12, R0         ; R12 = az
-
-        ; Nyt: R8=ax, R11=ay, R12=az
+        ; Nyt: R8=ax, R11=ay
 
         ; --- Z-akselin rotaatio ---
         ; cx = (ax·cos_z − ay·sin_z) / 100
