@@ -661,7 +661,9 @@ class KCPU16TUI(App[None]):
         self._output_buffer: list[str] = []
         self._disk_dirty: bool = False
         self._watched_mtime: int | None = None  # st_mtime_ns (kokonaisluku)
-        self._exec_mode: str = "stopped"  # "stopped" | "full" | "slow"
+        self._exec_mode: str = (
+            "stopped"  # "stopped" | "step" | "full" | "slow" | "reset"
+        )
         # --asm listing caches (rebuilt each assemble)
         self._asm_addr_to_src: dict[int, str] = {}  # addr → raw source line
         self._asm_addr_to_label: dict[int, str] = {}  # addr → label name
@@ -872,6 +874,8 @@ class KCPU16TUI(App[None]):
         if mode == "step":
             self.machine.step()
             self._log_step_info()
+            self._exec_mode = "step"
+            self._update_run_mode_ui()
             self._refresh_all(include_screen=True)
         elif mode == "full":
             self._exec_mode = "full"
@@ -896,6 +900,8 @@ class KCPU16TUI(App[None]):
             return
         self.machine.step()
         self._log_step_info()
+        self._exec_mode = "step"
+        self._update_run_mode_ui()
         self._refresh_all(include_screen=True)
 
     def action_run_full_speed(self) -> None:
@@ -956,7 +962,7 @@ class KCPU16TUI(App[None]):
         sitten cold reset nollaa CPU:n, muistin ja laitteet.
         """
         self.workers.cancel_all()
-        self._exec_mode = "stopped"
+        self._exec_mode = "reset"
         self.machine.cold_reset()
         self.is_assembled = False
         self.addr_to_line = {}
@@ -1147,7 +1153,7 @@ class KCPU16TUI(App[None]):
         Terminaali ei tue näppäimennostotapahtumia, joten painallus ja
         vapautus lähetetään peräkkäin samasta tapahtumasta.
         """
-        if self._exec_mode == "stopped":
+        if self._exec_mode not in ("full", "slow"):
             return
         if self.machine.keyboard is None:
             return
@@ -1252,6 +1258,8 @@ class KCPU16TUI(App[None]):
                     f"[cyan].diskblock: {total_words} sanaa tallennettu "
                     f"levyblokkiin {blk}.[/cyan]"
                 )
+            self._exec_mode = "stopped"
+            self._update_run_mode_ui()
             self._refresh_all()
         except Exception as e:
             self._log(f"[red]Assembly error: {e}[/red]")
@@ -1372,8 +1380,10 @@ class KCPU16TUI(App[None]):
         try:
             label_text = {
                 "stopped": "\u25a0 STOPPED",
+                "step": "\u25a0 STEP",
                 "full": "\u25b6 FULL",
                 "slow": "\u25b6 SLOW",
+                "reset": "\u25a0 RESET",
             }.get(self._exec_mode, "\u25a0 STOPPED")
             self.query_one("#run-mode-label", Static).update(label_text)
             btn_full = self.query_one("#btn-run-full", Button)
@@ -1387,7 +1397,7 @@ class KCPU16TUI(App[None]):
                 btn_full.variant = "default"
                 btn_slow.variant = "warning"
                 btn_stop.variant = "error"
-            else:  # stopped
+            else:  # stopped, step, reset
                 btn_full.variant = "success"
                 btn_slow.variant = "success"
                 btn_stop.variant = "default"
