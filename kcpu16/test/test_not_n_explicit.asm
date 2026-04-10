@@ -6,7 +6,7 @@
 
         .origin 0x0200
 
-        LOAD  R0, 0x0000
+        READ  R0, 0x0000
         NOT   R0              ; R0 = ~0x0000 = 0xFFFF: N=1 (0→1)
 
         HALT

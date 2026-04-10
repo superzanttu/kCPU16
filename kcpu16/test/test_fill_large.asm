@@ -5,9 +5,9 @@
 
         .origin 0x0200
 
-        LOAD  R0, 0x0700        ; alkuosoite
-        LOAD  R1, 0x073F        ; loppuosoite (64 sanaa: 0x0700-0x073F)
-        LOAD  R2, 0xABCD        ; täytettävä arvo
+        READ  R0, 0x0700        ; alkuosoite
+        READ  R1, 0x073F        ; loppuosoite (64 sanaa: 0x0700-0x073F)
+        READ  R2, 0xABCD        ; täytettävä arvo
 
         FILL  R0, R1, R2
 

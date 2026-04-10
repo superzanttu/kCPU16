@@ -5,10 +5,10 @@
 
         .origin 0x0200
 
-        LOAD  R0, 123
+        READ  R0, 123
         CPY   R1, R0          ; R1 = R0 = 123
         CPY   R2, R1          ; R2 = R1 = 123
-        LOAD  R3, 99
+        READ  R3, 99
         CPY   R3, R0          ; R3 = R0 = 123 (ylikirjoitus)
 
         HALT

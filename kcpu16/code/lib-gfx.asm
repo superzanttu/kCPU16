@@ -119,16 +119,16 @@ gfx_set_draw_mode:
 
 gfx_clear:
         ; --- Tarkista näyttötila ---
-        LOAD  R0, [GFX_MODE_REG]      ; R0 = nykyinen tila
-        LOAD  R1, 0
+        READ  R0, [GFX_MODE_REG]      ; R0 = nykyinen tila
+        READ  R1, 0
         CMP   R0, R1
         JNZ   _gfx_clear_ok
         INT   INT_BREAKPOINT          ; Virhe: käyttö tekstitilassa A
 _gfx_clear_ok:
         ; --- Nollaa koko VRAM FILL-käskyllä ---
-        LOAD  R0, VRAM_START          ; R0 = alkuosoite ($F800)
-        LOAD  R1, VRAM_END            ; R1 = loppuosoite ($FF7F, inklusiivinen)
-        LOAD  R2, 0                   ; R2 = täyttöarvo (nolla)
+        READ  R0, VRAM_START          ; R0 = alkuosoite ($F800)
+        READ  R1, VRAM_END            ; R1 = loppuosoite ($FF7F, inklusiivinen)
+        READ  R2, 0                   ; R2 = täyttöarvo (nolla)
         FILL  R0, R1, R2              ; täytä [VRAM_START..VRAM_END] nollilla
         RET
 
@@ -149,14 +149,14 @@ _gfx_clear_ok:
 
 gfx_pixel:
         ; --- Tarkista näyttötila ---
-        LOAD  R2, [GFX_MODE_REG]      ; R2 = nykyinen tila
-        LOAD  R3, 0
+        READ  R2, [GFX_MODE_REG]      ; R2 = nykyinen tila
+        READ  R3, 0
         CMP   R2, R3
         JNZ   _gfx_pixel_ok
         INT   INT_BREAKPOINT          ; Virhe: käyttö tekstitilassa A
 _gfx_pixel_ok:
         ; Valitse laskentapolku tilan mukaan
-        LOAD  R3, GFX_MODE_B
+        READ  R3, GFX_MODE_B
         CMP   R2, R3
         JZ    _gfx_pixel_b
 
@@ -175,7 +175,7 @@ _gfx_pixel_ok:
         ; -----------------------------------------------------------------------
 
         ; char_col = px // 2
-        LOAD  R2, 2
+        READ  R2, 2
         CPY   R3, R0
         DIV   R3, R2                  ; R3 = char_col = px // 2
 
@@ -186,7 +186,7 @@ _gfx_pixel_ok:
         SUB   R5, R4                  ; R5 = pt_col = px mod 2
 
         ; char_row = py // 4
-        LOAD  R2, 4
+        READ  R2, 4
         CPY   R6, R1
         DIV   R6, R2                  ; R6 = char_row = py // 4
 
@@ -197,15 +197,15 @@ _gfx_pixel_ok:
         SUB   R7, R4                  ; R7 = pt_row = py mod 4
 
         ; VRAM-osoite = VRAM_START + char_row * 80 + char_col
-        LOAD  R2, 80
+        READ  R2, 80
         MUL   R6, R2                  ; R6 = char_row * 80
         ADD   R6, R3                  ; R6 = char_row * 80 + char_col
-        LOAD  R2, VRAM_START
+        READ  R2, VRAM_START
         ADD   R6, R2                  ; R6 = VRAM-osoite
 
         ; Laske bittinumero
         ; R5 = pt_col, R7 = pt_row
-        LOAD  R2, 3
+        READ  R2, 3
         CMP   R7, R2                  ; pt_row == 3?
         JZ    _gfx_pixel_c_row3
 
@@ -216,12 +216,12 @@ _gfx_pixel_ok:
 
 _gfx_pixel_c_row3:
         ; pt_row == 3: bit_num = 6 + pt_col
-        LOAD  R2, 6
+        READ  R2, 6
         ADD   R5, R2                  ; R5 = 6 + pt_col
 
 _gfx_pixel_c_xor:
         ; Bittikuva = 1 << bit_num
-        LOAD  R4, 1
+        READ  R4, 1
         SHL   R4, R5                  ; R4 = 1 << bit_num  (R5=bit_num, R6=osoite)
         CPY   R5, R4                  ; R5 = bitmask
         JUMP  _gfx_apply              ; → yhteinen piirtokäsittelijä
@@ -237,13 +237,13 @@ _gfx_pixel_b:
         ; -----------------------------------------------------------------------
 
         ; addr = VRAM_START + (y // 2) * 80 + x
-        LOAD  R2, 2
+        READ  R2, 2
         CPY   R3, R1
         DIV   R3, R2                  ; R3 = y // 2
-        LOAD  R4, 80
+        READ  R4, 80
         MUL   R3, R4                  ; R3 = (y // 2) * 80
         ADD   R3, R0                  ; R3 = (y // 2) * 80 + x
-        LOAD  R4, VRAM_START
+        READ  R4, VRAM_START
         ADD   R3, R4                  ; R3 = VRAM-osoite
 
         ; y mod 2: parillinen → bitti 1 (= 2), pariton → bitti 0 (= 1)
@@ -253,17 +253,17 @@ _gfx_pixel_b:
         MUL   R5, R2                  ; R5 = (y // 2) * 2
         SUB   R4, R5                  ; R4 = y mod 2
 
-        LOAD  R5, 0
+        READ  R5, 0
         CMP   R4, R5
         JZ    _gfx_pixel_b_upper      ; y parillinen → ylempi pikseli
 
         ; y pariton: alempi pikseli → bitti 0
-        LOAD  R5, 1
+        READ  R5, 1
         JUMP  _gfx_pixel_b_xor
 
 _gfx_pixel_b_upper:
         ; y parillinen: ylempi pikseli → bitti 1
-        LOAD  R5, 2
+        READ  R5, 2
 
 _gfx_pixel_b_xor:
         CPY   R6, R3                  ; R6 = VRAM-osoite, R5 = bitmask
@@ -284,27 +284,27 @@ _gfx_pixel_b_xor:
 ; =============================================================================
 
 _gfx_apply:
-        LOAD  R3, [gfx_draw_mode]     ; R3 = piirtotila
-        LOAD  R4, GFX_DRAW_FG
+        READ  R3, [gfx_draw_mode]     ; R3 = piirtotila
+        READ  R4, GFX_DRAW_FG
         CMP   R3, R4
         JZ    _gfx_apply_fg
-        LOAD  R4, GFX_DRAW_BG
+        READ  R4, GFX_DRAW_BG
         CMP   R3, R4
         JZ    _gfx_apply_bg
         ; GFX_DRAW_XOR (0, oletus)
-        LOAD  R3, [R6]
+        READ  R3, [R6]
         XOR   R3, R5
         STORE [R6], R3
         RET
 _gfx_apply_fg:
-        LOAD  R3, [R6]
+        READ  R3, [R6]
         OR    R3, R5
         STORE [R6], R3
         RET
 _gfx_apply_bg:
         CPY   R4, R5                  ; R4 = bitmask-kopio
         NOT   R4                      ; R4 = ~bitmask
-        LOAD  R3, [R6]
+        READ  R3, [R6]
         AND   R3, R4
         STORE [R6], R3
         RET
@@ -337,8 +337,8 @@ _gfx_apply_bg:
 
 gfx_line:
         ; --- Tarkista näyttötila ---
-        LOAD  R4, [GFX_MODE_REG]      ; R4 = nykyinen tila
-        LOAD  R5, 0
+        READ  R4, [GFX_MODE_REG]      ; R4 = nykyinen tila
+        READ  R5, 0
         CMP   R4, R5
         JNZ   _gfx_line_ok
         INT   INT_BREAKPOINT          ; Virhe: käyttö tekstitilassa A
@@ -353,34 +353,34 @@ _gfx_line_ok:
         ; dx = |x1 − x0|, sx = sign(x1 − x0)
         CPY   R9, R6
         SUB   R9, R4                  ; R9 = x1 − x0
-        LOAD  R0, 0
+        READ  R0, 0
         CMP   R9, R0
         JGE   _gfx_line_sx_pos
         ; x1 < x0: sx = −1, dx = −R9
-        LOAD  R11, 0xFFFF             ; sx = −1 (kaksoiskomplemenitti: 0xFFFF = −1)
+        READ  R11, 0xFFFF             ; sx = −1 (kaksoiskomplemenitti: 0xFFFF = −1)
         NOT   R9                      ; ~R9
-        LOAD  R0, 1
+        READ  R0, 1
         ADD   R9, R0                  ; R9 = |x1−x0| = dx
         JUMP  _gfx_line_dy
 _gfx_line_sx_pos:
-        LOAD  R11, 1                  ; sx = 1  (R9 = dx, jo >= 0)
+        READ  R11, 1                  ; sx = 1  (R9 = dx, jo >= 0)
 
         ; --- Laske dy_neg ja sy ---
         ; dy_neg = −|y1 − y0|  (nolla tai negatiivinen), sy = sign(y1 − y0)
 _gfx_line_dy:
         CPY   R10, R7
         SUB   R10, R5                 ; R10 = y1 − y0
-        LOAD  R0, 0
+        READ  R0, 0
         CMP   R10, R0
         JGE   _gfx_line_sy_pos
         ; y1 < y0: sy = −1, R10 on jo negatiivinen (= −|dy|)
-        LOAD  R12, 0xFFFF             ; sy = −1 (kaksoiskomplemenitti: 0xFFFF = −1)
+        READ  R12, 0xFFFF             ; sy = −1 (kaksoiskomplemenitti: 0xFFFF = −1)
         JUMP  _gfx_line_err
 _gfx_line_sy_pos:
-        LOAD  R12, 1                  ; sy = 1
+        READ  R12, 1                  ; sy = 1
         ; R10 = |dy| > 0; negaa → dy_neg = −|dy|
         NOT   R10
-        LOAD  R0, 1
+        READ  R0, 1
         ADD   R10, R0                 ; R10 = dy_neg = −|dy|
 
         ; --- Alusta err = dx + dy_neg ---
@@ -423,7 +423,7 @@ _gfx_line_loop:
 _gfx_line_step:
         ; e2 = 2 * err
         CPY   R0, R8
-        LOAD  R1, 2
+        READ  R1, 2
         MUL   R0, R1                  ; R0 = e2 = 2 * err
 
         ; Jos e2 >= dy_neg: err += dy_neg; cx += sx

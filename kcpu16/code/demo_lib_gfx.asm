@@ -72,18 +72,18 @@ clock_handler:
         PUSH  R1
 
         ; phase = (phase + 1) % 2
-        LOAD  R0, [phase]
-        LOAD  R1, 1
+        READ  R0, [phase]
+        READ  R1, 1
         ADD   R0, R1
-        LOAD  R1, 2
+        READ  R1, 2
         CMP   R0, R1
         JLT   _ch_store
-        LOAD  R0, 0
+        READ  R0, 0
 _ch_store:
         STORE [phase], R0
 
         ; Käynnistä 3 s ajastin uudelleen (ikuinen looppi)
-        LOAD  R0, 3000
+        READ  R0, 3000
         SCTMR R0
 
         POP   R1
@@ -101,8 +101,8 @@ _ch_store:
 
 draw_mode_b:
         ; Kytke tila B
-        LOAD  R0, GFX_MODE_B
-        LOAD  R1, GFX_MODE_REG
+        READ  R0, GFX_MODE_B
+        READ  R1, GFX_MODE_REG
         STORE [R1], R0
 
         ; Tyhjennä näyttö
@@ -113,31 +113,31 @@ draw_mode_b:
         ; ------------------------------------------------------------------
 
         ; Yläreuna: (0, 0) → (79, 0)
-        LOAD  R0, 0
-        LOAD  R1, 0
-        LOAD  R2, 79
-        LOAD  R3, 0
+        READ  R0, 0
+        READ  R1, 0
+        READ  R2, 79
+        READ  R3, 0
         CALL  gfx_line
 
         ; Alareuna: (0, 47) → (79, 47)
-        LOAD  R0, 0
-        LOAD  R1, 47
-        LOAD  R2, 79
-        LOAD  R3, 47
+        READ  R0, 0
+        READ  R1, 47
+        READ  R2, 79
+        READ  R3, 47
         CALL  gfx_line
 
         ; Vasen reuna: (0, 0) → (0, 47)
-        LOAD  R0, 0
-        LOAD  R1, 0
-        LOAD  R2, 0
-        LOAD  R3, 47
+        READ  R0, 0
+        READ  R1, 0
+        READ  R2, 0
+        READ  R3, 47
         CALL  gfx_line
 
         ; Oikea reuna: (79, 0) → (79, 47)
-        LOAD  R0, 79
-        LOAD  R1, 0
-        LOAD  R2, 79
-        LOAD  R3, 47
+        READ  R0, 79
+        READ  R1, 0
+        READ  R2, 79
+        READ  R3, 47
         CALL  gfx_line
 
         ; ------------------------------------------------------------------
@@ -145,17 +145,17 @@ draw_mode_b:
         ; ------------------------------------------------------------------
 
         ; Vasen yläkulma → oikea alakulma: (0, 0) → (79, 47)
-        LOAD  R0, 0
-        LOAD  R1, 0
-        LOAD  R2, 79
-        LOAD  R3, 47
+        READ  R0, 0
+        READ  R1, 0
+        READ  R2, 79
+        READ  R3, 47
         CALL  gfx_line
 
         ; Oikea yläkulma → vasen alakulma: (79, 0) → (0, 47)
-        LOAD  R0, 79
-        LOAD  R1, 0
-        LOAD  R2, 0
-        LOAD  R3, 47
+        READ  R0, 79
+        READ  R1, 0
+        READ  R2, 0
+        READ  R3, 47
         CALL  gfx_line
 
         ; ------------------------------------------------------------------
@@ -163,24 +163,24 @@ draw_mode_b:
         ; ------------------------------------------------------------------
 
         ; Vaakaviiva keskellä: (0, 24) → (79, 24)
-        LOAD  R0, 0
-        LOAD  R1, 24
-        LOAD  R2, 79
-        LOAD  R3, 24
+        READ  R0, 0
+        READ  R1, 24
+        READ  R2, 79
+        READ  R3, 24
         CALL  gfx_line
 
         ; Pystyviiva keskellä: (40, 0) → (40, 47)
-        LOAD  R0, 40
-        LOAD  R1, 0
-        LOAD  R2, 40
-        LOAD  R3, 47
+        READ  R0, 40
+        READ  R1, 0
+        READ  R2, 40
+        READ  R3, 47
         CALL  gfx_line
 
         ; ------------------------------------------------------------------
         ; Yksittäinen pikseli näytön keskelle: (40, 24)
         ; ------------------------------------------------------------------
-        LOAD  R0, 40
-        LOAD  R1, 24
+        READ  R0, 40
+        READ  R1, 24
         CALL  gfx_pixel
 
         RET
@@ -196,8 +196,8 @@ draw_mode_b:
 
 draw_mode_c:
         ; Kytke tila C
-        LOAD  R0, GFX_MODE_C
-        LOAD  R1, GFX_MODE_REG
+        READ  R0, GFX_MODE_C
+        READ  R1, GFX_MODE_REG
         STORE [R1], R0
 
         ; Tyhjennä näyttö
@@ -208,31 +208,31 @@ draw_mode_c:
         ; ------------------------------------------------------------------
 
         ; Yläreuna: (0, 0) → (159, 0)
-        LOAD  R0, 0
-        LOAD  R1, 0
-        LOAD  R2, 159
-        LOAD  R3, 0
+        READ  R0, 0
+        READ  R1, 0
+        READ  R2, 159
+        READ  R3, 0
         CALL  gfx_line
 
         ; Alareuna: (0, 95) → (159, 95)
-        LOAD  R0, 0
-        LOAD  R1, 95
-        LOAD  R2, 159
-        LOAD  R3, 95
+        READ  R0, 0
+        READ  R1, 95
+        READ  R2, 159
+        READ  R3, 95
         CALL  gfx_line
 
         ; Vasen reuna: (0, 0) → (0, 95)
-        LOAD  R0, 0
-        LOAD  R1, 0
-        LOAD  R2, 0
-        LOAD  R3, 95
+        READ  R0, 0
+        READ  R1, 0
+        READ  R2, 0
+        READ  R3, 95
         CALL  gfx_line
 
         ; Oikea reuna: (159, 0) → (159, 95)
-        LOAD  R0, 159
-        LOAD  R1, 0
-        LOAD  R2, 159
-        LOAD  R3, 95
+        READ  R0, 159
+        READ  R1, 0
+        READ  R2, 159
+        READ  R3, 95
         CALL  gfx_line
 
         ; ------------------------------------------------------------------
@@ -240,17 +240,17 @@ draw_mode_c:
         ; ------------------------------------------------------------------
 
         ; Vasen yläkulma → oikea alakulma: (0, 0) → (159, 95)
-        LOAD  R0, 0
-        LOAD  R1, 0
-        LOAD  R2, 159
-        LOAD  R3, 95
+        READ  R0, 0
+        READ  R1, 0
+        READ  R2, 159
+        READ  R3, 95
         CALL  gfx_line
 
         ; Oikea yläkulma → vasen alakulma: (159, 0) → (0, 95)
-        LOAD  R0, 159
-        LOAD  R1, 0
-        LOAD  R2, 0
-        LOAD  R3, 95
+        READ  R0, 159
+        READ  R1, 0
+        READ  R2, 0
+        READ  R3, 95
         CALL  gfx_line
 
         ; ------------------------------------------------------------------
@@ -258,17 +258,17 @@ draw_mode_c:
         ; ------------------------------------------------------------------
 
         ; Vaakaviiva keskellä: (0, 48) → (159, 48)
-        LOAD  R0, 0
-        LOAD  R1, 48
-        LOAD  R2, 159
-        LOAD  R3, 48
+        READ  R0, 0
+        READ  R1, 48
+        READ  R2, 159
+        READ  R3, 48
         CALL  gfx_line
 
         ; Pystyviiva keskellä: (80, 0) → (80, 95)
-        LOAD  R0, 80
-        LOAD  R1, 0
-        LOAD  R2, 80
-        LOAD  R3, 95
+        READ  R0, 80
+        READ  R1, 0
+        READ  R2, 80
+        READ  R3, 95
         CALL  gfx_line
 
         ; ------------------------------------------------------------------
@@ -276,8 +276,8 @@ draw_mode_c:
         ; Tilan C resoluutio on 160×96 (x: 0–159, y: 0–95).
         ; Koordinaatti (80, 48) on lähinnä geometrista keskipistettä.
         ; ------------------------------------------------------------------
-        LOAD  R0, 80
-        LOAD  R1, 48
+        READ  R0, 80
+        READ  R1, 48
         CALL  gfx_pixel
 
         RET
@@ -290,7 +290,7 @@ main:
         ; Rekisteröi kellokeskeytyksen käsittelijä (INT 9 -vektori osoitteessa $0009)
         ; INT_CLOCK = 9 on assembler-arkkitehtuurivakio (ARCH_SYMBOLS); kirjoitetaan
         ; suoraan vektoritaulukkoon muistiosoitteeseen [INT_CLOCK] = [9] = $0009.
-        LOAD  R0, clock_handler
+        READ  R0, clock_handler
         STORE [INT_CLOCK], R0
 
 loop_forever:
@@ -299,7 +299,7 @@ loop_forever:
 
         ; Käynnistä 3 sekunnin kellokeskeytys (vain ensimmäisellä kierroksella;
         ; clock_handler käynnistää ajastimen aina uudelleen)
-        LOAD  R0, 3000
+        READ  R0, 3000
         SCTMR R0
 
         ; Salli keskeytykset
@@ -307,8 +307,8 @@ loop_forever:
 
 ; Odota kunnes phase 0 → 1 (kellokeskeytys laukeaa)
 wait_phase_1:
-        LOAD  R0, [phase]
-        LOAD  R1, 0
+        READ  R0, [phase]
+        READ  R1, 0
         CMP   R0, R1
         JZ    wait_phase_1
 
@@ -317,8 +317,8 @@ wait_phase_1:
 
 ; Odota kunnes phase 1 → 0 (toinen kellokeskeytys laukeaa) ja hyppää takaisin
 wait_phase_0:
-        LOAD  R0, [phase]
-        LOAD  R1, 0
+        READ  R0, [phase]
+        READ  R1, 0
         CMP   R0, R1
         JNZ   wait_phase_0
 

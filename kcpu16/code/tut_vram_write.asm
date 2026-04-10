@@ -46,33 +46,33 @@
 ; =============================================================================
 
         ; 'H' = valkoinen (FG=7: 0x0700 | 0x48 = 0x0748)
-        LOAD  R0, 0xF8A0      ; osoite rivi 2, sarake 0
-        LOAD  R1, 0x0748      ; 'H', FG=7 (valkoinen)
+        READ  R0, 0xF8A0      ; osoite rivi 2, sarake 0
+        READ  R1, 0x0748      ; 'H', FG=7 (valkoinen)
         STORE [R0], R1
 
         ; 'e' = keltainen (FG=3: 0x0300 | 0x65 = 0x0365)
-        LOAD  R0, 0xF8A1
-        LOAD  R1, 0x0365      ; 'e', FG=3 (keltainen)
+        READ  R0, 0xF8A1
+        READ  R1, 0x0365      ; 'e', FG=3 (keltainen)
         STORE [R0], R1
 
         ; 'l' = vihreä (FG=2: 0x0200 | 0x6C = 0x026C)
-        LOAD  R0, 0xF8A2
-        LOAD  R1, 0x026C      ; 'l', FG=2 (vihreä)
+        READ  R0, 0xF8A2
+        READ  R1, 0x026C      ; 'l', FG=2 (vihreä)
         STORE [R0], R1
 
         ; 'l' = syaani (FG=6: 0x0600 | 0x6C = 0x066C)
-        LOAD  R0, 0xF8A3
-        LOAD  R1, 0x066C      ; 'l', FG=6 (syaani)
+        READ  R0, 0xF8A3
+        READ  R1, 0x066C      ; 'l', FG=6 (syaani)
         STORE [R0], R1
 
         ; 'o' = punainen (FG=1: 0x0100 | 0x6F = 0x016F)
-        LOAD  R0, 0xF8A4
-        LOAD  R1, 0x016F      ; 'o', FG=1 (punainen)
+        READ  R0, 0xF8A4
+        READ  R1, 0x016F      ; 'o', FG=1 (punainen)
         STORE [R0], R1
 
         ; '!' = bold valkoinen (FG=7, bold: 0x4700 | 0x21 = 0x4721)
-        LOAD  R0, 0xF8A5
-        LOAD  R1, 0x4721      ; '!', FG=7, lihavoitu
+        READ  R0, 0xF8A5
+        READ  R1, 0x4721      ; '!', FG=7, lihavoitu
         STORE [R0], R1
 
 ; =============================================================================
@@ -83,28 +83,28 @@
 ; Yhdistettynä: 0x2700 | ascii
 ; =============================================================================
 
-        LOAD  R0, 0xF940
-        LOAD  R1, 0x276B      ; 'k' (0x6B), valkoinen-sinisellä
+        READ  R0, 0xF940
+        READ  R1, 0x276B      ; 'k' (0x6B), valkoinen-sinisellä
         STORE [R0], R1
 
-        LOAD  R0, 0xF941
-        LOAD  R1, 0x2743      ; 'C' (0x43)
+        READ  R0, 0xF941
+        READ  R1, 0x2743      ; 'C' (0x43)
         STORE [R0], R1
 
-        LOAD  R0, 0xF942
-        LOAD  R1, 0x2750      ; 'P' (0x50)
+        READ  R0, 0xF942
+        READ  R1, 0x2750      ; 'P' (0x50)
         STORE [R0], R1
 
-        LOAD  R0, 0xF943
-        LOAD  R1, 0x2755      ; 'U' (0x55)
+        READ  R0, 0xF943
+        READ  R1, 0x2755      ; 'U' (0x55)
         STORE [R0], R1
 
-        LOAD  R0, 0xF944
-        LOAD  R1, 0x2731      ; '1' (0x31)
+        READ  R0, 0xF944
+        READ  R1, 0x2731      ; '1' (0x31)
         STORE [R0], R1
 
-        LOAD  R0, 0xF945
-        LOAD  R1, 0x2736      ; '6' (0x36)
+        READ  R0, 0xF945
+        READ  R1, 0x2736      ; '6' (0x36)
         STORE [R0], R1
 
 ; =============================================================================
@@ -112,32 +112,32 @@
 ; Rivi 6, sarake 0–7 = 0xF9E0..0xF9E7
 ; =============================================================================
 
-        LOAD  R0, 0xF9E0      ; VRAM-osoitin
-        LOAD  R2, 8           ; 8 merkkiä
-        LOAD  R3, 1           ; inkrementti
-        LOAD  R4, 1           ; väri-indeksi FG, alkaa 1 (ei musta=0)
-        LOAD  R12, 0          ; nollavakio (silmukan vertailu)
+        READ  R0, 0xF9E0      ; VRAM-osoitin
+        READ  R2, 8           ; 8 merkkiä
+        READ  R3, 1           ; inkrementti
+        READ  R4, 1           ; väri-indeksi FG, alkaa 1 (ei musta=0)
+        READ  R12, 0          ; nollavakio (silmukan vertailu)
 
 fill_loop:
         CMP   R2, R12         ; R2 == 0?
         JZ    fill_done
 
         ; Rakenna VRAM-sana: '@' (0x40) + FG-väri (bits 8–10)
-        LOAD  R1, 0x0040      ; '@' (0x40)
+        READ  R1, 0x0040      ; '@' (0x40)
         CPY   R5, R4          ; R5 = väri-indeksi (1–7)
-        LOAD  R6, 8
+        READ  R6, 8
         SHL   R5, R6          ; R5 = FG << 8 (siirtää bits 8–10:een)
         OR    R1, R5          ; R1 = FG-attribuutti | '@'
         STORE [R0], R1        ; kirjoita VRAM:iin
 
         ADD   R0, R3          ; seuraava VRAM-paikka
         ADD   R4, R3          ; seuraava väri-indeksi
-        LOAD  R5, 8
+        READ  R5, 8
         CMP   R4, R5
         JGT   reset_color     ; R4 > 7 → palaa arvoon 1
         JUMP  fill_cont
 reset_color:
-        LOAD  R4, 1           ; kierrä takaisin väri 1:een
+        READ  R4, 1           ; kierrä takaisin väri 1:een
 fill_cont:
         SUB   R2, R3          ; laskuri--
         JUMP  fill_loop

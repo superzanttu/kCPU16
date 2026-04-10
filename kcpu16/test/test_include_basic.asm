@@ -4,7 +4,7 @@
         .origin 0x0200
 
 START:
-        LOAD  R0, 5
+        READ  R0, 5
         CALL  ADD_TEN       ; R0 = 5 + 10 = 15
         HALT
 

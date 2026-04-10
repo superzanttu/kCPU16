@@ -8,11 +8,11 @@
         .origin 0x0200
 
         ; Lataa kaikki rekisterit eri arvoilla
-        LOAD  R0, 0x1234
-        LOAD  R1, 0xABCD
-        LOAD  R2, 0x5678
-        LOAD  R3, 0xF0F0
-        LOAD  FP, 0x0400
+        READ  R0, 0x1234
+        READ  R1, 0xABCD
+        READ  R2, 0x5678
+        READ  R3, 0xF0F0
+        READ  FP, 0x0400
 
         ; AND R0, R1: vain R0 muuttuu, R1/R2/R3/FP säilyvät
         AND   R0, R1          ; R0 = 0x1234 & 0xABCD = 0x0204
@@ -25,7 +25,7 @@
 
         ; SHL R1, R3 (R3=0xF0F0 → siirtomäärä & 0xFFFF, mutta yli 16 → 0)
         ; Käytä pientä siirtomäärää: lataa R3=2
-        LOAD  R3, 2
+        READ  R3, 2
         SHL   R1, R3          ; R1 = 0xABCD << 2 = 0xAF34 (& 0xFFFF)
                               ; vain R1 muuttuu
 

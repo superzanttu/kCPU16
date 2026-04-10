@@ -5,6 +5,6 @@
 
 ADD_TEN:
     ; R0 = R0 + 10, palaa kutsujalle
-    LOAD R1, 10
+    READ R1, 10
     ADD  R0, R1
     RET

@@ -81,14 +81,14 @@ BG_HEADER_STR:
 ; Turmelee: R11, R12
 ; =============================================================================
 write_str:
-        LOAD  R12, 0
+        READ  R12, 0
 ws_loop:
-        LOAD  R11, [R9]
+        READ  R11, [R9]
         CMP   R11, R12
         JZ    ws_done
         OR    R11, R10
         STORE [R8], R11
-        LOAD  R11, 1
+        READ  R11, 1
         ADD   R8, R11
         ADD   R9, R11
         JUMP  ws_loop
@@ -102,17 +102,17 @@ main:
         ; ----------------------------------------------------------------
         ; Rivi 0: Otsikkorivi  (VRAM 0xF800)
         ; ----------------------------------------------------------------
-        LOAD  R8, 0xF800
-        LOAD  R9, TITLE_STR
-        LOAD  R10, 0x0700       ; FG=7 (val), BG=0 (mus)
+        READ  R8, 0xF800
+        READ  R9, TITLE_STR
+        READ  R10, 0x0700       ; FG=7 (val), BG=0 (mus)
         CALL  write_str
 
         ; ----------------------------------------------------------------
         ; Rivi 1: BG-sarakeotsikointi  (VRAM 0xF850 = 0xF800 + 80)
         ; ----------------------------------------------------------------
-        LOAD  R8, 0xF850
-        LOAD  R9, BG_HEADER_STR
-        LOAD  R10, 0x0700
+        READ  R8, 0xF850
+        READ  R9, BG_HEADER_STR
+        READ  R10, 0x0700
         CALL  write_str
 
         ; ================================================================
@@ -121,37 +121,37 @@ main:
         ;   Rivi 2 → 0xF8A0  (0xF800 + 160)
         ;   Rivi 9 → 0xFAD0  (0xF800 + 720)
         ; ================================================================
-        LOAD  R0, 0             ; FG = 0
-        LOAD  R2, 0xF8A0        ; VRAM → rivi 2
+        READ  R0, 0             ; FG = 0
+        READ  R2, 0xF8A0        ; VRAM → rivi 2
 
 fg_loop:
         ; ----------------------------------------------------------------
         ; Kirjoita FG-tunniste "FGx: " (5 merkkiä, valkoinen/musta)
         ; ----------------------------------------------------------------
-        LOAD  R3, 0x0746        ; 'F' (valkoinen)
+        READ  R3, 0x0746        ; 'F' (valkoinen)
         STORE [R2], R3
-        LOAD  R3, 1 ; ADD R2, 1
+        READ  R3, 1 ; ADD R2, 1
         ADD   R2, R3
 
-        LOAD  R3, 0x0747        ; 'G' (valkoinen)
+        READ  R3, 0x0747        ; 'G' (valkoinen)
         STORE [R2], R3
-        LOAD  R3, 1
+        READ  R3, 1
         ADD   R2, R3
 
-        LOAD  R3, 0x0730        ; '0' pohja
+        READ  R3, 0x0730        ; '0' pohja
         ADD   R3, R0            ; R3 = '0' + FG
         STORE [R2], R3
-        LOAD  R3, 1
+        READ  R3, 1
         ADD   R2, R3
 
-        LOAD  R3, 0x073A        ; ':'
+        READ  R3, 0x073A        ; ':'
         STORE [R2], R3
-        LOAD  R3, 1
+        READ  R3, 1
         ADD   R2, R3
 
-        LOAD  R3, 0x0720        ; ' '
+        READ  R3, 0x0720        ; ' '
         STORE [R2], R3
-        LOAD  R3, 1
+        READ  R3, 1
         ADD   R2, R3            ; R2 = rivin alku + 5
 
         ; ================================================================
@@ -160,58 +160,58 @@ fg_loop:
         ;
         ; base_attr = (FG * 256) | (BG * 2048)
         ; ================================================================
-        LOAD  R1, 0             ; BG = 0
+        READ  R1, 0             ; BG = 0
 
 bg_loop:
         ; ---- Laske base_attr → R4 ----
         CPY   R4, R0
-        LOAD  R3, 256
+        READ  R3, 256
         MUL   R4, R3            ; R4 = FG << 8
 
         STORE [0x0300], R4      ; Tallenna FG<<8 tilapäismuistiin
         CPY   R4, R1
-        LOAD  R3, 2048
+        READ  R3, 2048
         MUL   R4, R3            ; R4 = BG << 11
 
-        LOAD  R7, [0x0300]
+        READ  R7, [0x0300]
         OR    R4, R7            ; R4 = base_attr
 
         ; 'N' normaali
-        LOAD  R5, 0x4E
+        READ  R5, 0x4E
         OR    R5, R4
         STORE [R2], R5
-        LOAD  R3, 1
+        READ  R3, 1
         ADD   R2, R3
 
         ; 'B' lihavoitu  (bit14=1, ascii=0x42 → 0x4042)
-        LOAD  R5, 0x4042
+        READ  R5, 0x4042
         OR    R5, R4
         STORE [R2], R5
-        LOAD  R3, 1
+        READ  R3, 1
         ADD   R2, R3
 
         ; ' ' välilyönti — näyttää BG-värin
-        LOAD  R5, 0x20
+        READ  R5, 0x20
         OR    R5, R4
         STORE [R2], R5
-        LOAD  R3, 1
+        READ  R3, 1
         ADD   R2, R3            ; R2 = rivin alku + 5 + (BG+1)*3
 
         ; ---- BG-laskuri ----
-        LOAD  R3, 1
+        READ  R3, 1
         ADD   R1, R3            ; BG++
-        LOAD  R3, 8
+        READ  R3, 8
         CMP   R1, R3
         JNZ   bg_loop
 
         ; Kirjoitettiin 5 + 8*3 = 29 merkkiä. Siirry seuraavaan riviin: +51
-        LOAD  R3, 51
+        READ  R3, 51
         ADD   R2, R3
 
         ; ---- FG-laskuri ----
-        LOAD  R3, 1
+        READ  R3, 1
         ADD   R0, R3            ; FG++
-        LOAD  R3, 8
+        READ  R3, 8
         CMP   R0, R3
         JNZ   fg_loop
 

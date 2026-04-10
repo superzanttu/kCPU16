@@ -38,16 +38,16 @@
         ; -----------------------------------------------
         ; Alusta rekisterit
         ; -----------------------------------------------
-        LOAD  R0, 0     ; summa = 0
-        LOAD  R1, 1     ; laskuri = 1 (aloitetaan ykkösestä)
-        LOAD  R2, 5     ; yläraja = 5 (lopetetaan viiteen)
-        LOAD  R3, 1     ; askelkoko = 1
+        READ  R0, 0     ; summa = 0
+        READ  R1, 1     ; laskuri = 1 (aloitetaan ykkösestä)
+        READ  R2, 5     ; yläraja = 5 (lopetetaan viiteen)
+        READ  R3, 1     ; askelkoko = 1
 
         ; -----------------------------------------------
         ; Alusta näyttöpointteri ja tulosta aloitusmerkki
         ; -----------------------------------------------
-        LOAD  FP, 0xF880 ; FP = näyttöpointteri (rivi 2)
-        LOAD  SP, 0xE045 ; SP = 'E' (valkoinen)
+        READ  FP, 0xF880 ; FP = näyttöpointteri (rivi 2)
+        READ  SP, 0xE045 ; SP = 'E' (valkoinen)
         STORE [FP], SP  ; Kirjoita 'E' näytölle
         ADD   FP, R3     ; Siirry seuraavaan paikkaan
 
@@ -64,7 +64,7 @@ loop:
         ; -----------------------------------------------
         ; Tulosta piste '.' edistymisen merkiksi
         ; -----------------------------------------------
-        LOAD  SP, 0xE02E ; SP = '.' (valkoinen)
+        READ  SP, 0xE02E ; SP = '.' (valkoinen)
         STORE [FP], SP  ; Kirjoita '.'
         ADD   FP, R3     ; Siirry seuraavaan paikkaan
 
@@ -88,7 +88,7 @@ done:
         ; -----------------------------------------------
         ; Tulosta lopetusmerkki 'X'
         ; -----------------------------------------------
-        LOAD  SP, 0xE058 ; SP = 'X' (valkoinen)
+        READ  SP, 0xE058 ; SP = 'X' (valkoinen)
         STORE [FP], SP  ; Kirjoita 'X'
 
         ; -----------------------------------------------

@@ -10,13 +10,13 @@
         .origin 0x0200
 
         ; Vaihe 1: aseta C=1, N=1, V=1 (0→1)
-        LOAD  R0, 0x7FFF
-        LOAD  R1, 0xFFFF
+        READ  R0, 0x7FFF
+        READ  R1, 0xFFFF
         SUB   R0, R1          ; 0x7FFF-0xFFFF=0x8000: C=1, N=1, V=1, Z=0
 
         ; Vaihe 2: sama operaatio → C:1→1, N:1→1, V:1→1
-        LOAD  R0, 0x7FFF
-        LOAD  R1, 0xFFFF
+        READ  R0, 0x7FFF
+        READ  R1, 0xFFFF
         SUB   R0, R1          ; 0x8000: C=1, N=1, V=1 (1→1)
 
         HALT

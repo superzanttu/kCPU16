@@ -2,7 +2,7 @@
 
         .origin 0x0200
 
-        LOAD  R0, LIB_CONST     ; R0 = 99
+        READ  R0, LIB_CONST     ; R0 = 99
         HALT
 
         .include "includes/include_lib.asm"

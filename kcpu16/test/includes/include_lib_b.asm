@@ -3,6 +3,6 @@
 .const LIB_B, 3
 
 ADD_THREE:
-    LOAD R1, 3
+    READ R1, 3
     ADD  R0, R1
     RET

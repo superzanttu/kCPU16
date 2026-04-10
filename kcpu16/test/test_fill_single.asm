@@ -5,9 +5,9 @@
 
         .origin 0x0200
 
-        LOAD  R0, 0x0600        ; alku = loppu = 0x0600
-        LOAD  R1, 0x0600
-        LOAD  R2, 0xCAFE
+        READ  R0, 0x0600        ; alku = loppu = 0x0600
+        READ  R1, 0x0600
+        READ  R2, 0xCAFE
 
         FILL  R0, R1, R2        ; täytä vain yksi sana
 

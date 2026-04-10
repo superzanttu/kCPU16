@@ -5,9 +5,9 @@
 
         .origin 0x0200
 
-        LOAD  R0, 0x0800        ; alkuosoite
-        LOAD  R1, 0x0804        ; loppuosoite (5 sanaa: 0x0800-0x0804)
-        LOAD  R2, 0xFFFF        ; 16-bittinen maksimiarvo
+        READ  R0, 0x0800        ; alkuosoite
+        READ  R1, 0x0804        ; loppuosoite (5 sanaa: 0x0800-0x0804)
+        READ  R2, 0xFFFF        ; 16-bittinen maksimiarvo
 
         FILL  R0, R1, R2
 

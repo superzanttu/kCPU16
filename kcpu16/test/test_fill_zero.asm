@@ -6,13 +6,13 @@
         .origin 0x0200
 
         ; Kirjoita ensin ei-nolla-arvo, jotta nollaus todella testataan
-        LOAD  R0, 0x0500
-        LOAD  R1, 0x0503
-        LOAD  R2, 0x1234
+        READ  R0, 0x0500
+        READ  R1, 0x0503
+        READ  R2, 0x1234
         FILL  R0, R1, R2        ; kirjoita 0x1234 alueelle
 
         ; Nollaa sama alue
-        LOAD  R2, 0
+        READ  R2, 0
         FILL  R0, R1, R2        ; nollaa alue 0x0500-0x0503
 
         HALT

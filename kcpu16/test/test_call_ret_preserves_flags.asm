@@ -6,8 +6,8 @@
 .origin 0x0200
 
 ; Aseta C=1, V=1, Z=1, N=0
-LOAD  R0, 0x8000
-LOAD  R1, 0x8000
+READ  R0, 0x8000
+READ  R1, 0x8000
 ADD   R0, R1          ; C=1, V=1, Z=1, N=0
 
 ; CALL/RET eivät saa muuttaa lippuja
@@ -18,7 +18,7 @@ HALT
 
 aliohjelma:
 ; Ei aritmetiikkaa — käytetään LOADia joka myös säilyttää liput
-LOAD  R0, 0x1234
+READ  R0, 0x1234
 RET
 
 .expect_reg   R0, 0x1234

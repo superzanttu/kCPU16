@@ -7,51 +7,51 @@
         .origin 0x0200
 
 ; --- Tapaus 0: indeksi 0 → func0 ---
-        LOAD  R0, 0
+        READ  R0, 0
         CALLI R0, func0, func1, func2
         ; palataan tänne
         JUMP  next1
 
 func0:
-        LOAD  R1, 10          ; valittiin oikein
+        READ  R1, 10          ; valittiin oikein
         RET
 func1:
-        LOAD  R1, 99
+        READ  R1, 99
         RET
 func2:
-        LOAD  R1, 99
+        READ  R1, 99
         RET
 
 next1:
 ; --- Tapaus 1: indeksi 1 → funcB ---
-        LOAD  R0, 1
+        READ  R0, 1
         CALLI R0, funcA, funcB, funcC
         JUMP  next2
 
 funcA:
-        LOAD  R2, 99
+        READ  R2, 99
         RET
 funcB:
-        LOAD  R2, 20          ; valittiin oikein
+        READ  R2, 20          ; valittiin oikein
         RET
 funcC:
-        LOAD  R2, 99
+        READ  R2, 99
         RET
 
 next2:
 ; --- Tapaus 2: indeksi 2 → funcZ ---
-        LOAD  R0, 2
+        READ  R0, 2
         CALLI R0, funcX, funcY, funcZ
         JUMP  done
 
 funcX:
-        LOAD  R3, 99
+        READ  R3, 99
         RET
 funcY:
-        LOAD  R3, 99
+        READ  R3, 99
         RET
 funcZ:
-        LOAD  R3, 30          ; valittiin oikein
+        READ  R3, 30          ; valittiin oikein
         RET
 
 done:

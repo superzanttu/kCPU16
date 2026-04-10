@@ -157,23 +157,23 @@ clock_handler:
         PUSH  R1
 
         ; phase++
-        LOAD  R0, [phase]
-        LOAD  R1, 1
+        READ  R0, [phase]
+        READ  R1, 1
         ADD   R0, R1
         STORE [phase], R0
 
         ; Jos phase >= 2, pysäytä ajastin
-        LOAD  R1, 2
+        READ  R1, 2
         CMP   R0, R1
         JGE   _ch_stop
 
         ; phase < 2: käynnistä 20 sekunnin ajastin uudelleen
-        LOAD  R0, 20000
+        READ  R0, 20000
         SCTMR R0
         JUMP  _ch_done
 
 _ch_stop:
-        LOAD  R0, 0
+        READ  R0, 0
         SCTMR R0
 
 _ch_done:
@@ -200,9 +200,9 @@ _ch_done:
 ; =============================================================================
 
 smul_div100:
-        LOAD  R2, 0x8000      ; etumerkkilipun maski (bitti 15)
-        LOAD  R3, 0           ; tulosmerkki: 0 = positiivinen, 1 = negatiivinen
-        LOAD  R5, 0           ; nollakonstantti vertailuja varten
+        READ  R2, 0x8000      ; etumerkkilipun maski (bitti 15)
+        READ  R3, 0           ; tulosmerkki: 0 = positiivinen, 1 = negatiivinen
+        READ  R5, 0           ; nollakonstantti vertailuja varten
 
         ; --- Tarkista R0:n etumerkki ---
         CPY   R4, R0
@@ -212,9 +212,9 @@ smul_div100:
 
         ; R0 on negatiivinen: negate (2-komplementti: ~R0 + 1)
         NOT   R0
-        LOAD  R4, 1
+        READ  R4, 1
         ADD   R0, R4
-        LOAD  R4, 1
+        READ  R4, 1
         XOR   R3, R4          ; käännä tulosmerkki
 
 _smul_r0_ok:
@@ -226,15 +226,15 @@ _smul_r0_ok:
 
         ; R1 on negatiivinen: negate
         NOT   R1
-        LOAD  R4, 1
+        READ  R4, 1
         ADD   R1, R4
-        LOAD  R4, 1
+        READ  R4, 1
         XOR   R3, R4          ; käännä tulosmerkki
 
 _smul_r1_ok:
         ; --- Etumerkitön kertolasku ja jako ---
         MUL   R0, R1          ; R0 = |A| × |B|
-        LOAD  R4, 100
+        READ  R4, 100
         DIV   R0, R4          ; R0 = (|A| × |B|) / 100
 
         ; --- Palauta etumerkki ---
@@ -243,7 +243,7 @@ _smul_r1_ok:
 
         ; Tulos on negatiivinen: negate
         NOT   R0
-        LOAD  R4, 1
+        READ  R4, 1
         ADD   R0, R4
 
 _smul_done:
@@ -270,38 +270,38 @@ _smul_done:
 
 draw_cube_frame:
         ; Lataa rotaatiokulma R13:een (käytetään eri VAIHE 1:ssä)
-        LOAD  R13, [angle]
+        READ  R13, [angle]
 
         ; --- VAIHE 1: Kärkipisteiden Y-akselin pyöritys ja projektio ---
-        LOAD  R15, 0          ; R15 = kärkipiste-indeksi (0–7)
+        READ  R15, 0          ; R15 = kärkipiste-indeksi (0–7)
 
 _dcf_vertex_loop:
         ; Lataa vx[R15], vy[R15], vz[R15]
-        LOAD  R0, cube_vx
+        READ  R0, cube_vx
         ADD   R0, R15
-        LOAD  R8, [R0]        ; R8 = vx (etumerkillinen)
+        READ  R8, [R0]        ; R8 = vx (etumerkillinen)
 
-        LOAD  R0, cube_vy
+        READ  R0, cube_vy
         ADD   R0, R15
-        LOAD  R9, [R0]        ; R9 = vy (etumerkillinen)
+        READ  R9, [R0]        ; R9 = vy (etumerkillinen)
 
-        LOAD  R0, cube_vz
+        READ  R0, cube_vz
         ADD   R0, R15
-        LOAD  R10, [R0]       ; R10 = vz (etumerkillinen)
+        READ  R10, [R0]       ; R10 = vz (etumerkillinen)
 
         ; Hae sin(angle): sin_table[angle]
-        LOAD  R0, sin_table
+        READ  R0, sin_table
         ADD   R0, R13
-        LOAD  R6, [R0]        ; R6 = sin(angle) × 100
+        READ  R6, [R0]        ; R6 = sin(angle) × 100
 
         ; Hae cos(angle): sin_table[(angle + 16) & 63]
-        LOAD  R0, 16
+        READ  R0, 16
         ADD   R0, R13         ; R0 = angle + 16
-        LOAD  R4, 63
+        READ  R4, 63
         AND   R0, R4          ; R0 = (angle + 16) & 63
-        LOAD  R4, sin_table
+        READ  R4, sin_table
         ADD   R0, R4          ; R0 = &sin_table[(angle+16)&63]
-        LOAD  R7, [R0]        ; R7 = cos(angle) × 100
+        READ  R7, [R0]        ; R7 = cos(angle) × 100
 
         ; Laske vx·cos/100
         ; smul_div100 clobbers R0–R5 mutta R6,R7,R8,R9,R10,R13,R14,R15 pysyvät
@@ -322,7 +322,7 @@ _dcf_vertex_loop:
         ; ny = vy (R9 säilyy muuttumattomana)
 
         ; --- Sovella skaalaus ja siirros tilan mukaan ---
-        LOAD  R4, 2
+        READ  R4, 2
         CMP   R14, R4
         JNZ   _dcf_mode_b
 
@@ -331,80 +331,80 @@ _dcf_vertex_loop:
         ADD   R11, R0         ; R11 = nx × 2  (etumerkitön ADD = 2-komplementin×2 ✓)
         CPY   R0, R9
         ADD   R9, R0          ; R9  = ny × 2
-        LOAD  R0, 80
+        READ  R0, 80
         ADD   R11, R0         ; R11 = screen_x
-        LOAD  R0, 48
+        READ  R0, 48
         ADD   R9, R0          ; R9  = screen_y
         JUMP  _dcf_store
 
 _dcf_mode_b:
         ; Tila B: suoraan, keskipiste (40, 24)
-        LOAD  R0, 40
+        READ  R0, 40
         ADD   R11, R0         ; R11 = screen_x
-        LOAD  R0, 24
+        READ  R0, 24
         ADD   R9, R0          ; R9  = screen_y
 
 _dcf_store:
         ; Tallenna proj_x[R15] ja proj_y[R15]
-        LOAD  R0, proj_x
+        READ  R0, proj_x
         ADD   R0, R15
         STORE [R0], R11       ; proj_x[R15] = screen_x
 
-        LOAD  R0, proj_y
+        READ  R0, proj_y
         ADD   R0, R15
         STORE [R0], R9        ; proj_y[R15] = screen_y
 
         ; Seuraava kärkipiste
-        LOAD  R0, 1
+        READ  R0, 1
         ADD   R15, R0
-        LOAD  R0, 8
+        READ  R0, 8
         CMP   R15, R0
         JNZ   _dcf_vertex_loop
 
         ; --- VAIHE 2: Piirrä 12 kaarta ---
         ; gfx_line clobbers R0–R12, mutta R13 ja R15 pysyvät!
-        LOAD  R13, 0          ; R13 = edge_table sanatason offset (0, 2, 4 … 22)
-        LOAD  R15, 0          ; R15 = kaarilaskuri (0–11)
+        READ  R13, 0          ; R13 = edge_table sanatason offset (0, 2, 4 … 22)
+        READ  R15, 0          ; R15 = kaarilaskuri (0–11)
 
 _dcf_edge_loop:
         ; Lue v0 ja v1 edge_table:sta
-        LOAD  R0, edge_table
+        READ  R0, edge_table
         ADD   R0, R13
-        LOAD  R4, [R0]        ; R4 = v0
-        LOAD  R5, 1
+        READ  R4, [R0]        ; R4 = v0
+        READ  R5, 1
         ADD   R0, R5          ; R0 → edge_table[R13 + 1]
-        LOAD  R5, [R0]        ; R5 = v1
+        READ  R5, [R0]        ; R5 = v1
 
         ; Lataa proj_x[v0] → R0
-        LOAD  R0, proj_x
+        READ  R0, proj_x
         ADD   R0, R4
-        LOAD  R0, [R0]        ; R0 = proj_x[v0]
+        READ  R0, [R0]        ; R0 = proj_x[v0]
 
         ; Lataa proj_y[v0] → R1
-        LOAD  R1, proj_y
+        READ  R1, proj_y
         ADD   R1, R4
-        LOAD  R1, [R1]        ; R1 = proj_y[v0]
+        READ  R1, [R1]        ; R1 = proj_y[v0]
 
         ; Lataa proj_x[v1] → R2
-        LOAD  R2, proj_x
+        READ  R2, proj_x
         ADD   R2, R5
-        LOAD  R2, [R2]        ; R2 = proj_x[v1]
+        READ  R2, [R2]        ; R2 = proj_x[v1]
 
         ; Lataa proj_y[v1] → R3
-        LOAD  R3, proj_y
+        READ  R3, proj_y
         ADD   R3, R5
-        LOAD  R3, [R3]        ; R3 = proj_y[v1]
+        READ  R3, [R3]        ; R3 = proj_y[v1]
 
         ; Piirrä viiva (R0,R1) → (R2,R3)
         ; gfx_line clobbers R0–R12 mutta EI R13, R14, R15
         CALL  gfx_line
 
         ; Edistä kaarilaskuria
-        LOAD  R0, 2
+        READ  R0, 2
         ADD   R13, R0         ; R13 += 2  (kaksi sanaa per kaari)
-        LOAD  R0, 1
+        READ  R0, 1
         ADD   R15, R0         ; R15 += 1
-        LOAD  R0, 12
+        READ  R0, 12
         CMP   R15, R0
         JNZ   _dcf_edge_loop
 
@@ -416,7 +416,7 @@ _dcf_edge_loop:
 
 main:
         ; Rekisteröi kellokeskeytyksen käsittelijä (INT 9 -vektori = osoite 9)
-        LOAD  R0, clock_handler
+        READ  R0, clock_handler
         STORE [INT_CLOCK], R0
 
         ; Salli (laitteisto)keskeytykset
@@ -424,25 +424,25 @@ main:
 
 restart_loop:
         ; Nollaa tilamuuttujat — phase ja angle ovat vierekkäisiä sanoja muistissa
-        LOAD  R0, phase
-        LOAD  R1, angle
-        LOAD  R2, 0
+        READ  R0, phase
+        READ  R1, angle
+        READ  R2, 0
         FILL  R0, R1, R2
 
         ; Aseta piirtotila: etuväri (pikselit piirretään päälle, ei XOR)
-        LOAD  R0, GFX_DRAW_FG
+        READ  R0, GFX_DRAW_FG
         CALL  gfx_set_draw_mode
 
         ; Käynnistä 20 sekunnin kellokeskeytys tila B:lle
-        LOAD  R0, 20000
+        READ  R0, 20000
         SCTMR R0
 
         ; Aseta grafiikkatila B
-        LOAD  R0, GFX_MODE_B
-        LOAD  R1, GFX_MODE_REG
+        READ  R0, GFX_MODE_B
+        READ  R1, GFX_MODE_REG
         STORE [R1], R0
 
-        LOAD  R14, 1          ; R14 = 1 (tila B)
+        READ  R14, 1          ; R14 = 1 (tila B)
 
 ; --- Tila B -piirtosilmukka ---
 b_loop:
@@ -450,29 +450,29 @@ b_loop:
         CALL  draw_cube_frame
 
         ; Kasvata rotaatiokulmaa (0–63), nollaa kierroksen jälkeen
-        LOAD  R0, [angle]
-        LOAD  R1, 1
+        READ  R0, [angle]
+        READ  R1, 1
         ADD   R0, R1
-        LOAD  R1, 64
+        READ  R1, 64
         CMP   R0, R1
         JNZ   _b_no_wrap
-        LOAD  R0, 0
+        READ  R0, 0
 _b_no_wrap:
         STORE [angle], R0
 
         ; Tarkista vaihe — jos edelleen 0, jatka tila B:tä
-        LOAD  R0, [phase]
-        LOAD  R1, 0
+        READ  R0, [phase]
+        READ  R1, 0
         CMP   R0, R1
         JZ    b_loop
 
         ; Vaihe muuttui: siirry tila C:hen
         ; (clock_handler on jo käynnistänyt 20 s ajastimen uudelleen)
-        LOAD  R0, GFX_MODE_C
-        LOAD  R1, GFX_MODE_REG
+        READ  R0, GFX_MODE_C
+        READ  R1, GFX_MODE_REG
         STORE [R1], R0
 
-        LOAD  R14, 2          ; R14 = 2 (tila C)
+        READ  R14, 2          ; R14 = 2 (tila C)
 
 ; --- Tila C -piirtosilmukka ---
 c_loop:
@@ -480,19 +480,19 @@ c_loop:
         CALL  draw_cube_frame
 
         ; Kasvata rotaatiokulmaa
-        LOAD  R0, [angle]
-        LOAD  R1, 1
+        READ  R0, [angle]
+        READ  R1, 1
         ADD   R0, R1
-        LOAD  R1, 64
+        READ  R1, 64
         CMP   R0, R1
         JNZ   _c_no_wrap
-        LOAD  R0, 0
+        READ  R0, 0
 _c_no_wrap:
         STORE [angle], R0
 
         ; Tarkista vaihe — jos edelleen 1, jatka tila C:tä
-        LOAD  R0, [phase]
-        LOAD  R1, 1
+        READ  R0, [phase]
+        READ  R1, 1
         CMP   R0, R1
         JZ    c_loop
 

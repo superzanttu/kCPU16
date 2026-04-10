@@ -6,14 +6,14 @@
 
         .origin 0x0200
 
-        LOAD  R0, [CLOCK_YEAR]   ; Lue vuosi MMIO:sta
-        LOAD  R1, 2000
+        READ  R0, [CLOCK_YEAR]   ; Lue vuosi MMIO:sta
+        READ  R1, 2000
         CMP   R0, R1
         JGT   ok                 ; vuosi > 2000 -> OK
-        LOAD  R0, 0              ; fail
+        READ  R0, 0              ; fail
         JUMP  done
 ok:
-        LOAD  R0, 1              ; pass
+        READ  R0, 1              ; pass
 done:
         HALT
 

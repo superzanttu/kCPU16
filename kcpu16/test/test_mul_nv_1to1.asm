@@ -7,13 +7,13 @@
         .origin 0x0200
 
         ; Vaihe 1: aseta N=1, V=1 (0→1)
-        LOAD  R0, 2
-        LOAD  R1, 0x4000
+        READ  R0, 2
+        READ  R1, 0x4000
         MUL   R0, R1          ; 2×16384=0x8000: N=1, V=1, C=0, Z=0
 
         ; Vaihe 2: sama operaatio → N:1→1, V:1→1
-        LOAD  R0, 2
-        LOAD  R1, 0x4000
+        READ  R0, 2
+        READ  R1, 0x4000
         MUL   R0, R1          ; 0x8000: N=1, V=1 (1→1)
 
         HALT

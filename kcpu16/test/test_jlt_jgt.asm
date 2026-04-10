@@ -7,19 +7,19 @@
         .origin 0x0200
 
         ; --- JLT: 3 < 7 → hyppy otetaan ---
-        LOAD  R0, 3
-        LOAD  R1, 7
+        READ  R0, 3
+        READ  R1, 7
         CMP   R0, R1          ; N=1, V=0 → N≠V
         JLT   jgt_test
-        LOAD  R2, 99          ; ei suoriteta
+        READ  R2, 99          ; ei suoriteta
 
 jgt_test:
         ; --- JGT: 9 > 4 → hyppy otetaan ---
-        LOAD  R0, 9
-        LOAD  R1, 4
+        READ  R0, 9
+        READ  R1, 4
         CMP   R0, R1          ; Z=0, N=0, V=0 → Z=0 ja N=V
         JGT   done
-        LOAD  R3, 99          ; ei suoriteta
+        READ  R3, 99          ; ei suoriteta
 
 done:
         HALT

@@ -5,18 +5,18 @@
 
         .origin 0x0200
 
-        LOAD  R4,  0xABCD
-        LOAD  R8,  0x1234
-        LOAD  R15, 0x5678
+        READ  R4,  0xABCD
+        READ  R8,  0x1234
+        READ  R15, 0x5678
 
         PUSH  R4               ; pino: [0xABCD]
         PUSH  R8               ; pino: [0xABCD, 0x1234]
         PUSH  R15              ; pino: [0xABCD, 0x1234, 0x5678]
 
         ; Nollaa rekisterit varmistaaksemme että POP hakee pinosta
-        LOAD  R4,  0
-        LOAD  R8,  0
-        LOAD  R15, 0
+        READ  R4,  0
+        READ  R8,  0
+        READ  R15, 0
 
         POP   R15              ; R15 = 0x5678
         POP   R8               ; R8  = 0x1234

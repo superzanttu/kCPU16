@@ -5,11 +5,11 @@
 
         .origin 0x0200
 
-        LOAD  R0, 111
-        LOAD  R1, 222
+        READ  R0, 111
+        READ  R1, 222
         CPY   R8,  R0          ; R8  = R0 = 111
         CPY   R9,  R1          ; R9  = R1 = 222
-        LOAD  R12, 0xFF
+        READ  R12, 0xFF
         CPY   R2,  R12         ; R2  = R12 = 255
         CPY   R15, R9          ; R15 = R9  = 222
 

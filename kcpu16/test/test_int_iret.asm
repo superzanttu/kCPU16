@@ -17,22 +17,22 @@
 .origin 0x0200
 
 ; Aseta keskeytysvektori 3 (breakpoint) osoittamaan handler:iin
-LOAD  R0, handler
+READ  R0, handler
 STORE [0x0003], R0  ; vektori 3 = handler:in osoite
 
 ; Aseta testiarvo
-LOAD  R0, 0
-LOAD  R1, 0
+READ  R0, 0
+READ  R1, 0
 
 ; Kutsu INT 3 (breakpoint)
 INT   3
 
 ; Paluu INT:stä tulee tähän
-LOAD  R1, 77          ; tämä suoritetaan IRET:in jälkeen
+READ  R1, 77          ; tämä suoritetaan IRET:in jälkeen
 HALT
 
 handler:
-    LOAD  R0, 42      ; handler asettaa R0=42
+    READ  R0, 42      ; handler asettaa R0=42
     IRET              ; palaa INT:n jälkeiseen käskyyn
 
 .expect_reg   R0, 42         ; handler suoritettiin

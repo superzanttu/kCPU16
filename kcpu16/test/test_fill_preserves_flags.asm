@@ -6,14 +6,14 @@
         .origin 0x0200
 
         ; Aseta liput tunnettuun tilaan: ADD joka asettaa C=1
-        LOAD  R3, 0xFFFF
-        LOAD  R4, 1
+        READ  R3, 0xFFFF
+        READ  R4, 1
         ADD   R3, R4            ; R3 = 0, Z=1, N=0, C=1, V=0
 
         ; Suorita FILL — sen ei pidä muuttaa lippuja
-        LOAD  R0, 0x0900
-        LOAD  R1, 0x0905
-        LOAD  R2, 0x1111
+        READ  R0, 0x0900
+        READ  R1, 0x0905
+        READ  R2, 0x1111
         FILL  R0, R1, R2
 
         HALT

@@ -12,42 +12,42 @@
 .origin 0x0200
 
 ; Case 1: A = B
-LOAD  R0, 100
-LOAD  R1, 100
+READ  R0, 100
+READ  R1, 100
 CMP   R0, R1          ; Z=1, N=0, C=0, V=0
 JZ    case2
-LOAD  R2, 99          ; ei suoriteta
+READ  R2, 99          ; ei suoriteta
 case2:
 
 ; Case 2: A > B (unsigned ja signed)
-LOAD  R0, 200
-LOAD  R1, 50
+READ  R0, 200
+READ  R1, 50
 CMP   R0, R1          ; Z=0, N=0, C=0, V=0
 JGT   case3
-LOAD  R2, 99
+READ  R2, 99
 case3:
 
 ; Case 3: A < B
-LOAD  R0, 10
-LOAD  R1, 500
+READ  R0, 10
+READ  R1, 500
 CMP   R0, R1          ; Z=0, C=1 (borrow: 10 < 500)
 JLT   case4
-LOAD  R2, 99
+READ  R2, 99
 case4:
 
 ; Case 4: Signed: 0x8000 (-32768) vs 0x0001 (1)
 ; CMP: 0x8000 - 0x0001 = 0x7FFF
 ; N=0, V=1 -> N!=V -> signed less than!
-LOAD  R0, 0x8000
-LOAD  R1, 0x0001
+READ  R0, 0x8000
+READ  R1, 0x0001
 CMP   R0, R1
 JLT   case5            ; -32768 < 1 -> otettu
-LOAD  R2, 99
+READ  R2, 99
 case5:
 
 ; Viimeinen CMP: varmista operandit ehjät
-LOAD  R0, 42
-LOAD  R1, 42
+READ  R0, 42
+READ  R1, 42
 CMP   R0, R1
 
 HALT

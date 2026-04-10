@@ -9,13 +9,13 @@
         .origin 0x0200
 
         ; Vaihe 1: aseta Z=1, C=1, V=1 (0→1)
-        LOAD  R0, 0x8000
-        LOAD  R1, 0x8000
+        READ  R0, 0x8000
+        READ  R1, 0x8000
         ADD   R0, R1          ; 0x8000+0x8000=0x10000→0: Z=1, C=1, V=1, N=0
 
         ; Vaihe 2: sama operaatio uudelleen → Z:1→1, C:1→1, V:1→1
-        LOAD  R0, 0x8000
-        LOAD  R1, 0x8000
+        READ  R0, 0x8000
+        READ  R1, 0x8000
         ADD   R0, R1          ; Z=1, C=1, V=1 (1→1 kaikille)
 
         HALT

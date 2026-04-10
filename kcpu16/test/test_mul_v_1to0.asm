@@ -7,13 +7,13 @@
         .origin 0x0200
 
         ; Aseta V=1 ADD:lla (0x7FFF + 1 = 0x8000: signed overflow → V=1)
-        LOAD  R0, 0x7FFF
-        LOAD  R1, 1
+        READ  R0, 0x7FFF
+        READ  R1, 1
         ADD   R0, R1          ; V=1, N=1, C=0, Z=0
 
         ; MUL pienillä arvoilla → V=0 (V:1→0)
-        LOAD  R0, 2
-        LOAD  R1, 4
+        READ  R0, 2
+        READ  R1, 4
         MUL   R0, R1          ; 2 × 4 = 8: V=0 (1→0), C=0, Z=0, N=0
 
         HALT

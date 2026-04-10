@@ -7,8 +7,8 @@
 
 .origin 0x0200
 
-LOAD  R0, 0x8000
-LOAD  R1, 0x8000
+READ  R0, 0x8000
+READ  R1, 0x8000
 ADD   R0, R1          ; 0x8000 + 0x8000 = 0x10000 -> R0=0
 
 HALT

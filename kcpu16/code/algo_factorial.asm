@@ -48,8 +48,8 @@
         ; -----------------------------------------------
         ; Pääohjelma: Alusta ja kutsu aliohjelmaa
         ; -----------------------------------------------
-        LOAD  R0, 5     ; R0 = n = 5 (laskettava kertoma)
-        LOAD  R3, 0xF840 ; R3 = näyttöpointteri (rivi 1, sarake 64)
+        READ  R0, 5     ; R0 = n = 5 (laskettava kertoma)
+        READ  R3, 0xF840 ; R3 = näyttöpointteri (rivi 1, sarake 64)
 
         ; -----------------------------------------------
         ; Aliohjelmakutsu
@@ -61,17 +61,17 @@
         ; Aliohjelma palasi, R0 = 120
         ; Tulosta tulos "120" näytölle
         ; -----------------------------------------------
-        LOAD  R2, 1        ; R2 = 1 (näyttöpoitnerin askel)
+        READ  R2, 1        ; R2 = 1 (näyttöpoitnerin askel)
 
-        LOAD  FP, 0xE031   ; '1'
+        READ  FP, 0xE031   ; '1'
         STORE [R3], FP
         ADD   R3, R2
 
-        LOAD  FP, 0xE032   ; '2'
+        READ  FP, 0xE032   ; '2'
         STORE [R3], FP
         ADD   R3, R2
 
-        LOAD  FP, 0xE030   ; '0'
+        READ  FP, 0xE030   ; '0'
         STORE [R3], FP
 
         ; -----------------------------------------------
@@ -109,8 +109,8 @@ fact_iter:
         ; Alusta aliohjelma
         ; -----------------------------------------------
         CPY   R1, R0    ; R1 = n (laskuri, laskee alaspäin)
-        LOAD  R0, 1     ; R0 = 1 (tulos, kerrotaan ylöspäin)
-        LOAD  R2, 1     ; R2 = 1 (vakio dekrementille)
+        READ  R0, 1     ; R0 = 1 (tulos, kerrotaan ylöspäin)
+        READ  R2, 1     ; R2 = 1 (vakio dekrementille)
 
 ; -----------------------------------------------
 ; Kertomissilmukka
@@ -122,14 +122,14 @@ fact_loop:
         ; -----------------------------------------------
         STORE [0x0212], R0  ; Tallenna tulos väliaikaisesti muistiin
         CPY   FP, R1       ; FP = laskurin kopio
-        LOAD  R0, 0xE030   ; R0 = valkoinen '0' -pohja
+        READ  R0, 0xE030   ; R0 = valkoinen '0' -pohja
         ADD   FP, R0       ; FP = '0' + laskuri = numeromerkki
-        LOAD R0, [0x0212]  ; Palauta tulos R0:aan
+        READ R0, [0x0212]  ; Palauta tulos R0:aan
         STORE [R3], FP  ; Kirjoita merkki näytölle
         ADD   R3, R2       ; Seuraava näyttöpaikka
 
         ; Tulosta välilyönti
-        LOAD  FP, 0xE020   ; ' '
+        READ  FP, 0xE020   ; ' '
         STORE [R3], FP
         ADD   R3, R2
 

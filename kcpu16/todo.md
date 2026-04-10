@@ -16,15 +16,15 @@ Tehtävät on merkitty hakasulkeilla, ja niiden tilaa voidaan päivittää seura
 ## Ohje tekoälylle: 
 
 - Saat työskennellä kerrallaan vain yhden tehtävän parissa.
-- Valitset Tehtävät-kappaleesta listan ensimmäisen tehtävän. 
-- Kun ryhdyt suorittamaan tehtävää, päivitä sen tilaksi [W] ja aloita tehtävän suorittaminen. Tämä on tehtävä ehdottomasti ennen mitään tehtävään liittyviä toimia. Lisää tehtävän alle sisennettynä "START: YYYY-MM-DD HH:MM:SS" -rivi, joka kertoo milloin aloitit tehtävän suorittamisen. Tämä auttaa seuraamaan tehtävien etenemistä ja arvioimaan suoritusaikoja.
-- Jos huomaat, että tehtävä on epäselvä tai siinä on ongelmia, merkitse se tilaan [?] ja kuvaile ongelma lyhyesti. Lisää tehtävän alle sisennettynä "ISSUE: YYYY-MM-DD HH:MM:SS" -rivi, joka kertoo milloin ongelma havaittiin. Tämä auttaa dokumentoimaan ongelmat ja varmistamaan, että ne käsitellään ennen kuin tehtävää yritetään suorittaa.
+- Valitset Tehtävät-kappaleesta listan ensimmäisen tehtävän, ellet ole analysoinut peräkkäisiä tehtäviä ja päättänyt, että on järkevää suorittaa ne ryhminä.
+- Kun ryhdyt suorittamaan tehtävää, päivitä sen tilaksi [W] ja aloita tehtävän suorittaminen. Tämä on tehtävä ehdottomasti ennen mitään tehtävään liittyviä toimia.
+- Jos huomaat, että tehtävä on epäselvä tai siinä on ongelmia, merkitse se tilaan [?] ja kuvaile ongelma lyhyesti.
 - Älä yritä suorittaa tehtävää, ennen kuin se on selkeä ja toteuttamiskelpoinen. 
 - Älä muuta tehtävän alkuperäistä kuvausta, mutta voit lisätä kommentteja tai huomautuksia, jotka auttavat selventämään tehtävää, sen vaatimuksia tai epäselvyyksiä. 
 - Voit myös ehdottaa tehtävän jakamista pienempiin osiin, jos se vaikuttaa liian suurelta tai monimutkaiselta toteutettavaksi kerralla.
 - Voit analysoida tehtävien vaatimuksia ja suorittaa niitä ryhminä.
 - Mikäli nämä ohjeet ovat epäselvät, kuvaile ongelma tämän listan alle, ja lopeta tehtävien suorittaminen.
-- Suoritettuasi tehtävän, päivitä sen tilaksi [X] ja lisää tehtävän alle sisennettynä "DONE: YYYY-MM-DD HH:MM:SS" -rivi, joka kertoo milloin tehtävä saatiin valmiiksi. Tämä auttaa seuraamaan tehtävien suoritusaikoja ja arvioimaan tulevien tehtävien vaatimuksia.
+- Suoritettuasi tehtävän, päivitä sen tilaksi [X] ja lisää tehtävän alle sisennettynä "- DONE: YYYY-MM-DD-HH-MM-SS" -rivi, joka kertoo milloin tehtävä saatiin valmiiksi. Tämä auttaa seuraamaan tehtävien suoritusaikoja ja arvioimaan tulevien tehtävien vaatimuksia.
   
 ## Tehtävät
 
@@ -45,13 +45,11 @@ Tehtävät on merkitty hakasulkeilla, ja niiden tilaa voidaan päivittää seura
 [X] Lisää ohjelmaan MAX-suoritustila ja vastaavat toiminnot käyttöliittymään kuin FAST-tilalla on.. TÄssä tilassa näytön päiviytys tapahtuu vain, kun ohjelma on pysähtynyt, eikä joka käskyn jälkeen. Tämä mahdollistaa erittäin nopean suorituksen ilman näytön päivityksen aiheuttamaa hidastumista. Ohjelman käyttöliittymän tulee kuitenkin toimia normaalisti, ja käyttäjän tulee pystyä pysäyttämään ohjelma milloin tahansa. Tämä tila on hyödyllinen erityisesti silloin, kun halutaan suorittaa suuri määrä käskyjä nopeasti ilman tarvetta nähdä jokaisen käskyn vaikutusta näytöllä.
 [X] Lisää dokumentaatioon kuvaus siitä, miten MAX-tila toimii ja miten se vaikuttaa ohjelman suoritukseen.
 [X] Lisää dokumentaation kuvaus siitä miten ja milloin näppäimenpainallukset välitetään ohjelman suoritukseen.
-    START: 2026-04-10 00:00:00
-    DONE: 2026-04-10 00:00:01
-[ ] Varmista että assebler sallii vain LOAD ja STORE käskyt, eikä salli käskyjen erilaisten osoitusmuotojen käyttöä. Myöskään LOAD-käskun käyttäminen assembler koodissa ei ole sallittu. Tarkoituksena on että ohjelmoija käyttää vain READ ja STORE käskyjä, ja että assembler hoitaa oikeiden LOAD/STORE-käskyjen generoinnin eri osoitusmuodoille. Tämä auttaa pitämään assembler-koodin selkeänä ja yksinkertaisena, ja varmistaa että kaikki muistiviittaukset tapahtuvat turvallisesti ja oikein.
-[ ] Lisää dokumentaatioon kuvaus siitä, että assembler sallii vain READ ja STORE käytön.
-[ ] Lisää KCPU16:n näyttöön kaksoisbufferionti, joka mahdollistaa näytön päivittämisen ilman välkkymistä. Tämä tarkoittaa, että kaikki näytölle piirretyt muutokset tehdään ensin taustalla olevaan bufferiin, ja sitten koko buffer kopioidaan kerralla näytölle. Tämä parantaa suorituskykyä ja tekee näytön päivityksestä sujuvampaa, erityisesti silloin, kun piirretään paljon pikseleitä tai tehdään suuria muutoksia näytölle.
+[X] Varmista että assebler sallii vain LOAD ja STORE käskyt, eikä salli käskyjen erilaisten osoitusmuotojen käyttöä. Myöskään LOAD-käskyn käyttäminen assembler koodissa ei ole sallittu. Tarkoituksena on että ohjelmoija käyttää vain READ ja STORE käskyjä, ja että assembler hoitaa oikeiden LOAD/STORE-käskyjen generoinnin eri osoitusmuodoille. Tämä auttaa pitämään assembler-koodin selkeänä ja yksinkertaisena, ja varmistaa että kaikki muistiviittaukset tapahtuvat turvallisesti ja oikein.
+[X] Lisää dokumentaatioon kuvaus siitä, että assembler sallii vain READ ja STORE käytön.
+[ ] Lisää KCPU16:n näyttöön kaksoisbufferionti, joka mahdollistaa näytön päivittämisen ilman välkkymistä. Tämä tarkoittaa, että kaikki näytölle piirretyt muutokset tehdään ensin taustalla olevaan bufferiin, ja sitten koko buffer kopioidaan kerralla näytölle. Tämä parantaa suorituskykyä ja tekee näytön päivityksestä sujuvampaa, erityisesti silloin, kun piirretään paljon pikseleitä tai tehdään suuria muutoksia näytölle. Säilytä kuitenkin mahdollisuus olla käyttämättä kaksoisbufferointia, jos käyttäjä haluaa nähdä jokaisen käskyn vaikutuksen näytöllä välittömästi.
 [ ] Lisää dokumentaatioon kuvaus siitä, miten kaksoisbufferointi toimii ja miten se parantaa näytön päivitystä.
-[ ] Määritä kaikille käskyille suoritusikat, jotka kuvaavat kuinka kauan kunkin käskyn suorittaminen kestää. Nämä ajat voivat perustua esimerkiksi käskyjen monimutkaisuuteen tai siihen, kuinka paljon muistiviittauksia ne tekevät. Käskyjen suoritusajat voidaan määrittää esimerkiksi mikrosekunteina tai millisekunteina, ja ne voivat vaihdella käskyittäin. Tämä auttaa tekemään ohjelman suorituksesta realistisempaa ja antaa käyttäjälle paremman käsityksen siitä, kuinka kauan ohjelman suorituminen kestää.
+[ ] Määritä kaikille käskyille suorituajat, jotka kuvaavat kuinka kauan kunkin käskyn suorittaminen kestää. Nämä ajat voivat perustua esimerkiksi käskyjen monimutkaisuuteen tai siihen, kuinka paljon muistiviittauksia ne tekevät. Käskyjen suoritusajat voidaan määrittää esimerkiksi mikrosekunteina tai millisekunteina, ja ne voivat vaihdella käskyittäin. Tämä auttaa tekemään ohjelman suorituksesta realistisempaa ja antaa käyttäjälle paremman käsityksen siitä, kuinka kauan ohjelman suorituminen kestää.
 [ ] Lisää dokumentaatioon kuvaus siitä, miten käskyjen suoritusajat määritetään ja miten ne vaikuttavat ohjelman suoritukseen.
 [ ] Muuta toimintaa niin että uptime-laskurin arvon kasvattamiseen käytetään konekielisille käskyille määriteltyjä suoritusaikoja.
 [ ] Muuta Ajastinkeskeytyksen (TMR) ja Kellokeskeytyksen (CTMR) toimintaa niin, että ne perustuvat käskyjen suoritusaikoihin eikä pelkästään suoritettujen käskyjen lukumäärään. Tämä tarkoittaa, että keskeytykset laukaistaan, kun käskyjen suoritukseen kuluva aika saavuttaa tietyn rajan, eikä vain silloin, kun tietty määrä käskyjä on suoritettu. Tämä tekee keskeytyksistä realistisempia ja antaa käyttäjälle paremman käsityksen siitä, kuinka kauan ohjelman suorituminen kestää. Tämä mahdollistaa prosessorin toiminnan hidastamisen ilman ongelmia.

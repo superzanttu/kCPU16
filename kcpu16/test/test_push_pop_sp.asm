@@ -13,12 +13,12 @@
 CPY   R0, SP          ; R0 = alkuperäinen SP = 0xFFFF
 
 ; PUSH R1 (100): SP pitäisi olla 0xFFFE
-LOAD  R1, 100
+READ  R1, 100
 PUSH  R1
 CPY   R2, SP          ; R2 = 0xFFFE
 
 ; Toinen PUSH (200): SP pitäisi olla 0xFFFD
-LOAD  R1, 200
+READ  R1, 200
 PUSH  R1
 CPY   R3, SP          ; R3 = 0xFFFD
 

@@ -14,7 +14,7 @@ label:                  ; Label (valinnainen, omalla rivillä tai käskyn edess�
                         ; Kommentit puolipisteellä
 ```
 
-- Mnemonikit ovat kirjainkoosta riippumattomia (`LOAD` = `load`)
+- Mnemonikit ovat kirjainkoosta riippumattomia (`READ` = `read`)
 - Rekisterinimet ovat kirjainkoosta riippumattomia (`R0` = `r0`)
 - Labelit päättyvät kaksoispisteeseen määrittelyssä, mutta viitattaessa kaksoispisteen saa jättää pois
 - Tyhjät rivit ja ylimääräiset välilyönnit ovat sallittuja
@@ -26,16 +26,16 @@ label:                  ; Label (valinnainen, omalla rivillä tai käskyn edess�
 | Syntaksi      | Tyyppi                                                | Esimerkki              |
 | ------------- | ----------------------------------------------------- | ---------------------- |
 | `R0`–`SP`     | Rekisteri (kirjainkoosta riippumaton)                 | `ADD R0, R1`           |
-| `42`          | Desimaali-literaali                                   | `LOAD R0, 42`          |
-| `0xFF`        | Heksadesimaali-literaali                              | `LOAD R0, 0xFF`        |
-| `0b1010`      | Binääri-literaali                                     | `LOAD R0, 0b1010`      |
-| `0o52`        | Oktaali-literaali                                     | `LOAD R0, 0o52`        |
+| `42`          | Desimaali-literaali                                   | `READ R0, 42`          |
+| `0xFF`        | Heksadesimaali-literaali                              | `READ R0, 0xFF`        |
+| `0b1010`      | Binääri-literaali                                     | `READ R0, 0b1010`      |
+| `0o52`        | Oktaali-literaali                                     | `READ R0, 0o52`        |
 | `label`       | Label-viittaus                                        | `JUMP loop`            |
-| `VRAM_START`  | Arkkitehtuurivakio (ks. kohta 4)                      | `LOAD R0, VRAM_START`  |
-| `NIMI`        | Käyttäjän vakio (`.const`, ks. kohta 5)               | `LOAD R0, BUFFER_SIZE` |
-| `[addr]`      | Absoluuttinen muistiosoite (ks. kohta 6)              | `LOAD R0, [0x3000]`    |
-| `[reg]`       | Epäsuora muistiosoite rekisterin kautta (ks. kohta 6) | `LOAD R0, [R1]`        |
-| `[FP+offset]` | FP-suhteellinen muistiosoite (ks. kohta 6)            | `LOAD R0, [FP+2]`      |
+| `VRAM_START`  | Arkkitehtuurivakio (ks. kohta 4)                      | `READ R0, VRAM_START`  |
+| `NIMI`        | Käyttäjän vakio (`.const`, ks. kohta 5)               | `READ R0, BUFFER_SIZE` |
+| `[addr]`      | Absoluuttinen muistiosoite (ks. kohta 6)              | `READ R0, [0x3000]`    |
+| `[reg]`       | Epäsuora muistiosoite rekisterin kautta (ks. kohta 6) | `READ R0, [R1]`        |
+| `[FP+offset]` | FP-suhteellinen muistiosoite (ks. kohta 6)            | `READ R0, [FP+2]`      |
 
 Rekisterit: `R0`–`R15` (yleiskäyttöiset), `FP` (frame pointer), `SP` (stack pointer). Kirjainkoosta riippumaton.
 
@@ -223,12 +223,18 @@ MY_CONST:                  ; VIRHE: nimi on jo .const-vakio
 
 ---
 
-# 6. Muistiosoitustavat ja LOAD/STORE-syntaksi
+# 6. Muistiosoitustavat: READ ja STORE
 
-`LOAD`- ja `STORE`-käskyissä voidaan käyttää hakasulkunotaatiota `[...]`
+Assembler-koodissa sallitaan ainoastaan kaksi datansiirtomnemoniikkaa:
+**`READ`** (lukeminen, immediate-lataus tai muistiluku) ja **`STORE`** (kirjoittaminen muistiin).
+Konekielen tasolla käytetyt `LOAD`, `READ_IND`, `READ_REL`, `STOREI`, `STORE_IND` jne.
+tuotetaan assemblerin toimesta automaattisesti — ohjelmoija ei käytä niitä
+suoraan assembler-koodissa.
+
+`READ`- ja `STORE`-käskyissä voidaan käyttää hakasulkunotaatiota `[...]`
 muistiosoituksen tarkentamiseen. Assembler valitsee sopivan konekielikäskyn
 automaattisesti hakasulkumuodon perusteella — ohjelmoija kirjoittaa aina vain
-`LOAD` tai `STORE`.
+`READ` tai `STORE`.
 
 ## 6.1 Osoitusmoodit
 
@@ -238,20 +244,24 @@ automaattisesti hakasulkumuodon perusteella — ohjelmoija kirjoittaa aina vain
 | `[reg]`       | Epäsuora      | Osoite on rekisterin arvo                   |
 | `[FP+offset]` | Suhteellinen  | Osoite on `FP + offset` (aliohjelman kehys) |
 
-## 6.2 LOAD reg, \[...\]
+## 6.2 READ reg, arvo ja READ reg, \[...\]
 
-`LOAD`-käsky hakasulkunotaatiolla lukee arvon muistista suoraan rekisteriin.
+`READ` on ainoa sallittu mnemoniikka datan lataamiseen rekisteriin:
 
-| Syntaksi              | Toiminta            |
-| --------------------- | ------------------- |
-| `LOAD reg, [addr]`    | `reg ← [addr]`      |
-| `LOAD reg, [regS]`    | `reg ← [regS]`      |
-| `LOAD reg, [FP+offs]` | `reg ← [FP + offs]` |
+| Syntaksi              | Toiminta                 | Tuotettu konekieli |
+| --------------------- | ------------------------ | ------------------ |
+| `READ reg, arvo`      | `reg ← arvo` (immediate) | `LOAD`             |
+| `READ reg, label`     | `reg ← label-osoite`     | `LOAD`             |
+| `READ reg, [addr]`    | `reg ← [addr]`           | `READ`             |
+| `READ reg, [regS]`    | `reg ← [regS]`           | `READ_IND`         |
+| `READ reg, [FP+offs]` | `reg ← [FP + offs]`      | `READ_REL`         |
 
 ```asm
-LOAD R0, [0x3000]       ; Lue osoitteesta 0x3000 (absoluuttinen)
-LOAD R0, [R1]           ; Lue osoitteesta, jonka R1 sisältää (epäsuora)
-LOAD R0, [FP+2]         ; Lue aliohjelman paikallismuuttuja indeksillä 2 (suhteellinen)
+READ R0, 42             ; Lataa välitön arvo 42 rekisteriin R0
+READ R0, VRAM_START     ; Lataa arkkitehtuurivakion arvo R0:aan
+READ R0, [0x3000]       ; Lue osoitteesta 0x3000 (absoluuttinen)
+READ R0, [R1]           ; Lue osoitteesta, jonka R1 sisältää (epäsuora)
+READ R0, [FP+2]         ; Lue aliohjelman paikallismuuttuja indeksillä 2 (suhteellinen)
 ```
 
 ## 6.3 STORE \[...\], lähde
@@ -288,8 +298,8 @@ STORE [FP+2], 99        ; Kirjoita välitön arvo paikallismuuttujaan (suhteelli
 
 ; Laske 10+20 ja tallenna tulos muistiin
 start:
-    LOAD  R0, 10
-    LOAD  R1, 20
+    READ  R0, 10
+    READ  R1, 20
     ADD   R0, R1        ; R0 = 30
     STORE [0x3000], R0  ; [0x3000] = 30
     HALT
@@ -304,8 +314,8 @@ start:
 .const MAX_VAL,     0x00FF
 
 start:
-    LOAD  R0, BUFFER_SIZE   ; R0 = 256
-    LOAD  R1, MAX_VAL       ; R1 = 255
+    READ  R0, BUFFER_SIZE   ; R0 = 256
+    READ  R1, MAX_VAL       ; R1 = 255
     ADD   R0, R1
     HALT
 ```
@@ -316,16 +326,16 @@ start:
 .origin 0x0200
 
 .macro INIT_REGS        ; Makron määrittely
-    LOAD R0, 0
-    LOAD R1, 0
+    READ R0, 0
+    READ R1, 0
 .endmacro
 
 START:
     INIT_REGS           ; Makron kutsu ekspansoi käskyt tähän
-    LOAD  R0, 42
-    LOAD  R1, 0xFF
-    LOAD  R2, 0b1010
-    LOAD  R3, VRAM_START  ; Arkkitehtuurivakio (= 0xF800)
+    READ  R0, 42
+    READ  R1, 0xFF
+    READ  R2, 0b1010
+    READ  R3, VRAM_START  ; Arkkitehtuurivakio (= 0xF800)
     ADD   R0, R1
     STORE [0x0200], R0
     JUMP  START
@@ -337,13 +347,13 @@ START:
 .origin 0x0200
 
 main:
-    LOAD R0, 5
+    READ R0, 5
     CALL factorial      ; Kutsu aliohjelma, paluuarvo R0:ssa
     HALT
 
 factorial:
     ; R0 = n, laskee n!
-    LOAD R1, 1
+    READ R1, 1
 loop:
     CMP  R0, 0
     JZ   done
@@ -360,8 +370,8 @@ done:
 ```asm
 .origin 0x0200
 
-    LOAD R0, VRAM_START     ; Näytön alkuosoite
-    LOAD R1, 0x0741         ; 'A' (0x41) valkoisella värillä (0x07 << 8)
+    READ R0, VRAM_START     ; Näytön alkuosoite
+    READ R1, 0x0741         ; 'A' (0x41) valkoisella värillä (0x07 << 8)
     STORE [R0], R1          ; Kirjoita ensimmäiselle ruudulle (epäsuora)
     HALT
 ```
@@ -376,11 +386,11 @@ done:
 start:
     ; Absoluuttinen: lue/kirjoita kiinteään osoitteeseen
     STORE [BUFFER], 42      ; Kirjoita välitön arvo vakion osoitteeseen
-    LOAD  R0, [BUFFER]      ; Lue sama osoite takaisin R0:aan
+    READ  R0, [BUFFER]      ; Lue sama osoite takaisin R0:aan
 
     ; Epäsuora: osoite rekisterin arvona
-    LOAD  R1, BUFFER        ; R1 = osoite 0x0300
-    LOAD  R2, [R1]          ; Lue [R1] eli [0x0300] → R2 = 42
+    READ  R1, BUFFER        ; R1 = osoite 0x0300
+    READ  R2, [R1]          ; Lue [R1] eli [0x0300] → R2 = 42
     STORE [R1], R0          ; Kirjoita R0 rekisterin R1 osoittamaan paikkaan
 
     ; Suhteellinen (FP-kehys): paikallismuuttujat aliohjelmassa
@@ -389,7 +399,7 @@ start:
 
 mysub:
     STORE [FP+1], R0        ; Tallenna R0 paikallismuuttujaan indeksillä 1
-    LOAD  R3, [FP+1]        ; Lue se takaisin R3:een
+    READ  R3, [FP+1]        ; Lue se takaisin R3:een
     RET
 ```
 
@@ -398,8 +408,8 @@ mysub:
 ```asm
 .origin 0x0200
 
-    LOAD R0, 10
-    LOAD R1, 32
+    READ R0, 10
+    READ R1, 32
     ADD  R0, R1
     HALT
 
@@ -448,8 +458,8 @@ vuoksi.
 
 ; Pääohjelma: laske 10 + 32
 main:
-    LOAD  R0, 10
-    LOAD  R1, 32
+    READ  R0, 10
+    READ  R1, 32
     CALL  yhteenlasku       ; kutsu aliohjelma; paluuarvo R0:ssa
     HALT                    ; R0 = 42
 
@@ -470,8 +480,8 @@ yhteenlasku:
     PUSH  R1            ; tallenna b pinoon → [SP] = 32, SP--
     CPY   FP, SP        ; kiinnitä FP kehyksen pohjalle
 
-    LOAD  R0, [FP+2]    ; R0 = a = 10  (vakio-offset, vaikka SP muuttuisi)
-    LOAD  R1, [FP+1]    ; R1 = b = 32
+    READ  R0, [FP+2]    ; R0 = a = 10  (vakio-offset, vaikka SP muuttuisi)
+    READ  R1, [FP+1]    ; R1 = b = 32
     ADD   R0, R1        ; R0 = 42
 
     POP   R1            ; palauta R1 (poistaa b:n tallennuksen)

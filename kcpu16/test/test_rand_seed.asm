@@ -13,16 +13,16 @@
 
         .origin 0x0200
 
-        LOAD  R2, 1              ; oleta OK
+        READ  R2, 1              ; oleta OK
 
         ; Ensimmäinen kierros: siemen $DEAD
-        LOAD  R3, 0xDEAD
+        READ  R3, 0xDEAD
         STORE [RAND_MMIO], R3   ; aseta siemen
-        LOAD  R0, [RAND_MMIO]   ; lue arvo (= 0xDB56)
+        READ  R0, [RAND_MMIO]   ; lue arvo (= 0xDB56)
 
         ; Toinen kierros: sama siemen uudelleen
         STORE [RAND_MMIO], R3   ; aseta siemen uudelleen
-        LOAD  R1, [RAND_MMIO]   ; pitää olla sama arvo
+        READ  R1, [RAND_MMIO]   ; pitää olla sama arvo
 
         CMP   R0, R1
         JNZ   fail               ; arvot erilaisia — deterministisyys rikki
@@ -30,7 +30,7 @@
         HALT
 
 fail:
-        LOAD  R2, 0
+        READ  R2, 0
         HALT
 
 .expect_reg   R0, 0xDB56

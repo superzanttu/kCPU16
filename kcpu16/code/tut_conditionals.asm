@@ -81,7 +81,7 @@ STR_FAIL:
 ; Ulkoon: R8 osoittaa merkkijonon loppuun, R9 osoittaa null:n jälkeen
 ; =============================================================================
 write_str:
-        LOAD  R11, [R9]       ; lue seuraava merkki
+        READ  R11, [R9]       ; lue seuraava merkki
         CMP   R11, R12        ; onko null-terminaattori?
         JZ    ws_done         ; kyllä → lopeta
         OR    R11, R10        ; lisää väriattribuutti
@@ -96,41 +96,41 @@ ws_done:
 ; PÄÄOHJELMA
 ; =============================================================================
 main:
-        LOAD  R12, 0          ; nollavakio (null-terminaattorin tunnistus)
-        LOAD  R13, 1          ; inkrementtivakio (osoittimien kasvatukseen)
+        READ  R12, 0          ; nollavakio (null-terminaattorin tunnistus)
+        READ  R13, 1          ; inkrementtivakio (osoittimien kasvatukseen)
 
         ; --- Otsikko: rivi 0, sarake 32 = 0xF800 + 32 = 0xF820 ---
-        LOAD  R8, 0xF820
-        LOAD  R9, STR_TITLE
-        LOAD  R10, 0x4300     ; bold keltainen
+        READ  R8, 0xF820
+        READ  R9, STR_TITLE
+        READ  R10, 0x4300     ; bold keltainen
         CALL  write_str
 
         ; --- Viiva: rivi 1, sarake 32 = 0xF870 ---
-        LOAD  R8, 0xF870
-        LOAD  R9, STR_UNDER
-        LOAD  R10, 0x0700     ; valkoinen
+        READ  R8, 0xF870
+        READ  R9, STR_UNDER
+        READ  R10, 0x0700     ; valkoinen
         CALL  write_str
 
 ; --- Testi 1: JZ (yhtäläinen) ---
 ; Tilanne: CMP 5, 5 → Z=1 → JZ otetaan → "OK"
 ; Sarake 0, rivi 2 = 0xF8A0
 
-        LOAD  R8, 0xF8A0
-        LOAD  R9, STR_JZ
-        LOAD  R10, 0x0700
+        READ  R8, 0xF8A0
+        READ  R9, STR_JZ
+        READ  R10, 0x0700
         CALL  write_str
         ; --- R8 osoittaa nyt heti otsikon jälkeen ---
 
-        LOAD  R0, 5
-        LOAD  R1, 5
+        READ  R0, 5
+        READ  R1, 5
         CMP   R0, R1          ; Z=1 (5 − 5 = 0)
         JZ    t1_ok
-        LOAD  R9, STR_FAIL
-        LOAD  R10, 0x0100     ; punainen
+        READ  R9, STR_FAIL
+        READ  R10, 0x0100     ; punainen
         JUMP  t1_done
 t1_ok:
-        LOAD  R9, STR_OK
-        LOAD  R10, 0x0200     ; vihreä
+        READ  R9, STR_OK
+        READ  R10, 0x0200     ; vihreä
 t1_done:
         CALL  write_str
 
@@ -138,21 +138,21 @@ t1_done:
 ; Tilanne: CMP 5, 3 → Z=0 → JNZ otetaan → "OK"
 ; Sarake 0, rivi 3 = 0xF8F0
 
-        LOAD  R8, 0xF8F0
-        LOAD  R9, STR_JNZ
-        LOAD  R10, 0x0700
+        READ  R8, 0xF8F0
+        READ  R9, STR_JNZ
+        READ  R10, 0x0700
         CALL  write_str
 
-        LOAD  R0, 5
-        LOAD  R1, 3
+        READ  R0, 5
+        READ  R1, 3
         CMP   R0, R1          ; Z=0 (5 − 3 = 2 ≠ 0)
         JNZ   t2_ok
-        LOAD  R9, STR_FAIL
-        LOAD  R10, 0x0100
+        READ  R9, STR_FAIL
+        READ  R10, 0x0100
         JUMP  t2_done
 t2_ok:
-        LOAD  R9, STR_OK
-        LOAD  R10, 0x0200
+        READ  R9, STR_OK
+        READ  R10, 0x0200
 t2_done:
         CALL  write_str
 
@@ -160,21 +160,21 @@ t2_done:
 ; Tilanne: CMP 3, 5 → N=1, V=0 → N≠V → JLT otetaan → "OK"
 ; Sarake 0, rivi 4 = 0xF940
 
-        LOAD  R8, 0xF940
-        LOAD  R9, STR_JLT
-        LOAD  R10, 0x0700
+        READ  R8, 0xF940
+        READ  R9, STR_JLT
+        READ  R10, 0x0700
         CALL  write_str
 
-        LOAD  R0, 3
-        LOAD  R1, 5
+        READ  R0, 3
+        READ  R1, 5
         CMP   R0, R1          ; 3 − 5 = −2: N=1, V=0 → N≠V
         JLT   t3_ok
-        LOAD  R9, STR_FAIL
-        LOAD  R10, 0x0100
+        READ  R9, STR_FAIL
+        READ  R10, 0x0100
         JUMP  t3_done
 t3_ok:
-        LOAD  R9, STR_OK
-        LOAD  R10, 0x0200
+        READ  R9, STR_OK
+        READ  R10, 0x0200
 t3_done:
         CALL  write_str
 
@@ -182,21 +182,21 @@ t3_done:
 ; Tilanne: CMP 7, 4 → Z=0, N=0, V=0 → N=V → JGT otetaan → "OK"
 ; Sarake 0, rivi 5 = 0xF990
 
-        LOAD  R8, 0xF990
-        LOAD  R9, STR_JGT
-        LOAD  R10, 0x0700
+        READ  R8, 0xF990
+        READ  R9, STR_JGT
+        READ  R10, 0x0700
         CALL  write_str
 
-        LOAD  R0, 7
-        LOAD  R1, 4
+        READ  R0, 7
+        READ  R1, 4
         CMP   R0, R1          ; 7 − 4 = 3: Z=0, N=0, V=0 → N=V, Z=0
         JGT   t4_ok
-        LOAD  R9, STR_FAIL
-        LOAD  R10, 0x0100
+        READ  R9, STR_FAIL
+        READ  R10, 0x0100
         JUMP  t4_done
 t4_ok:
-        LOAD  R9, STR_OK
-        LOAD  R10, 0x0200
+        READ  R9, STR_OK
+        READ  R10, 0x0200
 t4_done:
         CALL  write_str
 
@@ -204,21 +204,21 @@ t4_done:
 ; Tilanne: CMP 5, 5 → Z=1 → JLE otetaan (Z=1 riittää) → "OK"
 ; Sarake 0, rivi 6 = 0xF9E0
 
-        LOAD  R8, 0xF9E0
-        LOAD  R9, STR_JLE
-        LOAD  R10, 0x0700
+        READ  R8, 0xF9E0
+        READ  R9, STR_JLE
+        READ  R10, 0x0700
         CALL  write_str
 
-        LOAD  R0, 5
-        LOAD  R1, 5
+        READ  R0, 5
+        READ  R1, 5
         CMP   R0, R1          ; Z=1
         JLE   t5_ok
-        LOAD  R9, STR_FAIL
-        LOAD  R10, 0x0100
+        READ  R9, STR_FAIL
+        READ  R10, 0x0100
         JUMP  t5_done
 t5_ok:
-        LOAD  R9, STR_OK
-        LOAD  R10, 0x0200
+        READ  R9, STR_OK
+        READ  R10, 0x0200
 t5_done:
         CALL  write_str
 
@@ -226,21 +226,21 @@ t5_done:
 ; Tilanne: CMP 9, 3 → N=0, V=0 → N=V → JGE otetaan → "OK"
 ; Sarake 0, rivi 7 = 0xFA30
 
-        LOAD  R8, 0xFA30
-        LOAD  R9, STR_JGE
-        LOAD  R10, 0x0700
+        READ  R8, 0xFA30
+        READ  R9, STR_JGE
+        READ  R10, 0x0700
         CALL  write_str
 
-        LOAD  R0, 9
-        LOAD  R1, 3
+        READ  R0, 9
+        READ  R1, 3
         CMP   R0, R1          ; 9 − 3 = 6: N=0, V=0 → N=V
         JGE   t6_ok
-        LOAD  R9, STR_FAIL
-        LOAD  R10, 0x0100
+        READ  R9, STR_FAIL
+        READ  R10, 0x0100
         JUMP  t6_done
 t6_ok:
-        LOAD  R9, STR_OK
-        LOAD  R10, 0x0200
+        READ  R9, STR_OK
+        READ  R10, 0x0200
 t6_done:
         CALL  write_str
 

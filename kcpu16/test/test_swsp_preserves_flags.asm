@@ -6,12 +6,12 @@
         .origin 0x0200
 
         ; Aseta C=1, V=1, Z=1, N=0 ADD:lla
-        LOAD  R0, 0x8000
-        LOAD  R1, 0x8000
+        READ  R0, 0x8000
+        READ  R1, 0x8000
         ADD   R0, R1          ; C=1, V=1, Z=1, N=0
 
         ; SWSP ei saa muuttaa lippuja
-        LOAD  R0, 0x0400
+        READ  R0, 0x0400
         SWSP  R1, R0          ; R1 = vanha SP, SP = 0x0400; liput ennallaan
         SWSP  R2, R1          ; R2 = 0x0400, SP = vanha SP; liput ennallaan
 

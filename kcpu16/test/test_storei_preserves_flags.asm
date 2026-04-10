@@ -10,19 +10,19 @@
         .origin 0x0200
 
         ; Aseta C=1, V=1, Z=1, N=0 ADD:lla
-        LOAD  R0, 0x8000
-        LOAD  R1, 0x8000
+        READ  R0, 0x8000
+        READ  R1, 0x8000
         ADD   R0, R1          ; C=1, V=1, Z=1, N=0
 
         ; --- STOREI [addr], imm ei saa muuttaa lippuja ---
         STORE [0x0300], 0x1234  ; välitön suoraan osoitteeseen
 
         ; --- STOREI_IND [reg], imm ei saa muuttaa lippuja ---
-        LOAD  R0, 0x0301        ; R0 = kohdeosoite (LOAD ei muuta lippuja)
+        READ  R0, 0x0301        ; R0 = kohdeosoite (LOAD ei muuta lippuja)
         STORE [R0], 0x5678      ; välitön epäsuoraan osoitteeseen
 
         ; --- STOREI_REL [FP+offset], imm ei saa muuttaa lippuja ---
-        LOAD  FP, 0x0300        ; FP = kanta (LOAD ei muuta lippuja)
+        READ  FP, 0x0300        ; FP = kanta (LOAD ei muuta lippuja)
         STORE [FP+2], 0x9ABC    ; välitön FP-suhteelliseen
 
         HALT

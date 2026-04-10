@@ -19,14 +19,14 @@
 .origin 0x0200
 
 ; Lue kaikki neljä uptime-rekisteriä
-LOAD  R0, [UPTIME_W3]    ; bitit 48-63 (aina 0)
-LOAD  R1, [UPTIME_W2]    ; bitit 32-47 (aina 0)
-LOAD  R2, [UPTIME_W1]    ; bitit 16-31 (0 lyhyessä testissä)
-LOAD  R3, [UPTIME_W0]    ; bitit  0-15 (0 lyhyessä testissä)
+READ  R0, [UPTIME_W3]    ; bitit 48-63 (aina 0)
+READ  R1, [UPTIME_W2]    ; bitit 32-47 (aina 0)
+READ  R2, [UPTIME_W1]    ; bitit 16-31 (0 lyhyessä testissä)
+READ  R3, [UPTIME_W0]    ; bitit  0-15 (0 lyhyessä testissä)
 
 ; Tarkista W3 = 0 (rakenteellinen ominaisuus)
-LOAD  R4, 1              ; R4 = 1 (oleta OK)
-LOAD  R5, 0              ; R5 = vertailuarvo 0
+READ  R4, 1              ; R4 = 1 (oleta OK)
+READ  R5, 0              ; R5 = vertailuarvo 0
 
 CMP   R0, R5
 JNZ   fail               ; W3 != 0 -> virhe
@@ -38,7 +38,7 @@ JNZ   fail               ; W2 != 0 -> virhe
 JUMP  done
 
 fail:
-        LOAD  R4, 0      ; virhe
+        READ  R4, 0      ; virhe
 
 done:
         HALT

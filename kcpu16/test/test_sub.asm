@@ -6,8 +6,8 @@
 
         .origin 0x0200
 
-        LOAD  R0, 50
-        LOAD  R1, 30
+        READ  R0, 50
+        READ  R1, 30
         SUB   R0, R1          ; R0 = 50 − 30 = 20
 
         HALT
