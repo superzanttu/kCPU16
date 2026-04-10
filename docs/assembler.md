@@ -47,7 +47,8 @@ Rekisterit: `R0`–`R15` (yleiskäyttöiset), `FP` (frame pointer), `SP` (stack 
 | -------------------------------------- | --------------------------------------------------------------------------- |
 | `.origin addr` / `.org addr`           | Aseta koodin aloitusosoite (oletus: 0x0100)                                 |
 | `.at addr`                             | Siirry uuteen muistiosoitteeseen (uusi koodisegmentti)                      |
-| `.db val, val, …`                      | Tallenna raakoja 16-bittisiä sanoja suoraan muistiin                        |
+| `.dw val, val, …`                      | Tallenna 16-bittisiä sanoja muistiin; kukin arvo maskataan arvolla 0xFFFF   |
+| `.db val, val, …`                      | Tallenna 8-bittisiä arvoja muistiin; kukin arvo maskataan arvolla 0xFF      |
 | `.dstr "teksti"` / `.dstr 'teksti'`    | Tallenna null-terminoitu merkkijono; escape: `\\` `\"` `\'` `\n` `\t` `\0`  |
 | `.diskblock N`                         | Assemblauksen jälkeen tallenna konekieli tallennuslaitteen blokkiin N       |
 | `.const NIMI, ARVO`                    | Määrittele nimetty vakio (kokonaisluku tai heksa; ks. kohta 5)              |
@@ -62,6 +63,36 @@ Rekisterit: `R0`–`R15` (yleiskäyttöiset), `FP` (frame pointer), `SP` (stack 
 | `.inject_key_release koodi`            | Testidirektiivi: simuloi näppäinvapautus (esim. `.inject_key_release 0x41`) |
 
 > **Kommentit:** Puolipiste (`;`) aloittaa riviloppukommentin. Lohkokommentit `/* ... */` eivät ole tuettu.
+
+## 3.1 Datadirektiiviit: .dw ja .db
+
+Molemmat direktiivit tallentavat sarjan literaaliarvoja peräkkäisiin muistipaikkoihin.
+Koska kCPU16 on **sanakohtaisesti osoitettu** (word-addressed), jokainen arvo
+— riippumatta sen bittileveydestä — vie yhden 16-bittisen muistipaikan.
+
+| Direktiivi | Maski    | Hyväksytty arvoalue       |
+| ---------- | -------- | ------------------------- |
+| `.dw`      | `0xFFFF` | 0 – 65535 tai –32768 – –1 |
+| `.db`      | `0x00FF` | 0 – 255 tai –128 – –1     |
+
+**Numeroliteraalit:** Desimaali (`42`), heksadesimaali (`0xFF`), binääri (`0b1010`),
+oktaali (`0o52`) ovat kaikki sallittuja.
+
+**Etumerkilliset arvot** muunnetaan 2-komplementtiesitysmuotoon maskauksella:
+`-1` tallentuu `.dw`:llä arvona `0xFFFF` (65535) ja `.db`:llä arvona `0xFF` (255).
+
+```asm
+; .dw esimerkkejä
+TAULUKKO:
+    .dw 0, 65535, 0x1234    ; etumerkittömiä sanoja
+    .dw -1, -32768           ; etumerkilliset, maskattu 0xFFFF:llä
+
+; .db esimerkkejä
+MERKIT:
+    .db 0x41, 0x42, 0x43    ; 'A', 'B', 'C'
+    .db 0, 255               ; pienin ja suurin byte-arvo
+    .db -1, -128             ; etumerkilliset, maskattu 0xFF:llä
+```
 
 ---
 
