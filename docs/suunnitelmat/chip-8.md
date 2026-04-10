@@ -42,8 +42,8 @@ Seuraavat ominaisuudet ovat jo olemassa ja hyödyllisiä CHIP-8-emulaattorille:
   - `CTMR` (ms-pohjainen, `SCTMR`)
 
 ### 2.4 Näyttö
-- Nykyinen näyttö on teksti/attribuuttipohjainen VRAM (`0xF800–0xFF7F`)
-- Tämä ei ole suoraan CHIP-8:n 64×32 1bpp -framebuffer, joten renderöinti vaatii muunnoskerroksen
+- kCPU16:ssa on toteutettuna grafiikkatila B (80×48), joka on riittävä CHIP-8:n 64×32-kuvalle.
+- CHIP-8-piirto voidaan tehdä emulaattorin omalla 64×32 1bpp -framebufferilla ja piirtää siitä tila B:hen ilman uuden näyttötilan toteutusta.
 
 ---
 
