@@ -428,6 +428,10 @@ restart_loop:
         STORE [phase], R0
         STORE [angle], R0
 
+        ; Aseta piirtotila: etuväri (pikselit piirretään päälle, ei XOR)
+        LOAD  R0, GFX_DRAW_FG
+        CALL  gfx_set_draw_mode
+
         ; Käynnistä 20 sekunnin kellokeskeytys tila B:lle
         LOAD  R0, 20000
         SCTMR R0

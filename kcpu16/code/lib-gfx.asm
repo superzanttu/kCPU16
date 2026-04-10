@@ -11,14 +11,21 @@
 ;   Tila C — Braille:            160 × 96 pikseliä  ($FF80 = 2)
 ;
 ; TOIMINNOT:
-;   gfx_clear  — Tyhjennä näyttö (nollaa koko VRAM)
-;   gfx_pixel  — Piirra pikseli XOR-toimintona (R0=x, R1=y)
-;   gfx_line   — Piirrä viiva XOR-toimintona  (R0=x0, R1=y0, R2=x1, R3=y1)
+;   gfx_clear         — Tyhjennä näyttö (nollaa koko VRAM)
+;   gfx_set_draw_mode — Aseta piirtotila (R0 = piirtotila)
+;   gfx_pixel         — Piirra pikseli (R0=x, R1=y)
+;   gfx_line          — Piirrä viiva (R0=x0, R1=y0, R2=x1, R3=y1)
+;
+; PIIRTOTILAT (gfx_set_draw_mode:n R0-arvo):
+;   GFX_DRAW_XOR (0) — XOR-tila: vaihtaa pikselin tilaa (oletus)
+;   GFX_DRAW_FG  (1) — Etuväri:   asettaa pikselin päälle
+;   GFX_DRAW_BG  (2) — Taustaväri: nollaa pikselin
 ;
 ; REKISTERIKÄYTTÖ (clobbers):
-;   gfx_clear: R0–R3
-;   gfx_pixel: R0–R7
-;   gfx_line:  R0–R12  (kutsuu gfx_pixel sisäisesti)
+;   gfx_clear:         R0–R3
+;   gfx_set_draw_mode: —
+;   gfx_pixel:         R0–R7
+;   gfx_line:          R0–R12  (kutsuu gfx_pixel sisäisesti)
 ;
 ; KÄYTTÖESIMERKKI:
 ;   ; Aseta tila B
@@ -69,9 +76,34 @@
 .const GFX_MODE_B, 1       ; Tila B — puoliblokkipikseli 80×48
 .const GFX_MODE_C, 2       ; Tila C — braille 160×96
 
+; Piirtotilat (käytetään gfx_set_draw_mode-funktiolle)
+.const GFX_DRAW_XOR, 0     ; XOR-tila: vaihtaa pikselin tilaa (oletus)
+.const GFX_DRAW_FG,  1     ; Etuväri:   asettaa pikselin päälle
+.const GFX_DRAW_BG,  2     ; Taustaväri: nollaa pikselin
+
 ; Huom: VRAM_START (0xF800), VRAM_WORDS (1920) ja INT_BREAKPOINT (3) ovat
 ; arkkitehtuurivakioita jotka assembler injektoi automaattisesti (ARCH_SYMBOLS).
 ; Niitä ei tarvitse määritellä .const-direktiivillä.
+
+; =============================================================================
+; gfx_draw_mode — Nykyinen piirtotila (1-sanainen muuttuja)
+; Arvo: GFX_DRAW_XOR=0 (oletus), GFX_DRAW_FG=1, GFX_DRAW_BG=2
+; =============================================================================
+
+gfx_draw_mode:
+        .db  0
+
+; =============================================================================
+; gfx_set_draw_mode — Aseta piirtotila
+;
+; Sisään:  R0 = uusi piirtotila (GFX_DRAW_XOR / GFX_DRAW_FG / GFX_DRAW_BG)
+; Ulos:    —
+; Clobbers: —
+; =============================================================================
+
+gfx_set_draw_mode:
+        STORE [gfx_draw_mode], R0
+        RET
 
 ; =============================================================================
 ; gfx_clear — Tyhjennä grafiikkanäyttö
@@ -81,6 +113,7 @@
 ; Clobbers: R0–R3
 ;
 ; Nollaa kaikki 1920 VRAM-sanaa ($F800–$FF7F).
+; Huom: toiminto ohittaa gfx_draw_mode — tyhjentää aina taustaan.
 ; Laukaisee INT INT_BREAKPOINT (INT 3) jos näyttötila on A ($FF80 = 0).
 ; =============================================================================
 
@@ -194,13 +227,9 @@ _gfx_pixel_c_row3:
 _gfx_pixel_c_xor:
         ; Bittikuva = 1 << bit_num
         LOAD  R4, 1
-        SHL   R4, R5                  ; R4 = 1 << bit_num
-
-        ; XOR VRAM-sana
-        LOAD  R5, [R6]                ; R5 = nykyinen VRAM-sana
-        XOR   R5, R4                  ; R5 ^= bittikuva
-        STORE [R6], R5                ; kirjoita takaisin
-        RET
+        SHL   R4, R5                  ; R4 = 1 << bit_num  (R5=bit_num, R6=osoite)
+        CPY   R5, R4                  ; R5 = bitmask
+        JUMP  _gfx_apply              ; → yhteinen piirtokäsittelijä
 
 _gfx_pixel_b:
         ; -----------------------------------------------------------------------
@@ -242,13 +271,51 @@ _gfx_pixel_b_upper:
         LOAD  R5, 2
 
 _gfx_pixel_b_xor:
-        LOAD  R6, [R3]                ; R6 = nykyinen VRAM-sana
-        XOR   R6, R5                  ; R6 ^= bittikuva
-        STORE [R3], R6                ; kirjoita takaisin
+        CPY   R6, R3                  ; R6 = VRAM-osoite, R5 = bitmask
+        JUMP  _gfx_apply              ; → yhteinen piirtokäsittelijä
+
+; =============================================================================
+; _gfx_apply — Yhteinen piirtokäsittelijä (sisäinen apurutiini)
+;
+; Sisään:  R6 = VRAM-osoite
+;          R5 = bitmask (asetettavat bitit)
+; Ulos:    —
+; Clobbers: R3, R4, R6  (gfx_pixel:n clobber-rajoissa)
+;
+; Lukee gfx_draw_mode ja soveltaa:
+;   GFX_DRAW_XOR (0): VRAM[R6] ^= R5
+;   GFX_DRAW_FG  (1): VRAM[R6] |= R5
+;   GFX_DRAW_BG  (2): VRAM[R6] &= ~R5
+; =============================================================================
+
+_gfx_apply:
+        LOAD  R3, [gfx_draw_mode]     ; R3 = piirtotila
+        LOAD  R4, GFX_DRAW_FG
+        CMP   R3, R4
+        JZ    _gfx_apply_fg
+        LOAD  R4, GFX_DRAW_BG
+        CMP   R3, R4
+        JZ    _gfx_apply_bg
+        ; GFX_DRAW_XOR (0, oletus)
+        LOAD  R3, [R6]
+        XOR   R3, R5
+        STORE [R6], R3
+        RET
+_gfx_apply_fg:
+        LOAD  R3, [R6]
+        OR    R3, R5
+        STORE [R6], R3
+        RET
+_gfx_apply_bg:
+        CPY   R4, R5                  ; R4 = bitmask-kopio
+        NOT   R4                      ; R4 = ~bitmask
+        LOAD  R3, [R6]
+        AND   R3, R4
+        STORE [R6], R3
         RET
 
 ; =============================================================================
-; gfx_line — Piirrä viiva XOR-toimintona (Bresenham)
+; gfx_line — Piirrä viiva (Bresenham)
 ;
 ; Sisään:  R0 = x0 (aloituspiste x)
 ;          R1 = y0 (aloituspiste y)
