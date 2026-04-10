@@ -28,7 +28,7 @@ Perustelut:
 
 | Alue | Osoitteet | Käyttö |
 | --- | --- | --- |
-| Interpreter/varaus | `0x000–0x1FF` | Tulkin oma alue, fontit ja varatut tiedot |
+| Interpreter/varaus | `0x000–0x1FF` | Tulkin varattu alue; fonttidata oletuksena `0x050–0x09F` |
 | ROM-ohjelma | `0x200–0xFFF` | Ladattu CHIP-8-ohjelma |
 
 ## 5. Emulaattorin tilamuuttujat (määrittelyrunko)
@@ -65,7 +65,7 @@ Perustelut:
 - [ ] Päivitetäänkö `I` käskyjen `FX55/FX65` jälkeen (legacy vs modern)?
 - [ ] Käytetäänkö piirrossa wrapping- vai clipping-käytöstä ruudun reunoilla?
 - [ ] Miten `8XY6` ja `8XYE` shift-opcodejen yhteensopivuuslinjaus valitaan?
-- [ ] Miten 60 Hz ajastintikki sidotaan kCPU16:n ajastusmekanismiin?
+- [ ] Miten 60 Hz ajastintahdistus sidotaan kCPU16:n ajastusmekanismiin?
 
 ## 8. Seuraavat askeleet
 
