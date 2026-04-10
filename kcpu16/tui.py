@@ -1352,7 +1352,7 @@ class KCPU16TUI(App[None]):
         Terminaali ei tue näppäimennostotapahtumia, joten painallus ja
         vapautus lähetetään peräkkäin samasta tapahtumasta.
         """
-        if self._exec_mode not in ("fast", "slow"):
+        if self._exec_mode not in ("fast", "max", "slow"):
             return
         if self.machine.keyboard is None:
             return
@@ -1695,7 +1695,11 @@ class KCPU16TUI(App[None]):
                 now = time.monotonic()
                 if now - last_refresh >= REFRESH_INTERVAL:
                     last_refresh = now
-                    self.call_from_thread(self._refresh_all, mode == "fast")
+                    if mode == "max":
+                        # MAX-tilassa päivitetään vain Screen (VRAM), ei debug-paneeleja
+                        self.call_from_thread(self._refresh_screen_tab)
+                    else:
+                        self.call_from_thread(self._refresh_all, True)
                 if cpu.halted:
                     self.call_from_thread(
                         _done, f"[red]HALTED after {total_cycles} cycles.[/red]"

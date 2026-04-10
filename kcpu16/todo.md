@@ -17,12 +17,14 @@ Tehtävät on merkitty hakasulkeilla, ja niiden tilaa voidaan päivittää seura
 
 - Saat työskennellä kerrallaan vain yhden tehtävän parissa.
 - Valitset Tehtävät-kappaleesta listan ensimmäisen tehtävän. 
-- Kun ryhdyt suorittamaan tehtävää, päivitä sen tilaksi [W] ja aloita tehtävän suorittaminen. Tämä on tehtävä ehdottomasti ennen mitään tehtävään liittyviä toimia.
-- Jos huomaat, että tehtävä on epäselvä tai siinä on ongelmia, merkitse se tilaan [?] ja kuvaile ongelma lyhyesti. 
+- Kun ryhdyt suorittamaan tehtävää, päivitä sen tilaksi [W] ja aloita tehtävän suorittaminen. Tämä on tehtävä ehdottomasti ennen mitään tehtävään liittyviä toimia. Lisää tehtävän alle sisennettynä "START: YYYY-MM-DD HH:MM:SS" -rivi, joka kertoo milloin aloitit tehtävän suorittamisen. Tämä auttaa seuraamaan tehtävien etenemistä ja arvioimaan suoritusaikoja.
+- Jos huomaat, että tehtävä on epäselvä tai siinä on ongelmia, merkitse se tilaan [?] ja kuvaile ongelma lyhyesti. Lisää tehtävän alle sisennettynä "ISSUE: YYYY-MM-DD HH:MM:SS" -rivi, joka kertoo milloin ongelma havaittiin. Tämä auttaa dokumentoimaan ongelmat ja varmistamaan, että ne käsitellään ennen kuin tehtävää yritetään suorittaa.
 - Älä yritä suorittaa tehtävää, ennen kuin se on selkeä ja toteuttamiskelpoinen. 
 - Älä muuta tehtävän alkuperäistä kuvausta, mutta voit lisätä kommentteja tai huomautuksia, jotka auttavat selventämään tehtävää, sen vaatimuksia tai epäselvyyksiä. 
 - Voit myös ehdottaa tehtävän jakamista pienempiin osiin, jos se vaikuttaa liian suurelta tai monimutkaiselta toteutettavaksi kerralla.
+- Voit analysoida tehtävien vaatimuksia ja suorittaa niitä ryhminä.
 - Mikäli nämä ohjeet ovat epäselvät, kuvaile ongelma tämän listan alle, ja lopeta tehtävien suorittaminen.
+- Suoritettuasi tehtävän, päivitä sen tilaksi [X] ja lisää tehtävän alle sisennettynä "DONE: YYYY-MM-DD HH:MM:SS" -rivi, joka kertoo milloin tehtävä saatiin valmiiksi. Tämä auttaa seuraamaan tehtävien suoritusaikoja ja arvioimaan tulevien tehtävien vaatimuksia.
   
 ## Tehtävät
 
@@ -40,8 +42,8 @@ Tehtävät on merkitty hakasulkeilla, ja niiden tilaa voidaan päivittää seura
 [X] Lisää dokumentaatioon kuvaus siitä, miten ohjelman suoritusnopeutta voi säätää ja miten se vaikuttaa ohjelman suoritukseen.
 [X] Vaihda FULL tilan nimeksi FAST ja pidä toiminta samana. Tämä on vain nimimuutos, joka tekee tilan nimen kuvaavammaksi.
 [X] Lisää dokumentaatioon kuvaus siitä, että FULL-tila on nimetty uudelleen FAST-tilaksi, mutta sen toiminta pysyy samana.
-[ ] Lisää ohjelmaan MAX-suoritustila ja vastaavat toiminnot käyttöliittymään kuin FAST-tilalla on.. TÄssä tilassa näytön päiviytys tapahtuu vain, kun ohjelma on pysähtynyt, eikä joka käskyn jälkeen. Tämä mahdollistaa erittäin nopean suorituksen ilman näytön päivityksen aiheuttamaa hidastumista. Ohjelman käyttöliittymän tulee kuitenkin toimia normaalisti, ja käyttäjän tulee pystyä pysäyttämään ohjelma milloin tahansa. Tämä tila on hyödyllinen erityisesti silloin, kun halutaan suorittaa suuri määrä käskyjä nopeasti ilman tarvetta nähdä jokaisen käskyn vaikutusta näytöllä.
-[ ] Lisää dokumentaatioon kuvaus siitä, miten MAX-tila toimii ja miten se vaikuttaa ohjelman suoritukseen.
+[X] Lisää ohjelmaan MAX-suoritustila ja vastaavat toiminnot käyttöliittymään kuin FAST-tilalla on.. TÄssä tilassa näytön päiviytys tapahtuu vain, kun ohjelma on pysähtynyt, eikä joka käskyn jälkeen. Tämä mahdollistaa erittäin nopean suorituksen ilman näytön päivityksen aiheuttamaa hidastumista. Ohjelman käyttöliittymän tulee kuitenkin toimia normaalisti, ja käyttäjän tulee pystyä pysäyttämään ohjelma milloin tahansa. Tämä tila on hyödyllinen erityisesti silloin, kun halutaan suorittaa suuri määrä käskyjä nopeasti ilman tarvetta nähdä jokaisen käskyn vaikutusta näytöllä.
+[X] Lisää dokumentaatioon kuvaus siitä, miten MAX-tila toimii ja miten se vaikuttaa ohjelman suoritukseen.
 [ ] Lisää dokumentaation kuvaus siitä miten ja milloin näppäimenpainallukset välitetään ohjelman suoritukseen.
 [ ] Varmista että assebler sallii vain LOAD ja STORE käskyt, eikä salli käskyjen erilaisten osoitusmuotojen käyttöä. Myöskään LOAD-käskun käyttäminen assembler koodissa ei ole sallittu. Tarkoituksena on että ohjelmoija käyttää vain READ ja STORE käskyjä, ja että assembler hoitaa oikeiden LOAD/STORE-käskyjen generoinnin eri osoitusmuodoille. Tämä auttaa pitämään assembler-koodin selkeänä ja yksinkertaisena, ja varmistaa että kaikki muistiviittaukset tapahtuvat turvallisesti ja oikein.
 [ ] Lisää dokumentaatioon kuvaus siitä, että assembler sallii vain READ ja STORE käytön.
@@ -66,6 +68,6 @@ Tehtävät on merkitty hakasulkeilla, ja niiden tilaa voidaan päivittää seura
 [ ] Lisää dokumentaatioon kuvaus siitä, että .dsk- ja .asm-tiedostojen tallennuksen jälkeen ko. nimi näytetään käyttöliittymässä, kuin se olisi juuri ladattu, ja että tämä auttaa käyttäjää ymmärtämään, että tiedosto on tallennettu onnistuneesti.
 [ ] Varmista että .asm tai .dsk-tiedoston lataamisen jälkeen ohjelman suoritustila on STOPPED, eikä esimerkiksi STEP tai FULL. Tämä varmistaa, että ohjelma ei ala suorittaa automaattisesti heti lataamisen jälkeen, ja antaa käyttäjälle mahdollisuuden tarkistaa ladatun ohjelman ennen sen suorittamista.
 [ ] Lisää dokumentaatioon kuvaus siitä, että .asm- tai .dsk-tiedoston lataamisen jälkeen ohjelman suoritustila on STOPPED, eikä esimerkiksi STEP tai FULL, ja että tämä antaa käyttäjälle mahdollisuuden tarkistaa ladatun ohjelman ennen sen suorittamista.
-[ ] Varmista että käyttöliittymän kaikki osat ovat englanninkielisiä, mukaan lukien kaikki painikkeet, valikot, virheilmoitukset. Tämä varmistaa, että käyttöliittymä on yhdenmukainen ja ymmärrettävä kaikille käyttäjille, riippumatta heidän kielitaustastaan.
+[ ] Varmista että käyttöliittymän kaikki osat ovat englanninkielisiä ja johdonmukaisesti nimettyjä, mukaan lukien kaikki painikkeet, valikot, virheilmoitukset. Tämä varmistaa, että käyttöliittymä on yhdenmukainen ja ymmärrettävä kaikille käyttäjille, riippumatta heidän kielitaustastaan.
 [ ] Lisää LOAD-painikkeeseen toiminto, jolla ladattava ohjelma (pakotettu code-hakemistoon) valitaan valintaikkunasta, jossa on esillä kaikki code-hakemistossa olevat .asm-tiedostot. Tämä helpottaa ohjelman lataamista, koska käyttäjän ei tarvitse muistaa tai kirjoittaa tarkkaa tiedostopolkua, vaan hän voi valita ladattavan ohjelman visuaalisesta listasta. Valintaikkunasta valitaan ladattava ohjelma hiiren tuplaklikillä tai valitsemalla ohjelma ja painamall Load-painiketta. Toiminnon voi peruttaa Cancel-painikkeella.
 [ ] Lisää dokumentaatioon kuvaus siitä, että LOAD-painikkeella voidaan valita ladattava ohjelma ikkunasta, jossa on esillä kaikki code-hakemistossa olevat .asm-tiedostot, ja että tämä helpottaa ohjelman lataamista.

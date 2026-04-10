@@ -9,7 +9,7 @@ Se on inspiroitu MARS/RARS-, GDB TUI-, Turbo Debugger- ja emu8086-ohjelmistoista
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────────────────────────────┐
-| Toolbar: Load | Assemble ^B | Step F7 | Fast F5 | Slow F6 | Stop F8 | Reset ^R | BP F2 | ...    |
+| Toolbar: Load | Assemble ^B | Step F7 | Fast F5 | Max F4 | Slow F6 | Stop F8 | Reset ^R | BP F2 | ...    |
 ├────────────────────────────┬─────────────────────────────────────────────────────────────────────┤
 │ Screen (80×24 VRAM)        │ [Disassembly | Memory | Stack]                                      │
 │                            │ ●=breakpoint  ▶=nykyinen PC                                        │
@@ -59,6 +59,7 @@ Sisältö skrollautuu pystysuunnassa. Alareunassa komentorivisyöte (`>`).
 | -------- | ------------------------------------ |
 | F1       | Ohje                                 |
 | F2       | Vaihda breakpoint nykyisellä rivillä |
+| F4       | Aja MAX-nopeudella (MAX)             |
 | F5       | Aja nopeasti (FAST)                  |
 | F6       | Aja hitaasti (SLOW)                  |
 | F7 / F10 | Step (1 käsky kerrallaan)            |
@@ -126,13 +127,14 @@ python main.py --dsk levykuva.dsk
 
 Ohjelman suoritustila näytetään toolbarin oikeassa yläkulmassa. Tila päivittyy reaaliaikaisesti kaikissa näppäin- ja painike-toiminnoissa.
 
-| Tila      | Merkki | Kuvaus                                                                                 | Miten saavutetaan                |
-| --------- | ------ | -------------------------------------------------------------------------------------- | -------------------------------- |
-| `STOPPED` | ■      | CPU pysähtyneenä. Muisti ja rekisterit säilyvät. Askel tai ajo mahdollinen.            | Ohjelma pysäytetty (F8 / `stop`) |
-| `STEP`    | ■      | Yksi käsky suoritettu. CPU odottaa seuraavaa komentoa.                                 | F7 / F10 tai `step`-komento      |
-| `FULL`    | ▶      | CPU ajaa maksimiteholla. UI päivittyy noin 200 ms välein.                              | F5 tai `run`-komento             |
-| `SLOW`    | ▶      | CPU ajaa hitaasti (säädettävä nopeus). UI päivittyy jokaisen käskyn jälkeen.           | F6 tai `slow`-komento            |
-| `RESET`   | ■      | Kone on juuri nollattu. Muisti, rekisterit ja laitteet nollattu. Ei ladattua ohjelmaa. | Ctrl+R tai `reset`-komento       |
+| Tila      | Merkki | Kuvaus                                                                                          | Miten saavutetaan                |
+| --------- | ------ | ----------------------------------------------------------------------------------------------- | -------------------------------- |
+| `STOPPED` | ■      | CPU pysähtyneenä. Muisti ja rekisterit säilyvät. Askel tai ajo mahdollinen.                     | Ohjelma pysäytetty (F8 / `stop`) |
+| `STEP`    | ■      | Yksi käsky suoritettu. CPU odottaa seuraavaa komentoa.                                          | F7 / F10 tai `step`-komento      |
+| `FAST`    | ▶      | CPU ajaa maksimiteholla. UI päivittyy noin 200 ms välein.                                       | F5 tai `run`-komento             |
+| `MAX`     | ▶      | CPU ajaa maksimiteholla ilman näytön päivitystä ajon aikana. Näyttö päivittyy vain pysähtyessä. | F4                               |
+| `SLOW`    | ▶      | CPU ajaa hitaasti (säädettävä nopeus). UI päivittyy jokaisen käskyn jälkeen.                    | F6 tai `slow`-komento            |
+| `RESET`   | ■      | Kone on juuri nollattu. Muisti, rekisterit ja laitteet nollattu. Ei ladattua ohjelmaa.          | Ctrl+R tai `reset`-komento       |
 
 ## Tilasiirtymät
 
@@ -142,18 +144,18 @@ RESET ──────────────────► STOPPED
   ▲                           │
   │ Ctrl+R / reset            │ F7 / step
   │                           ▼
-STOPPED ◄──── F8 / stop ── STEP ──► (F5→FAST, F6→SLOW)
+STOPPED ◄──── F8 / stop ── STEP ──► (F4→MAX, F5→FAST, F6→SLOW)
                            │
                     CPU HALT/EXIT ──► (auto uudelleenlataus seuraavalla askeleella)
 
-FAST / SLOW ──► (HALT/EXIT/BP) ──► STOPPED
+FAST / MAX / SLOW ──► (HALT/EXIT/BP) ──► STOPPED
 ```
 
 ## Huomioita
 
-- **FAST**- ja **SLOW**-tiloissa F5 tai F6 toimii myös pysäytyksenä (toggle): toinen painallus pysäyttää.
-- Kun CPU on saavuttanut `HALT`- tai `EXIT`-käskyn, seuraava Step/Fast/Slow-painallus **lataa ohjelman uudelleen** (reassembloi) ja aloittaa alusta.
-- Näppäimistösyöte välitetään emulaattorille vain **FAST**- ja **SLOW**-tiloissa.
+- **FAST**-, **MAX**- ja **SLOW**-tiloissa vastaava näppäin (F5/F4/F6) toimii myös pysäytyksenä (toggle): toinen painallus pysäyttää.
+- Kun CPU on saavuttanut `HALT`- tai `EXIT`-käskyn, seuraava Step/Fast/Max/Slow-painallus **lataa ohjelman uudelleen** (reassembloi) ja aloittaa alusta.
+- Näppäimistösyöte välitetään emulaattorille vain **FAST**-, **MAX**- ja **SLOW**-tiloissa.
 - **RESET**-tila siirtyy **STOPPED**-tilaan kun tiedosto ladataan tai assembloidaan (`load`, `asm`, Ctrl+O, Ctrl+B).
 
 ---
