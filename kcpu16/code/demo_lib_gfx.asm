@@ -281,6 +281,8 @@ draw_mode_c:
 
         ; ------------------------------------------------------------------
         ; Yksittäinen pikseli näytön keskelle: (80, 48)
+        ; Tilan C resoluutio on 160×96 (x: 0–159, y: 0–95).
+        ; Koordinaatti (80, 48) on lähinnä geometrista keskipistettä.
         ; ------------------------------------------------------------------
         LOAD  R0, 80
         LOAD  R1, 48
@@ -294,6 +296,8 @@ draw_mode_c:
 
 main:
         ; Rekisteröi kellokeskeytyksen käsittelijä (INT 9 -vektori osoitteessa $0009)
+        ; INT_CLOCK = 9 on assembler-arkkitehtuurivakio (ARCH_SYMBOLS); kirjoitetaan
+        ; suoraan vektoritaulukkoon muistiosoitteeseen [INT_CLOCK] = [9] = $0009.
         LOAD  R0, clock_handler
         STORE [INT_CLOCK], R0
 

@@ -69,6 +69,10 @@
 .const GFX_MODE_B, 1       ; Tila B — puoliblokkipikseli 80×48
 .const GFX_MODE_C, 2       ; Tila C — braille 160×96
 
+; Huom: VRAM_START (0xF800), VRAM_WORDS (1920) ja INT_BREAKPOINT (3) ovat
+; arkkitehtuurivakioita jotka assembler injektoi automaattisesti (ARCH_SYMBOLS).
+; Niitä ei tarvitse määritellä .const-direktiivillä.
+
 ; =============================================================================
 ; gfx_clear — Tyhjennä grafiikkanäyttö
 ;
