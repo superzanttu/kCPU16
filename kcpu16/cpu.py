@@ -61,6 +61,7 @@ from .constants import (
     KBD_MMIO_END,
     KBD_MMIO_START,
     KBD_STATUS,
+    MEMORY_WORDS,
     RAND_MMIO,
     RAND_LFSR_MASK,
     RAND_LFSR_SEED,
@@ -389,6 +390,13 @@ class CPU:
             addr = ins.operands[1]
             self.memory.check_user_access(addr, self.regs.mpr)
 
+        # Tarkista FILL-muistiviittaus (FILL: kirjoittaa [regStart..regEnd])
+        elif ins.mnemonic == "FILL" and len(ins.operands) >= 3:
+            start = self._get_reg(ins.operands[0])
+            end = self._get_reg(ins.operands[1])
+            self.memory.check_user_access(start, self.regs.mpr)
+            self.memory.check_user_access(end, self.regs.mpr)
+
     def _execute(self, ins: DecodedInstruction) -> None:
         """
         Suorita dekoodattu kasky.
@@ -471,6 +479,21 @@ class CPU:
             imm, offset = ins.operands
             addr = (self.regs.fp + offset) & WORD_MASK
             self._write_word(addr, imm & WORD_MASK)
+
+        elif ins.mnemonic == "FILL":
+            # FILL regStart, regEnd, regVal - Täytä muistialue arvolla
+            # Kirjoittaa regVal:n arvo osoitteisiin [regStart..regEnd] inklusiivisesti.
+            # Toimii myös kiertoalueilla (regStart > regEnd): täyttää regStart->0xFFFF->regEnd.
+            start_reg, end_reg, val_reg = ins.operands
+            start = self._get_reg(start_reg)
+            end = self._get_reg(end_reg)
+            val = self._get_reg(val_reg) & WORD_MASK
+            addr = start
+            while True:
+                self._write_word(addr, val)
+                if addr == end:
+                    break
+                addr = (addr + 1) & WORD_MASK
 
         # ======================================================================
         # ARITMEETTISET KASKYT

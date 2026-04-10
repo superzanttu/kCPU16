@@ -201,6 +201,11 @@ OPCODE_TABLE: dict[int, tuple[str, int, bool]] = {
         2,
         False,
     ),  # STOREI_REL imm, offset  Kirjoita välitön arvo [FP + offset]
+    _op(0, 1, 11, 3): (
+        "FILL",
+        3,
+        False,
+    ),  # FILL regStart, regEnd, regVal  Täytä muistialue [regStart..regEnd] arvolla regVal
     # -------------------------------------------------------------------------
     # GRP 2: ARITMEETTISET KASKYT (Arithmetic)
     #   Opcoodet: 0x2080-0x2580  (P=0, GRP=2, OPS=2)
@@ -250,7 +255,11 @@ OPCODE_TABLE: dict[int, tuple[str, int, bool]] = {
     _op(0, 5, 7, 1): ("JLE", 1, False),  # JLE  addr   Hyppa jos Z=1 tai N!=V
     _op(0, 5, 8, 1): ("JGE", 1, False),  # JGE  addr   Hyppa jos N=V
     _op(0, 5, 9, 0): ("JMPI", 0, False),  # JMPI reg, addr...  Indeksoitu epäsuora hyppy
-    _op(0, 5, 10, 0): ("CALLI", 0, False),  # CALLI reg, addr... Indeksoitu epäsuora kutsu
+    _op(0, 5, 10, 0): (
+        "CALLI",
+        0,
+        False,
+    ),  # CALLI reg, addr... Indeksoitu epäsuora kutsu
     # -------------------------------------------------------------------------
     # GRP 6: KESKEYTYKSET (Interrupts)
     #   User-kaskyt:   INT  0x6040  (P=0, GRP=6)
