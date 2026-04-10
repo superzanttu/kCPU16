@@ -59,7 +59,10 @@ _RICH_MARKUP_RE = re.compile(r"\[/?[^\[\]]+?\]")
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
+from textual import events
+from textual.message import Message
 from textual.screen import ModalScreen
+from textual.widget import Widget
 from textual.worker import get_current_worker
 from textual._work_decorator import work
 from textual.widgets import (
@@ -439,6 +442,113 @@ class SaveConfirmDialog(ModalScreen):
 
 
 # ===========================================================================
+# SpeedSlider — liukusäädin SLOW-nopeuden säätöön
+# ===========================================================================
+
+_SLIDER_TRACK_W = 54  # raitaosa merkeissä (3× leveämpi)
+_SLIDER_MAX_IPS = 1000  # suurin sallittu IPS-arvo
+
+
+class SpeedSlider(Widget):
+    """Liukusäädin SLOW-suoritusnopeuden säätöön (1–1000 IPS).
+
+    Näyttää nykyisen IPS-arvon ja graafisen raidan. Raitaa voi klikata
+    tai raahata arvon muuttamiseksi. Hiiren rullalla säätää logaritmisesti.
+    Arvon muuttuessa lähetetään SpeedSlider.Changed -viesti.
+    """
+
+    DEFAULT_CSS = """
+    SpeedSlider {
+        width: 70;
+        height: 3;
+        padding: 0 1;
+        content-align: center middle;
+        color: $text-muted;
+    }
+    """
+
+    class Changed(Message):
+        """Lähetetään kun liukusäätimen arvo muuttuu."""
+
+        def __init__(self, value: int) -> None:
+            super().__init__()
+            self.value = value
+
+    def __init__(self, value: int = 10, *, id: str | None = None) -> None:
+        super().__init__(id=id)
+        self._value: int = max(1, min(_SLIDER_MAX_IPS, value))
+        self._multiplier: int = 1
+        self._dragging: bool = False
+
+    @property
+    def value(self) -> int:
+        return self._value
+
+    @value.setter
+    def value(self, val: int) -> None:
+        val = max(1, min(_SLIDER_MAX_IPS, val))
+        if val != self._value:
+            self._value = val
+            self.refresh()
+            self.post_message(self.Changed(self._value))
+
+    def render(self) -> str:
+        import math
+
+        # Logaritminen skala: pienet arvot saavat enemmän tilaa
+        log_val = math.log10(self._value)
+        log_max = math.log10(_SLIDER_MAX_IPS)
+        ratio = log_val / log_max
+        pos = round(ratio * (_SLIDER_TRACK_W - 1))
+        track = "═" * pos + "●" + "═" * (_SLIDER_TRACK_W - 1 - pos)
+        effective = self._value * self._multiplier
+        return f"IPS:{effective:5d} [{track}]"
+
+    def _x_to_value(self, x: int) -> int:
+        import math
+
+        # padding(1) + "IPS:NNNN ["(10) = offset 11
+        track_start = 11
+        rel = x - track_start
+        ratio = max(0.0, min(1.0, rel / (_SLIDER_TRACK_W - 1)))
+        # Logaritminen muunnos: ratio → IPS
+        val = round(10 ** (ratio * math.log10(_SLIDER_MAX_IPS)))
+        return max(1, min(_SLIDER_MAX_IPS, val))
+
+    def on_mouse_down(self, event: events.MouseDown) -> None:
+        self._dragging = True
+        self.capture_mouse()
+        new_val = self._x_to_value(event.x)
+        if new_val != self._value:
+            self._value = new_val
+            self.refresh()
+            self.post_message(self.Changed(self._value))
+
+    def on_mouse_move(self, event: events.MouseMove) -> None:
+        if self._dragging:
+            new_val = self._x_to_value(event.x)
+            if new_val != self._value:
+                self._value = new_val
+                self.refresh()
+                self.post_message(self.Changed(self._value))
+
+    def on_mouse_up(self, event: events.MouseUp) -> None:
+        if self._dragging:
+            self._dragging = False
+            self.release_mouse()
+
+    def on_mouse_scroll_up(self, event: events.MouseScrollUp) -> None:
+        # Logaritminen askel: +10% tai vähintään +1
+        step = max(1, round(self._value * 0.1))
+        self.value = self._value + step
+
+    def on_mouse_scroll_down(self, event: events.MouseScrollDown) -> None:
+        # Logaritminen askel: -10% tai vähintään -1
+        step = max(1, round(self._value * 0.1))
+        self.value = self._value - step
+
+
+# ===========================================================================
 # TUI-sovellus
 # ===========================================================================
 
@@ -522,6 +632,32 @@ class KCPU16TUI(App[None]):
         padding: 0 1;
         content-align: center middle;
         color: $text-muted;
+    }
+    #speed-control-group {
+        height: 3;
+        width: auto;
+        layout: horizontal;
+    }
+    SpeedSlider {
+        width: 70;
+        height: 3;
+        padding: 0 1;
+        content-align: center middle;
+        color: $text-muted;
+    }
+    #speed-mult-group {
+        height: 3;
+        width: auto;
+        layout: horizontal;
+    }
+    #speed-mult-group > Button {
+        min-width: 6;
+        height: 3;
+        margin: 0;
+    }
+    Button.mult-selected {
+        background: $accent;
+        color: $text;
     }
 
     /* ---- Content area ---- */
@@ -664,6 +800,8 @@ class KCPU16TUI(App[None]):
         self._exec_mode: str = (
             "stopped"  # "stopped" | "step" | "full" | "slow" | "reset"
         )
+        self._slow_ips: int = 10  # käskyä/sekuntti SLOW-tilassa (1–1000)
+        self._slow_multiplier: int = 1  # kerroin: 1, 10 tai 100
         # --asm listing caches (rebuilt each assemble)
         self._asm_addr_to_src: dict[int, str] = {}  # addr → raw source line
         self._asm_addr_to_label: dict[int, str] = {}  # addr → label name
@@ -704,6 +842,13 @@ class KCPU16TUI(App[None]):
             yield Button("BP F2", id="btn-bp", variant="default")
             yield Button("Clear F9", id="btn-clear", variant="default")
             yield Button("Help F1", id="btn-help", variant="default")
+            yield Static(" ", classes="sep")
+            with Horizontal(id="speed-control-group"):
+                yield SpeedSlider(value=10, id="speed-slider")
+                with Horizontal(id="speed-mult-group"):
+                    yield Button("x1", id="btn-mult-x1", classes="mult-selected")
+                    yield Button("x10", id="btn-mult-x10")
+                    yield Button("x100", id="btn-mult-x100")
             yield Static("\u25a0 STOPPED", id="run-mode-label")
 
         # Content area: left panel (full width)
@@ -819,6 +964,28 @@ class KCPU16TUI(App[None]):
         action = actions.get(event.button.id)
         if action:
             action()
+            return
+
+        # Nopeudenkertoimen valinta
+        if event.button.id in ("btn-mult-x1", "btn-mult-x10", "btn-mult-x100"):
+            mult_map = {"btn-mult-x1": 1, "btn-mult-x10": 10, "btn-mult-x100": 100}
+            self._slow_multiplier = mult_map[event.button.id]
+            for bid in ("btn-mult-x1", "btn-mult-x10", "btn-mult-x100"):
+                try:
+                    self.query_one(f"#{bid}", Button).remove_class("mult-selected")
+                except Exception:
+                    pass
+            event.button.add_class("mult-selected")
+            try:
+                sl = self.query_one("#speed-slider", SpeedSlider)
+                sl._multiplier = self._slow_multiplier
+                sl.refresh()
+            except Exception:
+                pass
+
+    def on_speed_slider_changed(self, event: SpeedSlider.Changed) -> None:
+        """Päivitä SLOW-nopeus kun liukusäädin muuttuu."""
+        self._slow_ips = event.value
 
     # ------------------------------------------------------------------
     # Komentosyöte
@@ -885,7 +1052,9 @@ class KCPU16TUI(App[None]):
         elif mode == "slow":
             self._exec_mode = "slow"
             self._update_run_mode_ui()
-            self._log("[green]Running slow (10 IPS)... (F6/F8 to stop)[/green]")
+            self._log(
+                f"[green]Running slow ({self._slow_ips * self._slow_multiplier} IPS)... (F6/F8 to stop)[/green]"
+            )
             self._cpu_run_worker("slow")
         # mode == "stop": pelkkä uudelleenlataus riittää, _do_assemble hoiti
 
@@ -937,7 +1106,9 @@ class KCPU16TUI(App[None]):
         self.workers.cancel_all()
         self._exec_mode = "slow"
         self._update_run_mode_ui()
-        self._log("[green]Running slow (10 IPS)... (F6/F8 to stop)[/green]")
+        self._log(
+            f"[green]Running slow ({self._slow_ips * self._slow_multiplier} IPS)... (F6/F8 to stop)[/green]"
+        )
         self._cpu_run_worker("slow")
 
     def action_stop_program(self) -> None:
@@ -1088,10 +1259,13 @@ class KCPU16TUI(App[None]):
             "  run  [n]                     Full speed run to BP/halt (max n cycles)"
         )
         self._log(
-            "  slow                         Slow run (~10 IPS), all panels update each instr"
+            "  slow [n]                     Slow run (1–1000 IPS), all panels update each instr"
         )
         self._log("  stop                         Stop running CPU")
         self._log("  restart                      Reassemble and restart from 0x0100")
+        self._log(
+            "  speed <1–1000>               Set SLOW run speed in IPS (default 10)"
+        )
         self._log("[bold]Breakpoints:[/bold]")
         self._log("  bp <addr>                    Toggle breakpoint at address")
         self._log("  bp list                      List all breakpoints")
@@ -1184,6 +1358,14 @@ class KCPU16TUI(App[None]):
             tabs.border_subtitle = f"{name} *" if name else "*"
         else:
             tabs.border_subtitle = name
+
+    def _sync_speed_slider(self) -> None:
+        """Synkronoi liukusäätimen arvo _slow_ips:n mukaan."""
+        try:
+            self.query_one("#speed-slider", SpeedSlider)._value = self._slow_ips
+            self.query_one("#speed-slider", SpeedSlider).refresh()
+        except Exception:
+            pass
 
     def _do_open(self, path: Path) -> None:
         """Avaa tiedosto, tallentaa polun ja kääntää sen automaattisesti.
@@ -1431,7 +1613,6 @@ class KCPU16TUI(App[None]):
 
         if mode == "slow":
             # Hidas suoritus: yksi käsky kerrallaan, UI-päivitys joka käskyn jälkeen
-            SLOW_DELAY = 0.1  # sekuntia per käsky (10 IPS)
             while not worker.is_cancelled:
                 if cpu.halted or cpu.process_exit_requested:
                     break
@@ -1455,7 +1636,7 @@ class KCPU16TUI(App[None]):
                     )
                     return
                 self.call_from_thread(self._refresh_all, True)
-                time.sleep(SLOW_DELAY)
+                time.sleep(1.0 / max(1, self._slow_ips * self._slow_multiplier))
         else:
             # Täysi nopeus: eräsuoritus, UI päivittyy ~200ms välein
             BATCH = 5000
@@ -2060,6 +2241,17 @@ class KCPU16TUI(App[None]):
                 self.action_stop_program()
                 return CommandResult(True, "")
 
+            if op == "slow":
+                # slow [n] – aseta nopeus ja käynnistä hidas suoritus
+                if args:
+                    ips = int(args[0], 0)
+                    if not 1 <= ips <= 100:
+                        return CommandResult(False, "Speed must be 1\u2013100")
+                    self._slow_ips = ips
+                    self._sync_speed_slider()
+                self.action_run_slow_speed()
+                return CommandResult(True, "")
+
             if op == "restart":
                 self._do_assemble()
                 return CommandResult(True, "")
@@ -2112,6 +2304,19 @@ class KCPU16TUI(App[None]):
 
             if op == "version":
                 return CommandResult(True, f"kCPU16 v{__version__}")
+
+            if op == "speed":
+                if not args:
+                    return CommandResult(
+                        True,
+                        f"SLOW speed: {self._slow_ips} IPS (1–1000). Usage: speed <1–1000>",
+                    )
+                ips = int(args[0], 0)
+                if not 1 <= ips <= 1000:
+                    return CommandResult(False, "Speed must be 1–1000")
+                self._slow_ips = ips
+                self._sync_speed_slider()
+                return CommandResult(True, f"SLOW speed set to {ips} IPS.")
 
             return CommandResult(False, f"Unknown: {op}. Type 'help'.")
         except Exception as exc:
