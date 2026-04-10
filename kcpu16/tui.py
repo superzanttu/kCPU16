@@ -749,6 +749,7 @@ class KCPU16TUI(App[None]):
     BINDINGS = [
         Binding("ctrl+q", "quit", "Quit", priority=True),
         Binding("f2", "toggle_breakpoint", "BP F2", priority=True),
+        Binding("f4", "run_max_speed", "Max F4", priority=True),
         Binding("f5", "run_full_speed", "Fast F5", priority=True),
         Binding("f6", "run_slow_speed", "Slow F6", priority=True),
         Binding("f8", "stop_program", "Stop F8", priority=True),
@@ -798,7 +799,7 @@ class KCPU16TUI(App[None]):
         self._disk_dirty: bool = False
         self._watched_mtime: int | None = None  # st_mtime_ns (kokonaisluku)
         self._exec_mode: str = (
-            "stopped"  # "stopped" | "step" | "fast" | "slow" | "reset"
+            "stopped"  # "stopped" | "step" | "fast" | "max" | "slow" | "reset"
         )
         self._slow_ips: int = 10  # käskyä/sekuntti SLOW-tilassa (1–1000)
         self._slow_multiplier: int = 1  # kerroin: 1, 10 tai 100
@@ -835,6 +836,7 @@ class KCPU16TUI(App[None]):
             yield Static(" ", classes="sep")
             yield Button("Step F7", id="btn-step", variant="primary")
             yield Button("Fast F5", id="btn-run-full", variant="success")
+            yield Button("Max F4", id="btn-run-max", variant="success")
             yield Button("Slow F6", id="btn-run-slow", variant="success")
             yield Button("Stop F8", id="btn-stop", variant="default")
             yield Button("Reset ^R", id="btn-reset", variant="error")
@@ -954,6 +956,7 @@ class KCPU16TUI(App[None]):
             "btn-asm": self.action_assemble_code,
             "btn-step": self.action_step_once,
             "btn-run-full": self.action_run_full_speed,
+            "btn-run-max": self.action_run_max_speed,
             "btn-run-slow": self.action_run_slow_speed,
             "btn-stop": self.action_stop_program,
             "btn-reset": self.action_reset_machine,
@@ -1049,6 +1052,11 @@ class KCPU16TUI(App[None]):
             self._update_run_mode_ui()
             self._log("[green]Running fast... (F5/F8 to stop)[/green]")
             self._cpu_run_worker("fast")
+        elif mode == "max":
+            self._exec_mode = "max"
+            self._update_run_mode_ui()
+            self._log("[green]Running max... (F4/F8 to stop)[/green]")
+            self._cpu_run_worker("max")
         elif mode == "slow":
             self._exec_mode = "slow"
             self._update_run_mode_ui()
@@ -1079,7 +1087,7 @@ class KCPU16TUI(App[None]):
         Jos CPU on pysähtynyt (HALT/EXIT), ladataan ohjelma uudelleen ja
         käynnistetään täydellä nopeudella.
         """
-        if self._exec_mode == "full":
+        if self._exec_mode == "fast":
             self.action_stop_program()
             return
         if self.machine.cpu.halted or self.machine.process_exited:
@@ -1090,6 +1098,25 @@ class KCPU16TUI(App[None]):
         self._update_run_mode_ui()
         self._log("[green]Running fast... (F5/F8 to stop)[/green]")
         self._cpu_run_worker("fast")
+
+    def action_run_max_speed(self) -> None:
+        """Käynnistä CPU MAX-nopeudella (F4). Näyttöä ei päivitetä ajon aikana.
+
+        MAX-tilassa suoritus on maksimaalinen: näyttöä (VRAM) ei päivitetä
+        ajon aikana, vain pysähdyttäessä. Käyttöliittymä pysyy muutoin toimivana.
+        Toinen F4-painallus pysäyttää.
+        """
+        if self._exec_mode == "max":
+            self.action_stop_program()
+            return
+        if self.machine.cpu.halted or self.machine.process_exited:
+            self._reload_and_run("max")
+            return
+        self.workers.cancel_all()
+        self._exec_mode = "max"
+        self._update_run_mode_ui()
+        self._log("[green]Running max... (F4/F8 to stop)[/green]")
+        self._cpu_run_worker("max")
 
     def action_run_slow_speed(self) -> None:
         """Käynnistä CPU hidas suoritus (F6): ~10 IPS. Toinen painalus pysäyttää.
@@ -1561,24 +1588,34 @@ class KCPU16TUI(App[None]):
             label_text = {
                 "stopped": "\u25a0 STOPPED",
                 "step": "\u25a0 STEP",
-                "full": "\u25b6 FULL",
+                "fast": "\u25b6 FAST",
+                "max": "\u25b6 MAX",
                 "slow": "\u25b6 SLOW",
                 "reset": "\u25a0 RESET",
             }.get(self._exec_mode, "\u25a0 STOPPED")
             self.query_one("#run-mode-label", Static).update(label_text)
             btn_full = self.query_one("#btn-run-full", Button)
+            btn_max = self.query_one("#btn-run-max", Button)
             btn_slow = self.query_one("#btn-run-slow", Button)
             btn_stop = self.query_one("#btn-stop", Button)
             if self._exec_mode == "fast":
                 btn_full.variant = "warning"
+                btn_max.variant = "default"
+                btn_slow.variant = "default"
+                btn_stop.variant = "error"
+            elif self._exec_mode == "max":
+                btn_full.variant = "default"
+                btn_max.variant = "warning"
                 btn_slow.variant = "default"
                 btn_stop.variant = "error"
             elif self._exec_mode == "slow":
                 btn_full.variant = "default"
+                btn_max.variant = "default"
                 btn_slow.variant = "warning"
                 btn_stop.variant = "error"
             else:  # stopped, step, reset
                 btn_full.variant = "success"
+                btn_max.variant = "success"
                 btn_slow.variant = "success"
                 btn_stop.variant = "default"
         except Exception:
@@ -1635,8 +1672,9 @@ class KCPU16TUI(App[None]):
                     return
                 self.call_from_thread(self._refresh_all, True)
                 time.sleep(1.0 / max(1, self._slow_ips * self._slow_multiplier))
-        if mode != "slow":
+        if mode in ("fast", "max"):
             # Täysi nopeus: eräsuoritus, UI päivittyy ~200ms välein
+            # MAX-tilassa näyttöä (VRAM) ei päivitetä ajon aikana
             BATCH = 5000
             REFRESH_INTERVAL = 0.2  # sekuntia
             last_refresh = time.monotonic()
@@ -1657,7 +1695,7 @@ class KCPU16TUI(App[None]):
                 now = time.monotonic()
                 if now - last_refresh >= REFRESH_INTERVAL:
                     last_refresh = now
-                    self.call_from_thread(self._refresh_all, True)
+                    self.call_from_thread(self._refresh_all, mode == "fast")
                 if cpu.halted:
                     self.call_from_thread(
                         _done, f"[red]HALTED after {total_cycles} cycles.[/red]"
@@ -2243,8 +2281,8 @@ class KCPU16TUI(App[None]):
                 # slow [n] – aseta nopeus ja käynnistä hidas suoritus
                 if args:
                     ips = int(args[0], 0)
-                    if not 1 <= ips <= 100:
-                        return CommandResult(False, "Speed must be 1\u2013100")
+                    if not 1 <= ips <= 1000:
+                        return CommandResult(False, "Speed must be 1\u20131000")
                     self._slow_ips = ips
                     self._sync_speed_slider()
                 self.action_run_slow_speed()
