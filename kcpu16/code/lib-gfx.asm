@@ -291,7 +291,7 @@ _gfx_line_ok:
         CMP   R9, R0
         JGE   _gfx_line_sx_pos
         ; x1 < x0: sx = −1, dx = −R9
-        LOAD  R11, 0xFFFF             ; sx = −1
+        LOAD  R11, 0xFFFF             ; sx = −1 (kaksoiskomplemenitti: 0xFFFF = −1)
         NOT   R9                      ; ~R9
         LOAD  R0, 1
         ADD   R9, R0                  ; R9 = |x1−x0| = dx
@@ -308,7 +308,7 @@ _gfx_line_dy:
         CMP   R10, R0
         JGE   _gfx_line_sy_pos
         ; y1 < y0: sy = −1, R10 on jo negatiivinen (= −|dy|)
-        LOAD  R12, 0xFFFF             ; sy = −1
+        LOAD  R12, 0xFFFF             ; sy = −1 (kaksoiskomplemenitti: 0xFFFF = −1)
         JUMP  _gfx_line_err
 _gfx_line_sy_pos:
         LOAD  R12, 1                  ; sy = 1
