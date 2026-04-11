@@ -376,3 +376,19 @@ Flags-paneelin alaosassa näytetään kaksi erillistä tilatietoa:
 
 Molemmat tilat päivittyvät reaaliaikaisesti ohjelma latauksen, kääntämisen ja suorituksen aikana.
 
+## TMR ja CTMR — ajastinkeskeytystiedot
+
+Flags-paneelissa näytetään TMR- ja CTMR-ajastimien tila sekä aika seuraavaan laukaisukertaan.
+
+| Kenttä | Tila                | Kuvaus                                                     |
+| ------ | ------------------- | ---------------------------------------------------------- |
+| TMR    | `off`               | Ajastinkeskeytys pois päältä (TMR = 0)                     |
+| TMR    | `N µs (next: M µs)` | Ajastinkeskeytys päällä; väli N µs, seuraava M µs:n päästä |
+| CTMR   | `off`               | Kellokeskeytys pois päältä (CTMR = 0)                      |
+| CTMR   | `N ms (next: M ms)` | Kellokeskeytys päällä; väli N ms, seuraava M ms:n päästä   |
+
+Ajanyksiköt ovat **simuloitua aikaa** (ks. architecture.md luku 12):
+- TMR: mikrosekunteja (µs). `STMR R` asettaa välin rekisterin arvona.
+- CTMR: millisekunteja (ms). `SCTMR R` asettaa välin rekisterin arvona.
+- Jäljellä oleva aika lasketaan `next_fire_time − simulated_time_us`.
+

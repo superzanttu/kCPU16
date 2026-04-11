@@ -63,8 +63,8 @@ Vain Kernel-tilassa kirjoitettavissa (SMPR, STMR -käskyillä).
 | Rekisteri | Kuvaus                                                                    |
 | --------- | ------------------------------------------------------------------------- |
 | MPR       | Memory Protection Register — User-muistin alaraja                         |
-| TMR       | Timer Register — ajastinkeskeytyksen väli käskyjen lukumääränä (0 = pois) |
-| CTMR      | Clock Timer Register — kellokeskeytyksen väli millisekunteina (0 = pois)  |
+| TMR       | Timer Register — ajastinkeskeytyksen väli **mikrosekunneissa** (0 = pois)  |
+| CTMR      | Clock Timer Register — kellokeskeytyksen väli **millisekunteina** (0 = pois) |
 
 ## 2.4 Tilarekisteri (SR)
 
@@ -139,7 +139,8 @@ Jokainen vektoripaikka sisältää keskeytyskäsittelijän muistiosoitteen.
 
 Osoitteet ovat vain luettavia lukuun ottamatta $001B (kirjoitus asettaa CTMR-arvon).
 Lukeminen palauttaa reaaliaikaisen järjestelmäkellon arvon.
-Uptime-laskuri on 64-bittinen sekuntilaskuri jaettuna neljään 16-bittiseen sanaan (MSW ensin).
+Uptime-laskuri on 32-bittinen *simuloitu* sekuntilaskuri. Se lasketaan
+käskyjen suoritussyklien kertymästä (ks. luku 12 Suoritusajat), ei reaaliajasta.
 
 | Osoite      | Vakio              | Kuvaus                                                     |
 | ----------- | ------------------ | ---------------------------------------------------------- |
@@ -248,18 +249,20 @@ Tämä palauttaa automaattisesti edellisen suojaustilan (User/Kernel) ja keskeyt
 
 ## 5.4 Ajastinkeskeytys (TMR)
 
-- TMR-rekisteri määrittää aikavälin suoritettujen käskyjen lukumääränä
+- TMR-rekisteri määrittää aikavälin **mikrosekunneissa** (simuloitua aikaa)
 - TMR = 0 → ajastin pois päältä
-- Int 7 laukeaa kun `instruction_counter % TMR == 0` **ja** `I = 1`
-- Ajastinta ei tarkisteta jos keskeytykset on estetty (I = 0)
+- Int 7 laukeaa kun simuloitu aika saavuttaa seuraavan laukaisuhetken **ja** `I = 1`
+- Laukaisuhetki alustetaan STMR-käskyllä: `next = kertyma + TMR`
+- Laukaisun jälkeen laukaisuhetki siirtyy eteenpäin: `next += TMR`
+- Ajastinta ei tarkisteta jos I = 0
 
 ## 5.5 Kellokeskeytys (CTMR, Int 9)
 
-- CTMR-rekisteri määrittää aikavälin **millisekunteina** (reaaliaikainen kello)
+- CTMR-rekisteri määrittää aikavälin **millisekunteina** (simuloitua aikaa)
 - CTMR = 0 → kellokeskeytys pois päältä
-- Int 9 laukeaa kun CTMR ms on kulunut edellisestä laukeamisesta **ja** `I = 1`
-- Asetetaan `SCTMR reg` -käskyllä (Kernel-tila)
-- Käsittelijassä voi lukea `CLOCK_MILLIS` ($0016) nykyisen millisekunnin
+- Int 9 laukeaa kun simuloitu aika saavuttaa seuraavan laukaisuhetken **ja** `I = 1`
+- Laukaisuhetki alustetaan SCTMR-käskyllä: `next = kertyma + CTMR × 1000 µs`
+- Asetetaan `SCTMR reg` -käskyllä (Kernel-tila); myös $001B-kirjoitus asettaa CTMR:n
 
 ---
 
@@ -746,3 +749,80 @@ Assembly-kielen syntaksi, direktiivit, arkkitehtuurivakiot ja käyttöesimerkit 
 | NOP    | 0x7F00 | Ei tee mitään                                                      |
 
 > **Näppäimistön lukeminen:** Ei erillinen käsky. Käytä `READ reg, [KBD_DATA]` (MMIO $0020). Ks. kohta 4.1c.
+
+---
+
+# 12. Suoritusajat (Execution Timing)
+
+kCPU16 käyttää simuloitua kelloa, jossa jokainen käsky kuluttaa tietyn määrän **suoritussyklejä**. Yksi sykli vastaa yhtä mikrosekuntia (µs) simuloidulla 1 MHz kellolla.
+
+## 12.1 Simuloitu aika
+
+Simuloitu aika kertyy akkumulaattoriin `_simulated_time_us` jokaisen onnistuneesti suoritetun käskyn jälkeen. Epäonnistuneet käskyt (poikkeukset, keskeytykset) eivät kasvata laskuria.
+
+Simuloitua aikaa käytetään kaikkeen aikapohjaiseen toimintaan:
+- **Uptime-laskuri** ($0019–$001A): simulated_time_us ÷ 1 000 000 (sekunteja)
+- **TMR-keskeytys** (Int 7): laukeaa `next_tmr_us` saavutettaessa (TMR µs välein)
+- **CTMR-keskeytys** (Int 9): laukeaa `next_ctmr_us` saavutettaessa (CTMR × 1000 µs välein)
+
+## 12.2 Käskyjen suoritussyklit
+
+| Käsky          | Syklit | Huomio                                         |
+| -------------- | ------ | ---------------------------------------------- |
+| LOAD           | 1      | Välittömän arvon lataus                         |
+| CPY            | 1      | Rekisterikopiointi                              |
+| READ           | 1      | Muistiluku (absoluuttinen)                      |
+| STORE          | 1      | Muistikirjoitus                                 |
+| READ_IND       | 1      | Epäsuora muistiluku                             |
+| STORE_IND      | 1      | Epäsuora muistikirjoitus                        |
+| READ_REL       | 1      | FP-suhteellinen muistiluku                      |
+| STORE_REL      | 1      | FP-suhteellinen muistikirjoitus                 |
+| STOREI         | 1      | Välitön arvo muistiin                           |
+| STOREI_IND     | 1      | Välitön arvo epäsuoraan osoitteeseen            |
+| STOREI_REL     | 1      | Välitön arvo FP-suhteelliseen osoitteeseen      |
+| FILL           | 1 + N  | 1 perussykli + täytettävien sanojen lukumäärä N  |
+| ADD / SUB      | 1      |                                                 |
+| MUL            | 4      | Kertolasku                                      |
+| DIV            | 8      | Jakolasku                                       |
+| CMP / ADC      | 1      |                                                 |
+| AND/OR/XOR/NOT | 1      | Bittioperaatiot                                 |
+| SHL / SHR      | 1      | Bittisiirrot                                    |
+| PUSH / POP     | 1      | Pinooperaatiot                                  |
+| SWSP           | 1      |                                                 |
+| JUMP           | 1      |                                                 |
+| CALL / RET     | 2      | Sisältää pinoon tallennuksen tai luvun          |
+| JZ/JNZ/JLT ... | 1      | Kaikki ehdolliset hypyt                         |
+| JMPI / CALLI  | 2      | Indeksoitu hyppy / kutsu (perussykli)            |
+| INT / IRET     | 4      | Kontekstin tallennus ja palautus                |
+| EXIT           | 4      | Prosessin lopetus                               |
+| STI / CLI      | 1      |                                                 |
+| HALT / NOP     | 1      |                                                 |
+| STMR / SCTMR  | 1      |                                                 |
+| SMPR           | 1      |                                                 |
+| DREAD / DWRITE | 10     | I/O-operaatiot (tallennuslaite)                 |
+| TSL            | 2      | Atominen lue-muokkaa-kirjoita                   |
+
+## 12.3 Ajastinkeskeytykset simuloidun ajan perusteella
+
+**TMR-keskeytys (Int 7):**
+
+- `STMR R` asettaa TMR = R (yksikkö: µs)
+- Keskeytys laukeaa kun simuloitu aika ≥ `next_tmr_us`
+- Seuraava laukaisuhetki: `next_tmr_us += TMR`
+- Tämä takaa, että keskeytys laukeaa tasasin väliajoin riippumatta siitä, milloin tarkistus tapahtuu
+
+**CTMR-keskeytys (Int 9):**
+
+- `SCTMR R` asettaa CTMR = R (yksikkö: ms = 1000 µs)
+- Keskeytys laukeaa kun simuloitu aika ≥ `next_ctmr_us`
+- Seuraava laukaisuhetki: `next_ctmr_us += CTMR × 1000`
+
+## 12.4 Uptime MMIO
+
+Uptime lasketaan `simulated_time_us ÷ 1 000 000`. Arvo kasvaa yhdellä sekunnilla jokaista
+1 000 000 simuloitua mikrosekuntia kohti riippumatta ohjelman suoritusnopeudesta (FAST, MAX, SLOW jne.)
+
+| Rekisteri | Osoite | Kuvaus                            |
+| --------- | ------ | --------------------------------- |
+| UPTIME_W1 | $0019  | Sekuntilaskurin bitit 16–31       |
+| UPTIME_W0 | $001A  | Sekuntilaskurin bitit 0–15        |

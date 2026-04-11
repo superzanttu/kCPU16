@@ -2185,9 +2185,17 @@ class KCPU16TUI(App[None]):
         secs = uptime % 60
         uptime_str = f"{hours:02d}:{mins:02d}:{secs:02d}"
 
-        # Configurable interrupt states
-        tmr_str = f"[green]{r.tmr}[/] cyc" if r.tmr > 0 else "[dim]off[/]"
-        ctmr_str = f"[green]{r.ctmr}[/] ms" if r.ctmr > 0 else "[dim]off[/]"
+        # Configurable interrupt states with remaining time
+        if r.tmr > 0:
+            remaining_tmr = max(0, cpu._next_tmr_time_us - cpu._simulated_time_us)
+            tmr_str = f"[green]{r.tmr}[/] µs (next: {remaining_tmr} µs)"
+        else:
+            tmr_str = "[dim]off[/]"
+        if r.ctmr > 0:
+            remaining_ctmr = max(0, cpu._next_ctmr_time_us - cpu._simulated_time_us)
+            ctmr_str = f"[green]{r.ctmr}[/] ms (next: {remaining_ctmr // 1000} ms)"
+        else:
+            ctmr_str = "[dim]off[/]"
 
         # Graphics mode (GFX_MODE_REG)
         gfx_val = self.machine.memory.read(GFX_MODE_REG)

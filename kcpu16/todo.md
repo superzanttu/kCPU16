@@ -64,19 +64,30 @@ Tehtävät on merkitty hakasulkeilla, ja niiden tilaa voidaan päivittää seura
 
 ### Ryhmä 4: Suoritusaikajärjestelmä
 
-[ ] Määritä kaikille käskyille suoritusajat, jotka kuvaavat kuinka kauan kunkin käskyn suorittaminen kestää. Nämä ajat voivat perustua esimerkiksi käskyjen monimutkaisuuteen tai siihen, kuinka paljon muistiviittauksia ne tekevät. Käskyjen suoritusajat voidaan määrittää esimerkiksi mikrosekunteina tai millisekunteina, ja ne voivat vaihdella käskyittäin. Tämä auttaa tekemään ohjelman suorituksesta realistisempaa ja antaa käyttäjälle paremman käsityksen siitä, kuinka kauan ohjelman suorituminen kestää.
-[ ] Muuta toimintaa niin että uptime-laskurin arvon kasvattamiseen käytetään konekielisille käskyille määriteltyjä suoritusaikoja.
-[ ] Muuta Ajastinkeskeytyksen (TMR) ja Kellokeskeytyksen (CTMR) toimintaa niin, että ne perustuvat käskyjen suoritusaikoihin eikä pelkästään suoritettujen käskyjen lukumäärään. Tämä tarkoittaa, että keskeytykset laukaistaan, kun käskyjen suoritukseen kuluva aika saavuttaa tietyn rajan, eikä vain silloin, kun tietty määrä käskyjä on suoritettu. Tämä tekee keskeytyksistä realistisempia ja antaa käyttäjälle paremman käsityksen siitä, kuinka kauan ohjelman suorituminen kestää. Tämä mahdollistaa prosessorin toiminnan hidastamisen ilman ongelmia.
-[ ] Lisää Flags-ikkunaan TMR- ja CTRM- keskeytyksiin liittyvät tiedot, kuten jäljellä olevan ajan määrä ennen keskeytyksen laukeamista. Tämä antaa käyttäjälle paremman käsityksen siitä, kuinka kauan ohjelman suorituminen kestää ennen kuin keskeytys laukeaa, ja auttaa suunnittelemaan ohjelman suoritusta tehokkaammin.
-[ ] Lisää dokumentaatioon kuvaus siitä, miten käskyjen suoritusajat määritetään ja miten ne vaikuttavat ohjelman suoritukseen.
-[ ] Lisää dokumentaatioon kuvaus siitä, miten TMR- ja CTMR-keskeytykset laukaistaan käskyjen suoritusaikojen perusteella ja miten se vaikuttaa ohjelman suoritukseen.
-[ ] Lisää dokumentaatioon kuvaus siitä, miten TMR- ja CTMR-keskeytyksiin liittyvät tiedot näytetään Flags-ikkunassa ja miten se auttaa käyttäjää ymmärtämään ohjelman suoritusta.
+; Kaikki Ryhmä 4 -tehtävät on suoritettu, katso Valmiit tehtävät -osio.
 
 <!-- ============================================================ -->
 <!-- VALMIIT TEHTÄVÄT                                             -->
 <!-- ============================================================ -->
 
 ### Valmiit tehtävät
+
+[X] Määritä kaikille käskyille suoritusajat, jotka kuvaavat kuinka kauan kunkin käskyn suorittaminen kestää.
+; Toteutettu EXEC_CYCLES-taulukko instruction.py:ssä. Yksikkö: 1 µs simuloidulla 1 MHz kellolla.
+; Yksinkertaiset käskyt: 1 sykli. MUL=4, DIV=8, DREAD/DWRITE=10, INT/IRET/EXIT=4. FILL: 1 + N (dynaaminen).
+[X] Muuta toimintaa niin että uptime-laskurin arvon kasvattamiseen käytetään konekielisille käskyille määriteltyjä suoritusaikoja.
+; _uptime_counter lasketaan nyt simulated_time_us // 1_000_000. Ei enää reaaliaikariippuvuutta.
+[X] Muuta Ajastinkeskeytyksen (TMR) ja Kellokeskeytyksen (CTMR) toimintaa niin, että ne perustuvat käskyjen suoritusaikoihin eikä pelkästään suoritettujen käskyjen lukumäärään.
+; TMR: _next_tmr_time_us vertailu (ei enää modulo). CTMR: _next_ctmr_time_us vertailu.
+; STMR asettaa next_tmr_time_us = simulated + TMR. SCTMR asettaa next_ctmr_time_us = simulated + CTMR*1000.
+[X] Lisää Flags-ikkunaan TMR- ja CTMR-keskeytyksiin liittyvät tiedot, kuten jäljellä olevan ajan määrä ennen keskeytyksen laukeamista.
+; Flags-paneeli näyttää: "N µs (next: M µs)" TMR:lle ja "N ms (next: M ms)" CTMR:lle.
+[X] Lisää dokumentaatioon kuvaus siitä, miten käskyjen suoritusajat määritetään ja miten ne vaikuttavat ohjelman suoritukseen.
+; Dokumentoitu architecture.md luvussa 12 (Suoritusajat): EXEC_CYCLES-taulukko, simuloitu aika, uptime.
+[X] Lisää dokumentaatioon kuvaus siitä, miten TMR- ja CTMR-keskeytykset laukaistaan käskyjen suoritusaikojen perusteella ja miten se vaikuttaa ohjelman suoritukseen.
+; Dokumentoitu architecture.md luvuissa 5.4 ja 5.5 sekä 12.3 (Ajastinkeskeytykset simuloidun ajan perusteella).
+[X] Lisää dokumentaatioon kuvaus siitä, miten TMR- ja CTMR-keskeytyksiin liittyvät tiedot näytetään Flags-ikkunassa ja miten se auttaa käyttäjää ymmärtämään ohjelman suoritusta.
+; Dokumentoitu tui.md luvussa 11 (TMR ja CTMR — ajastinkeskeytystiedot).
 
 [X] Toolbarissa oli aiemmin ohjelman tilaa kuvaava teksti. Selvitä korvaako Flags-ikkunassa oleva State-tieto toolbarissa olleen tilatiedon. Jos toolbarissa oleva tilatieto on tarpeeton, poista sen.
 ; Toolbarissa ei ole erillistä tilatekstiä — pelkät painikkeet + SpeedSlider. Flags-paneeli (cpu-content) hoitaa tilanäytön. Ei muutoksia tarvittu.

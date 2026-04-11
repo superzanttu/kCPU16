@@ -95,6 +95,7 @@ from .instruction import (
     OPCODE_PRIV_SHIFT,
     OPCODE_NOPS_SHIFT,
     OPCODE_NOPS_MASK,
+    EXEC_CYCLES,
 )
 from .memory import Memory
 from .registers import RegisterFile
@@ -138,8 +139,13 @@ class CPU:
     # Kellonseuranta: reaaliaikaiset pisteet (time.monotonic())
     _clock_start: float = field(default_factory=time.monotonic, init=False)
     _uptime_counter: int = field(default=0, init=False)
-    _last_uptime_update: float = field(default_factory=time.monotonic, init=False)
-    _last_clock_int_time: float = field(default_factory=time.monotonic, init=False)
+
+    # Simuloitu suoritusaika mikrosekunteina (kertyy käskyjen suoritussykleistä)
+    _simulated_time_us: int = field(default=0, init=False)
+    # Seuraava simuloitu aika (µs) jolloin TMR-keskeytys laukeaa
+    _next_tmr_time_us: int = field(default=0, init=False)
+    # Seuraava simuloitu aika (µs) jolloin CTMR-keskeytys laukeaa
+    _next_ctmr_time_us: int = field(default=0, init=False)
 
     # 16-bittinen Galois LFSR satunnaislukugeneraattorille ($0022)
     _lfsr: int = field(default=RAND_LFSR_SEED, init=False)
@@ -160,8 +166,9 @@ class CPU:
         self._lfsr = RAND_LFSR_SEED
         now = time.monotonic()
         self._clock_start = now
-        self._last_uptime_update = now
-        self._last_clock_int_time = now
+        self._simulated_time_us = 0
+        self._next_tmr_time_us = 0
+        self._next_ctmr_time_us = 0
         self.regs.reset()
 
     def step(self) -> None:
@@ -205,6 +212,7 @@ class CPU:
             # VAIHE 4: EXECUTE
             # Suorita kaskyn varsinainen toiminto
             # ------------------------------------------------------------------
+            exec_cycles = self._get_exec_cycles(decoded)
             self._execute(decoded)
 
             # ------------------------------------------------------------------
@@ -213,8 +221,9 @@ class CPU:
             # ------------------------------------------------------------------
             self.regs.pc = (self.regs.pc + decoded.size_words) & WORD_MASK
 
-            # Paivita laskuri ja tarkista ajastinkeskeytys
+            # Paivita laskurit ja tarkista keskeytykset
             self.instruction_counter += 1
+            self._simulated_time_us += exec_cycles
             self._handle_timer_interrupt_if_needed()
             self._handle_keyboard_interrupt_if_needed()
             self._update_uptime_if_needed()
@@ -869,16 +878,20 @@ class CPU:
 
         elif ins.mnemonic == "STMR":
             # STMR reg - Set Timer Register
-            # Asettaa ajastinkeskeytyksen valin (0 = pois paalta)
+            # Asettaa ajastinkeskeytyksen valin mikrosekunneissa (0 = pois paalta)
             (reg_idx,) = ins.operands
-            self.regs.tmr = self._get_reg(reg_idx)
+            new_tmr = self._get_reg(reg_idx)
+            self.regs.tmr = new_tmr
+            # Nollaa laukaisuajastin: seuraava keskeytys tulee TMR µs:n paasta
+            self._next_tmr_time_us = self._simulated_time_us + new_tmr
 
         elif ins.mnemonic == "SCTMR":
             # SCTMR reg - Set Clock Timer Register (ms-vali, 0 = pois)
             (reg_idx,) = ins.operands
-            self.regs.ctmr = self._get_reg(reg_idx)
-            # Nollaa ajastin heti jotta ensimmainen keskeytys tulee oikeaan aikaan
-            self._last_clock_int_time = time.monotonic()
+            new_ctmr = self._get_reg(reg_idx)
+            self.regs.ctmr = new_ctmr
+            # Nollaa laukaisuajastin: seuraava keskeytys tulee CTMR ms:n paasta
+            self._next_ctmr_time_us = self._simulated_time_us + new_ctmr * 1000
 
         elif ins.mnemonic == "DREAD":
             # DREAD regD, regS - Lue tallennuslaitteelta
@@ -956,7 +969,7 @@ class CPU:
         Ajastinkeskeytys (INT 7) laukeaa kun:
         - TMR > 0 (ajastin on paalla)
         - I = 1 (keskeytykset ovat sallitut)
-        - instruction_counter on TMR:n monikerta
+        - Simuloitu aika on saavuttanut seuraavan laukaisuhetken
         """
         # TMR = 0 tarkoittaa etta ajastin on pois paalta
         if self.regs.tmr == 0:
@@ -966,21 +979,15 @@ class CPU:
         if self.regs.get_flag(SR_FLAG_I) == 0:
             return
 
-        # Laukaise kun counter % TMR == 0
-        if (
-            self.instruction_counter > 0
-            and (self.instruction_counter % self.regs.tmr) == 0
-        ):
+        # Laukaise kun simuloitu aika on ylittanyt seuraavan laukaisuhetken
+        if self._simulated_time_us >= self._next_tmr_time_us:
+            # Etene tarkasti TMR µs eteenpain (ei ajaudu hyvalla)
+            self._next_tmr_time_us += self.regs.tmr
             self._trigger_interrupt(INT_TIMER)
 
     def _update_uptime_if_needed(self) -> None:
-        """Kasvata 32-bittista sekuntilaskuria kun sekunti on kulunut."""
-        now = time.monotonic()
-        elapsed = now - self._last_uptime_update
-        if elapsed >= 1.0:
-            seconds = int(elapsed)
-            self._uptime_counter = (self._uptime_counter + seconds) % (2**32)
-            self._last_uptime_update += seconds  # siirrä tarkasti, ei ajaudu
+        """Paivita 32-bittinen sekuntilaskuri simuloidun ajan perusteella."""
+        self._uptime_counter = (self._simulated_time_us // 1_000_000) & 0xFFFFFFFF
 
     def _handle_keyboard_interrupt_if_needed(self) -> None:
         """
@@ -1000,22 +1007,42 @@ class CPU:
             self._trigger_interrupt(INT_KEYBOARD)
 
     def _handle_clock_interrupt_if_needed(self) -> None:
-        """Laukaise kellokeskeytys (INT 9) jos CTMR > 0 ja aika on kulunut.
+        """Laukaise kellokeskeytys (INT 9) jos CTMR > 0 ja simuloitu aika on saavutettu.
 
         Kellokeskeytys laukeaa kun:
         - CTMR > 0 (ms-ajastin paalla)
         - I = 1 (keskeytykset sallittu)
-        - CTMR millisekuntia kulunut edellisesta laukeamisesta
+        - Simuloitu aika on saavuttanut seuraavan laukaisuhetken
         """
         if self.regs.ctmr == 0:
             return
         if self.regs.get_flag(SR_FLAG_I) == 0:
             return
-        now = time.monotonic()
-        elapsed_ms = (now - self._last_clock_int_time) * 1000.0
-        if elapsed_ms >= self.regs.ctmr:
-            self._last_clock_int_time = now
+        if self._simulated_time_us >= self._next_ctmr_time_us:
+            # Etene tarkasti CTMR ms eteenpain (ei ajaudu hyvan)
+            self._next_ctmr_time_us += self.regs.ctmr * 1000
             self._trigger_interrupt(INT_CLOCK)
+
+    def _get_exec_cycles(self, ins: DecodedInstruction) -> int:
+        """Laske kaskylle simuloidut suoritussyklit (= mikrosekuntia 1 MHz kellolla).
+
+        Useimmilla kaskyilla on kiintea syklimäarä EXEC_CYCLES-taulukosta.
+        FILL-kaskylle lisataan taytettyjen sanojen maara dynaamisesti.
+
+        Args:
+            ins: Dekoodattu kasky (reksiteriarvot luetaan ennen _execute-kutsua)
+
+        Returns:
+            Simuloidut suoritussyklit (>= 1)
+        """
+        base = EXEC_CYCLES.get(ins.mnemonic, 1)
+        if ins.mnemonic == "FILL" and len(ins.operands) >= 2:
+            start = self._get_reg(ins.operands[0]) & WORD_MASK
+            end = self._get_reg(ins.operands[1]) & WORD_MASK
+            # Sanojen maara: toimii oikein myos kiertoalueilla
+            count = ((end - start) & WORD_MASK) + 1
+            return base + count
+        return base
 
     # ==========================================================================
     # MMIO-APUMETODIT: lue/kirjoita sana joka osaa hakea kellorekisterit
@@ -1041,7 +1068,7 @@ class CPU:
         value &= WORD_MASK
         if addr == CLOCK_INT_INTERVAL:
             self.regs.ctmr = value
-            self._last_clock_int_time = time.monotonic()
+            self._next_ctmr_time_us = self._simulated_time_us + value * 1000
             return
         # Muut kellolohkon osoitteet ovat vain luettavia — ohita hiljainen kirjoitus
         if CLOCK_MMIO_START <= addr <= CLOCK_MMIO_END:
