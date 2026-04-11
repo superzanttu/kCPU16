@@ -1164,9 +1164,15 @@ class KCPU16TUI(App[None]):
     def action_step_once(self) -> None:
         """Suorita yksi konekielikäsky (F7/F10 tai Step-painike).
 
-        Tarkistaa ensin onko CPU pysähtynyt (HALT/EXIT). Jos on,
+        Tarkistaa ensin onko ohjelma ladattu. Jos ei ole, logitetaan ilmoitus.
+        Tarkistaa sitten onko CPU pysähtynyt (HALT/EXIT). Jos on,
         ladataan ohjelma uudelleen ja suoritetaan ensimmäinen askel.
         """
+        if not self.is_assembled:
+            self._log(
+                "[yellow]No program loaded. Use 'load <file>' or Ctrl+O first.[/yellow]"
+            )
+            return
         if self.machine.cpu.halted or self.machine.process_exited:
             self._reload_and_run("step")
             return

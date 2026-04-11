@@ -54,20 +54,7 @@ Tehtävät on merkitty hakasulkeilla, ja niiden tilaa voidaan päivittää seura
 
 ### Ryhmä 3: UI – Tiedostohallinta & suoritustila
 
-[ ] Toolbarissa oli aiemmin ohjelman tilaa kuvaava teksti. Selvitä korvaako Flags-ikkunassa oleva State-tieto toolbarissa olleen tilatiedon. Jos toolbarissa oleva tilatieto on tarpeeton, poista sen.
-[ ] Varmista että käyttöliittymän kaikki osat ovat englanninkielisiä ja johdonmukaisesti nimettyjä, mukaan lukien kaikki painikkeet, valikot, virheilmoitukset. Tämä varmistaa, että käyttöliittymä on yhdenmukainen ja ymmärrettävä kaikille käyttäjille, riippumatta heidän kielitaustastaan.
-[ ] Step/Full/Slow painikkeet eivät saa käynnistää prosessorin toimintaa, ellei load-komennolla ole ladattu muistii ohjelmaa. Pitää antaa virheilmoitus, jos yritetään käynnistää ilman ladattua ohjelmaa. Tämä varmistaa, että käyttäjä ei vahingossa yritä suorittaa ohjelmaa, joka ei ole ladattu, ja antaa selkeän viestin siitä, että ensin on ladattava ohjelma ennen kuin sitä voi suorittaa.
-[ ] Varmista että .asm tai .dsk-tiedoston lataamisen jälkeen ohjelman suoritustila on STOPPED, eikä esimerkiksi STEP tai FULL. Tämä varmistaa, että ohjelma ei ala suorittaa automaattisesti heti lataamisen jälkeen, ja antaa käyttäjälle mahdollisuuden tarkistaa ladatun ohjelman ennen sen suorittamista.
-[ ] VArmista että latatun .asm-ohjelman nimi näkyy käyttöliitymässä. Jos ei ole ladattu älä näytä nimeä.
-[ ] Varmista että ladatun .dsk-levykuvan nimi näkyy käyttöliittymässä tallennuslaitteen kohdalla. Jos ei ole ladattu, älä näytä nimeä.
-[ ] Varmista että .dsk ja .asm-tiedostojen tallennuksen jälkee ko. nimi näytetään käyttöliittymässä, kuin se olisi juuri ladattu. Tämä antaa käyttäjälle selkeän vahvistuksen siitä, että tiedosto on tallennettu onnistuneesti, ja auttaa pitämään käyttöliittymän ajan tasalla ladattujen ja tallennettujen tiedostojen kanssa.
-[ ] Lisää LOAD-painikkeeseen toiminto, jolla ladattava ohjelma (pakotettu code-hakemistoon) valitaan valintaikkunasta, jossa on esillä kaikki code-hakemistossa olevat .asm-tiedostot. Tämä helpottaa ohjelman lataamista, koska käyttäjän ei tarvitse muistaa tai kirjoittaa tarkkaa tiedostopolkua, vaan hän voi valita ladattavan ohjelman visuaalisesta listasta. Valintaikkunasta valitaan ladattava ohjelma hiiren tuplaklikillä tai valitsemalla ohjelma ja painamall Load-painiketta. Toiminnon voi peruttaa Cancel-painikkeella.
-[ ] Lisää dokumentaatioon kuvaus siitä, että Step/Full/Slow-painikkeet vaativat ladatun ohjelman toimiakseen ja että ne antavat virheilmoituksen, jos yritetään käynnistää ilman ladattua ohjelmaa.
-[ ] Lisää dokumentaatioon kuvaus siitä, että .asm- tai .dsk-tiedoston lataamisen jälkeen ohjelman suoritustila on STOPPED, eikä esimerkiksi STEP tai FULL, ja että tämä antaa käyttäjälle mahdollisuuden tarkistaa ladatun ohjelman ennen sen suorittamista.
-[ ] Lisää dokumentaatioon kuvaus siitä, että latatun .asm-ohjelman nimi näkyy käyttöliittymässä, ja että nimeä ei näytetä, jos ohjelmaa ei ole ladattu.
-[ ] Lisää dokumentaatioon kuvaus siitä, että ladatun .dsk-levykuvan nimi näkyy käyttöliittymässä tallennuslaitteen kohdalla, ja että nimeä ei näytetä, jos levykuvaa ei ole ladattu.
-[ ] Lisää dokumentaatioon kuvaus siitä, että .dsk- ja .asm-tiedostojen tallennuksen jälkeen ko. nimi näytetään käyttöliittymässä, kuin se olisi juuri ladattu, ja että tämä auttaa käyttäjää ymmärtämään, että tiedosto on tallennettu onnistuneesti.
-[ ] Lisää dokumentaatioon kuvaus siitä, että LOAD-painikkeella voidaan valita ladattava ohjelma ikkunasta, jossa on esillä kaikki code-hakemistossa olevat .asm-tiedostot, ja että tämä helpottaa ohjelman lataamista.
+; Kaikki Ryhmä 3 -tehtävät on suoritettu, katso Valmiit tehtävät -osio.
 
 <!-- ============================================================ -->
 <!-- RYHMÄ 4: Suoritusaikajärjestelmä (instruction.py/cpu.py/tui) -->
@@ -77,7 +64,7 @@ Tehtävät on merkitty hakasulkeilla, ja niiden tilaa voidaan päivittää seura
 
 ### Ryhmä 4: Suoritusaikajärjestelmä
 
-[ ] Määritä kaikille käskyille suorituajat, jotka kuvaavat kuinka kauan kunkin käskyn suorittaminen kestää. Nämä ajat voivat perustua esimerkiksi käskyjen monimutkaisuuteen tai siihen, kuinka paljon muistiviittauksia ne tekevät. Käskyjen suoritusajat voidaan määrittää esimerkiksi mikrosekunteina tai millisekunteina, ja ne voivat vaihdella käskyittäin. Tämä auttaa tekemään ohjelman suorituksesta realistisempaa ja antaa käyttäjälle paremman käsityksen siitä, kuinka kauan ohjelman suorituminen kestää.
+[ ] Määritä kaikille käskyille suoritusajat, jotka kuvaavat kuinka kauan kunkin käskyn suorittaminen kestää. Nämä ajat voivat perustua esimerkiksi käskyjen monimutkaisuuteen tai siihen, kuinka paljon muistiviittauksia ne tekevät. Käskyjen suoritusajat voidaan määrittää esimerkiksi mikrosekunteina tai millisekunteina, ja ne voivat vaihdella käskyittäin. Tämä auttaa tekemään ohjelman suorituksesta realistisempaa ja antaa käyttäjälle paremman käsityksen siitä, kuinka kauan ohjelman suorituminen kestää.
 [ ] Muuta toimintaa niin että uptime-laskurin arvon kasvattamiseen käytetään konekielisille käskyille määriteltyjä suoritusaikoja.
 [ ] Muuta Ajastinkeskeytyksen (TMR) ja Kellokeskeytyksen (CTMR) toimintaa niin, että ne perustuvat käskyjen suoritusaikoihin eikä pelkästään suoritettujen käskyjen lukumäärään. Tämä tarkoittaa, että keskeytykset laukaistaan, kun käskyjen suoritukseen kuluva aika saavuttaa tietyn rajan, eikä vain silloin, kun tietty määrä käskyjä on suoritettu. Tämä tekee keskeytyksistä realistisempia ja antaa käyttäjälle paremman käsityksen siitä, kuinka kauan ohjelman suorituminen kestää. Tämä mahdollistaa prosessorin toiminnan hidastamisen ilman ongelmia.
 [ ] Lisää Flags-ikkunaan TMR- ja CTRM- keskeytyksiin liittyvät tiedot, kuten jäljellä olevan ajan määrä ennen keskeytyksen laukeamista. Tämä antaa käyttäjälle paremman käsityksen siitä, kuinka kauan ohjelman suorituminen kestää ennen kuin keskeytys laukeaa, ja auttaa suunnittelemaan ohjelman suoritusta tehokkaammin.
@@ -90,6 +77,35 @@ Tehtävät on merkitty hakasulkeilla, ja niiden tilaa voidaan päivittää seura
 <!-- ============================================================ -->
 
 ### Valmiit tehtävät
+
+[X] Toolbarissa oli aiemmin ohjelman tilaa kuvaava teksti. Selvitä korvaako Flags-ikkunassa oleva State-tieto toolbarissa olleen tilatiedon. Jos toolbarissa oleva tilatieto on tarpeeton, poista sen.
+; Toolbarissa ei ole erillistä tilatekstiä — pelkät painikkeet + SpeedSlider. Flags-paneeli (cpu-content) hoitaa tilanäytön. Ei muutoksia tarvittu.
+[X] Varmista että käyttöliittymän kaikki osat ovat englanninkielisiä ja johdonmukaisesti nimettyjä, mukaan lukien kaikki painikkeet, valikot, virheilmoitukset. Tämä varmistaa, että käyttöliittymä on yhdenmukainen ja ymmärrettävä kaikille käyttäjille, riippumatta heidän kielitaustastaan.
+; Kaikki käyttäjälle näkyvät tekstit (painikkeet, välilehdet, otsikot, virheilmoitukset, lokiviestit) ovat englanninkielisiä. Docstringit ja kommentit ovat suomeksi (sisäinen dokumentaatio, ei näy käyttäjälle).
+[X] Step/Full/Slow painikkeet eivät saa käynnistää prosessorin toimintaa, ellei load-komennolla ole ladattu muistii ohjelmaa. Pitää antaa virheilmoitus, jos yritetään käynnistää ilman ladattua ohjelmaa. Tämä varmistaa, että käyttäjä ei vahingossa yritä suorittaa ohjelmaa, joka ei ole ladattu, ja antaa selkeän viestin siitä, että ensin on ladattava ohjelma ennen kuin sitä voi suorittaa.
+; Fast/Max/Slow tarkistivat jo is_assembled. Lisättiin vastaava tarkistus action_step_once():iin (tui.py): jos ei ladattu, logitetaan "No program loaded. Use 'load <file>' or Ctrl+O first." eikä suoriteta konekäskyä.
+[X] Varmista että .asm tai .dsk-tiedoston lataamisen jälkeen ohjelman suoritustila on STOPPED, eikä esimerkiksi STEP tai FULL. Tämä varmistaa, että ohjelma ei ala suorittaa automaattisesti heti lataamisen jälkeen, ja antaa käyttäjälle mahdollisuuden tarkistaa ladatun ohjelman ennen sen suorittamista.
+; _do_assemble() asettaa _exec_mode = "stopped" aina assembloidessa. disk load -komento asettaa _exec_mode = "stopped" ja peruuttaa taustayöntekijän. Jo toteutettu.
+[X] VArmista että latatun .asm-ohjelman nimi näkyy käyttöliitymässä. Jos ei ole ladattu älä näytä nimeä.
+; _update_program_title() päivittää Screen-paneelin border_subtitle:n tiedostonimellä tai tyhjäksi. Kutsutaan _do_open():ssa. Jo toteutettu.
+[X] Varmista että ladatun .dsk-levykuvan nimi näkyy käyttöliittymässä tallennuslaitteen kohdalla. Jos ei ole ladattu, älä näytä nimeä.
+; _update_disk_title() päivittää disasm-tabs border_subtitle:n levykuvan nimellä (+ * jos muutoksia) tai tyhjäksi. Jo toteutettu.
+[X] Varmista että .dsk ja .asm-tiedostojen tallennuksen jälkee ko. nimi näytetään käyttöliittymässä, kuin se olisi juuri ladattu. Tämä antaa käyttäjälle selkeän vahvistuksen siitä, että tiedosto on tallennettu onnistuneesti, ja auttaa pitämään käyttöliittymän ajan tasalla ladattujen ja tallennettujen tiedostojen kanssa.
+; disk save -komento kutsuu _update_disk_title() tallennuksen jälkeen. .asm-tiedostoja ei muokata TUI:ssa (ulkoinen editori), joten .asm-tallennusta ei tarvita.
+[X] Lisää LOAD-painikkeeseen toiminto, jolla ladattava ohjelma (pakotettu code-hakemistoon) valitaan valintaikkunasta, jossa on esillä kaikki code-hakemistossa olevat .asm-tiedostot. Tämä helpottaa ohjelman lataamista, koska käyttäjän ei tarvitse muistaa tai kirjoittaa tarkkaa tiedostopolkua, vaan hän voi valita ladattavan ohjelman visuaalisesta listasta. Valintaikkunasta valitaan ladattava ohjelma hiiren tuplaklikillä tai valitsemalla ohjelma ja painamall Load-painiketta. Toiminnon voi peruttaa Cancel-painikkeella.
+; FilePickerDialog-modal on jo toteutettu tui.py:ssä. action_open_file() käyttää sitä LOAD-painikkeen ja Ctrl+O-pikavalinnasta. Jo toteutettu.
+[X] Lisää dokumentaatioon kuvaus siitä, että Step/Full/Slow-painikkeet vaativat ladatun ohjelman toimiakseen ja että ne antavat virheilmoituksen, jos yritetään käynnistää ilman ladattua ohjelmaa.
+; Dokumentoitu tui.md:n luvussa 10 ("Step/Fast/Max/Slow — ohjelman latausvaatimus").
+[X] Lisää dokumentaatioon kuvaus siitä, että .asm- tai .dsk-tiedoston lataamisen jälkeen ohjelman suoritustila on STOPPED, eikä esimerkiksi STEP tai FULL, ja että tämä antaa käyttäjälle mahdollisuuden tarkistaa ladatun ohjelman ennen sen suorittamista.
+; Dokumentoitu tui.md:n luvussa 10 ("Suoritustila latauksen jälkeen").
+[X] Lisää dokumentaatioon kuvaus siitä, että latatun .asm-ohjelman nimi näkyy käyttöliittymässä, ja että nimeä ei näytetä, jos ohjelmaa ei ole ladattu.
+; Dokumentoitu tui.md:n luvussa 10 ("Ladattujen tiedostojen nimet käyttöliittymässä").
+[X] Lisää dokumentaatioon kuvaus siitä, että ladatun .dsk-levykuvan nimi näkyy käyttöliittymässä tallennuslaitteen kohdalla, ja että nimeä ei näytetä, jos levykuvaa ei ole ladattu.
+; Dokumentoitu tui.md:n luvussa 10 ("Ladattujen tiedostojen nimet käyttöliittymässä").
+[X] Lisää dokumentaatioon kuvaus siitä, että .dsk- ja .asm-tiedostojen tallennuksen jälkeen ko. nimi näytetään käyttöliittymässä, kuin se olisi juuri ladattu, ja että tämä auttaa käyttäjää ymmärtämään, että tiedosto on tallennettu onnistuneesti.
+; Dokumentoitu tui.md:n luvussa 10 ("Ladattujen tiedostojen nimet käyttöliittymässä").
+[X] Lisää dokumentaatioon kuvaus siitä, että LOAD-painikkeella voidaan valita ladattava ohjelma ikkunasta, jossa on esillä kaikki code-hakemistossa olevat .asm-tiedostot, ja että tämä helpottaa ohjelman lataamista.
+; Dokumentoitu tui.md:n luvussa 10 ("Load-painike ja tiedostonvalintaikkuna").
 
 [X] Mitä Flags-ikkunassa näkyvä "State: READY" tieto tarkoittaa?
 ; READY (vihreä)   = CPU pyörii normaalisti (ei halted, ei exit_requested)
