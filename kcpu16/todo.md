@@ -180,107 +180,6 @@ Tehtävät on merkitty hakasulkeilla, ja niiden tilaa voidaan päivittää seura
 ; `_get_reg`: yksi bounds-check (`idx < 18`) + `self._reg_array[idx]` – ei if/elif-ketjua.
 ; `_set_reg`: vastaava `self._reg_array[idx] = value & WORD_MASK`.
 
-<!-- ============================================================ -->
-<!-- RYHMÄ 1: Selvitystehtävät (itsenäiset, ei riippuvuuksia)     -->
-<!-- Suorita ensin – tulokset voivat vaikuttaa muihin ryhmiin.    -->
-<!-- ============================================================ -->
-
-### Ryhmä 1: Selvitystehtävät
-
-; Kaikki Ryhmä 1 -tehtävät on suoritettu, katso Valmiit tehtävät -osio.
-
-<!-- ============================================================ -->
-<!-- RYHMÄ 2: Assembler-parannukset (assembler.py + cpu.py)       -->
-<!-- Muokkaa assembler.py ja cpu.py yhtä aikaa.                   -->
-<!-- ============================================================ -->
-
-### Ryhmä 2: Assembler-parannukset
-
-; Kaikki Ryhmä 2 -tehtävät on suoritettu, katso Valmiit tehtävät -osio.
-
-<!-- ============================================================ -->
-<!-- RYHMÄ 3: UI – Tiedostohallinta & suoritustila (tui.py)       -->
-<!-- Aloita selvitystehtävällä – tulos voi poistaa muita töitä.   -->
-<!-- Kaikki koskevat lataus-/tallennus-/käynnistyslogiikkaa.      -->
-<!-- ============================================================ -->
-
-### Ryhmä 3: UI – Tiedostohallinta & suoritustila
-
-; Kaikki Ryhmä 3 -tehtävät on suoritettu, katso Valmiit tehtävät -osio.
-
-<!-- ============================================================ -->
-<!-- RYHMÄ 4: Suoritusaikajärjestelmä (instruction.py/cpu.py/tui) -->
-<!-- Isoin muutos. Tehtävät ovat ketjutettuja: suoritusajat ensin,-->
-<!-- sitten uptime, sitten TMR/CTMR, sitten Flags-ikkuna.         -->
-<!-- ============================================================ -->
-
-### Ryhmä 4: Suoritusaikajärjestelmä
-
-; Kaikki Ryhmä 4 -tehtävät on suoritettu, katso Valmiit tehtävät -osio.
-
-<!-- ============================================================ -->
-<!-- RYHMÄ 10: 3D-demot – analyysi ja korjaukset                 -->
-<!-- Järjestys: analyysi → J-korjaus → L-korjaus → refaktorointi.-->
-<!-- Kaikki koskevat samaa koodikantaa (lib_3dobjects.asm).       -->
-<!-- ============================================================ -->
-
-### Ryhmä 10: 3D-demot – analyysi ja korjaukset
-
-; Kaikki Ryhmä 10 -tehtävät on suoritettu, katso Valmiit tehtävät -osio.
-
-<!-- ============================================================ -->
-<!-- RYHMÄ 11: Tallennuslaitekirjasto (lib-disk.asm)             -->
-<!-- Itsenäinen uusi ominaisuus, ei riippuvuuksia muihin ryhmiin. -->
-<!-- ============================================================ -->
-
-### Ryhmä 11: Tallennuslaitekirjasto
-
-; Kaikki Ryhmä 11 -tehtävät on suoritettu, katso Valmiit tehtävät -osio.
-
-<!-- ============================================================ -->
-<!-- RYHMÄ 5: Suorituskyky – Opcode-pohjainen dispatch (cpu.py)  -->
-<!-- Korvaa merkkijonopohjainen dispatch handler-taululla.        -->
-<!-- ============================================================ -->
-
-### Ryhmä 5: Suorituskyky – Opcode-pohjainen dispatch
-
-; Kaikki Ryhmä 5 -tehtävät on suoritettu, katso Valmiit tehtävät -osio.
-
-<!-- ============================================================ -->
-<!-- RYHMÄ 6: Suorituskyky – Ajanotto- ja keskeytystarkistukset  -->
-<!-- Riippuvuus: Ryhmä 4 (suoritusajat) suoritettava ensin, jotta -->
-<!-- TMR/CTMR-optimoinnit ovat yhteensopivia simuloitujen         -->
-<!-- aikojen kanssa. Vähentää time.monotonic()-kutsuja hot        -->
-<!-- loopissa ja korvaa modulo-vertailun next_cycle-vertailulla.  -->
-<!-- ============================================================ -->
-
-### Ryhmä 6: Suorituskyky – Ajanotto- ja keskeytystarkistukset
-
-; Kaikki Ryhmä 6 -tehtävät on suoritettu, katso Valmiit tehtävät -osio.
-
-<!-- ============================================================ -->
-<!-- RYHMÄ 7: Suorituskyky – Taulukkopohjaiset rekisterit        -->
-<!-- Korvaa if/elif-rekisteriketjut indeksoinnilla cpu.py:ssä.   -->
-<!-- ============================================================ -->
-
-### Ryhmä 7: Suorituskyky – Taulukkopohjaiset rekisterit
-
-; Kaikki Ryhmä 7 -tehtävät on suoritettu, katso Valmiit tehtävät -osio.
-
-<!-- ============================================================ -->
-<!-- RYHMÄ 8: Suorituskyky – Memory.write O(1)-suojaustarkistus  -->
-<!-- Korvaa alue-listan läpikäynti maskitaulukolla.              -->
-<!-- ============================================================ -->
-
-### Ryhmä 8: Suorituskyky – Memory.write O(1)-suojaustarkistus
-
-; Kaikki Ryhmä 8 -tehtävät on suoritettu, katso Valmiit tehtävät -osio.
-
-<!-- ============================================================ -->
-<!-- RYHMÄ 9: Suorituskyky – Fast run -suorituspolku (cpu.py)    -->
-<!-- Erillinen optimoitu hot loop jatkuvaan ajoon.               -->
-<!-- ============================================================ -->
-
 ### Ryhmä 9: Suorituskyky – Fast run -suorituspolku
 
 [ ] Lisää `run()`-metodiin optimoitu fast-path-silmukka: paikalliset viittaukset usein käytettyihin metodeihin/muuttujiin, vähemmän funktiokutsuja per käsky ja poikkeuspolku erotettuna normaalista nopeasta polusta. Nykyinen `step()` säilytetään debuggausta varten.
@@ -293,8 +192,8 @@ Tehtävät on merkitty hakasulkeilla, ja niiden tilaa voidaan päivittää seura
 
 ### Ryhmä A: Screen-kirjasto
 
-[ ] Kirjoita lib-screen.asm-kirjastoon funktio, joka mahdollistaa tekstin piirtämisen näytölle käyttäen kCPU16:n A-grafiikkatilaa, jotta näyttöä voi käyttää kuten yksinkertaista terminaalia, joka osaa skrollata tekstiä ylös.
-[ ] Lisää lib-screen.asm-kirjastoon funktio, jolla käyttäjältä voi pyytää inputia.
+[ ] Kirjoita lib-screen.asm-kirjastoon funktio, joka mahdollistaa tekstin tulostamisen näytölle käyttäen kCPU16:n A-grafiikkatilaa, jotta näyttöä voi käyttää kuten yksinkertaista terminaalia, joka osaa skrollata tekstiä ylös. Tämä voisi olla esimerkiksi "print" -funktio, joka ottaa merkkijonon ja tulostaa sen näytölle, ja skrollaa vanhaa tekstiä ylös tarvittaessa. Tämä funktio voisi myös tukea perusmuotoilua, kuten rivinvaihtoja ja tabulaattoreita, jotta teksti olisi helpommin luettavaa.
+[ ] Lisää lib-screen.asm-kirjastoon funktio, jolla käyttäjältä voi pyytää inputia. Tämä voisi olla esimerkiksi "input" -funktio, joka näyttää kehotteen näytöllä ja odottaa käyttäjältä syötettä, joka sitten palautetaan funktiosta. Tämä funktio voisi tukea perusominaisuuksia, kuten syötteen rajoittamista tiettyyn pituuteen ja mahdollisesti jopa yksinkertaista muokkausta (esim. backspace).
 
 <!-- ============================================================ -->
 <!-- RYHMÄ B: Disk-laajennukset (lib-disk.asm + disk_test.asm)   -->
