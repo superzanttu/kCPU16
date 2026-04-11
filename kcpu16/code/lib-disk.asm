@@ -154,19 +154,18 @@ disk_io_buf:
 ;
 ; Sisään: R0 = blokki-indeksi (0–255)
 ; Ulos:   (disk_io_buf täytetty)
-; Clobbers: R0–R3
+; Clobbers: R0–R5
 ; =============================================================================
 _disk_read_block:
         PUSH  R4
+        PUSH  R5
         ; Laske blokin aloitusosoite tallennuslaitteella: addr = blokki * 256
         READ  R1, 256
         MUL   R0, R1              ; R0 = blokki * 256 = aloitusosoite laitteella
         READ  R2, disk_io_buf     ; R2 = kohde RAM:ssa
         READ  R3, 256             ; R3 = laskuri (256 sanaa)
-_drb_loop:
-        CMP   R3, R3              ; onko R3 = 0?
-        ; käytetään erillistä nollatarkistusta vertailemalla nollaan
         READ  R4, 0
+_drb_loop:
         CMP   R3, R4
         JZ    _drb_done
         DREAD R5, R0              ; R5 = storage[R0]
@@ -175,8 +174,10 @@ _drb_loop:
         ADD   R0, R4              ; R0++
         ADD   R2, R4              ; R2++
         SUB   R3, R4              ; R3--
+        READ  R4, 0
         JUMP  _drb_loop
 _drb_done:
+        POP   R5
         POP   R4
         RET
 
@@ -457,78 +458,6 @@ _ffc_done:
         POP   R6
         RET
 
-; =============================================================================
-; _dir_find_by_name — Etsi hakemistomerkintä nimen perusteella
-;
-; Sisään: R0 = osoitin nimeen RAM:ssa (null-terminoitu)
-; Ulos:   R0 = merkinnän indeksi (0–7) jos löytyi
-;         R0 = 0xFFFF jos ei löydy
-;         disk_io_buf sisältää hakemistoblokin
-; Clobbers: R0–R7
-; =============================================================================
-_dir_find_by_name:
-        PUSH  R8
-        PUSH  R9
-        CPY   R9, R0              ; R9 = hakujen nimen osoitin
-
-        ; Lue hakemisto
-        READ  R0, DISK_DIR_BLOCK
-        CALL  _disk_read_block
-
-        ; Käy läpi merkinnät 0..DISK_DIR_ENTRIES-1
-        READ  R6, 0               ; R6 = merkintä-indeksi
-        READ  R7, DISK_DIR_ENTRIES
-        READ  R8, 1
-_dfbn_loop:
-        CMP   R6, R7
-        JGE   _dfbn_not_found
-        ; Laske merkinnän osoitin: disk_io_buf + R6 * DISK_DIR_ENTRY_SIZE
-        CPY   R0, R6
-        READ  R1, DISK_DIR_ENTRY_SIZE
-        MUL   R0, R1
-        READ  R1, disk_io_buf
-        ADD   R0, R1              ; R0 = &entry[R6]
-        ; Tarkista status (offset 0): 0 = vapaa, ohita
-        READ  R1, [R0]
-        CMP   R1, R8
-        JNZ   _dfbn_skip
-        ; Vertaa nimi (offset 1): &entry[R6] + 1
-        ADD   R0, R8              ; R0 = &entry[R6].name
-        CPY   R1, R9              ; R1 = haettu nimi
-        CALL  _disk_str_cmp       ; R0 = 0 jos samat
-        CMP   R0, R8
-        JNZ   _dfbn_found_idx     ; R0 ≠ 0 eli _disk_str_cmp palautti ≠ 0 = sama ... odota
-        ; _disk_str_cmp palauttaa 0 = samat, 1 = erot
-        ; JZ → samat
-        READ  R0, 0
-        CMP   R0, R0              ; lue viimeisin tulos R0 takaisin
-        ; Huom: _disk_str_cmp clobberoi R0; täytyy tallentaa indeksi ennen kutsua
-        ; Korjataan: tallennetaan R6 ennen kutsua, tarkistetaan R0 jälkeen
-_dfbn_skip:
-        ADD   R6, R8
-        JUMP  _dfbn_loop
-
-_dfbn_found_idx:
-        ; Tämä polku ei ole oikein, korjataan alla — ei käytetä
-        JUMP  _dfbn_not_found
-
-_dfbn_not_found:
-        READ  R0, DISK_EOF
-        POP   R9
-        POP   R8
-        RET
-
-; =============================================================================
-; _dir_find_by_name (korjattu versio)
-;
-; Käytetään tallentamalla indeksi ennen str_cmp-kutsua.
-; Korvataan koko aliohjelma toimivalla versiolla:
-; =============================================================================
-
-; Poistetaan vanhentunut versio ja käytetään tätä:
-; (Assembler linkittää viimeisimmän saman nimisen labelin — ei ole mahdollista.
-;  Käytetään eri nimiä sisäisille toteutuksille.)
-
 ; Korjattu kutsu — käytetään apumuuttujaa:
 _dfbn_cur_idx:
         .dw  0
@@ -736,6 +665,7 @@ disk_write:
         ; Tallenna parametrit
         STORE [_dw_data_ptr],   R1
         STORE [_dw_data_words], R2
+        STORE [_dw_orig_words], R2  ; tallenna alkuperäinen sanamäärä
         CPY   R9, R0              ; R9 = nimi
 
         ; Etsi tiedosto → R0 = indeksi tai virhe
@@ -1242,58 +1172,77 @@ _dst_not_found:
         RET
 
 ; =============================================================================
-; disk_list — Listaa kaikki tiedostot (kutsuu callback-aliohjelmaa)
+; disk_list — Listaa kaikki tiedostot puskuriin
 ;
-; Käy läpi hakemiston kaikki käytetyt merkinnät ja kutsuu callback-aliohjelmaa
-; jokaisen tiedoston kohdalla.
+; Käy läpi hakemiston kaikki käytetyt merkinnät ja kirjoittaa niiden
+; nimet (osoittimet disk_io_buf:ssa oleviin nimiin) annettuun puskuriin.
 ;
-; Sisään: R0 = osoitin callback-aliohjelmaan
-;              Callback saa:  R0 = indeksi, R1 = &entry (disk_io_buf:ssa)
-;              Callback palauttaa: R0 = 0 jatka, ≠0 keskeytä listaus
-; Ulos:   R0 = DISK_OK
-; Clobbers: R0–R7
+; Huom: disk_io_buf sisältää hakemiston kutsun paluuhetkellä.
+; Kutsuja voi käydä läpi puskurin osoittimet ja lukea nimet _ennen_ seuraavaa
+; disk_*-kutsua (kutsut ylikirjoittavat disk_io_buf:n).
+;
+; Sisään: R0 = osoitin puskuriin RAM:ssa (kohta johon kirjoitetaan osoittimia)
+;         R1 = puskurin max koko (max alkioita, kukin 1 sana = osoitin)
+; Ulos:   R0 = löytyneiden tiedostojen määrä (0 jos ei tiedostoja)
+;         Puskuriin kirjoitettu osoittimet /kunkin tiedoston nimi-kenttään
+;         (disk_io_buf + entry_offset + 1)
+; Clobbers: R0–R8
 ; =============================================================================
 disk_list:
         PUSH  R8
         PUSH  R9
-        STORE [_dl_callback], R0
+
+        STORE [_dl_dst_ptr],  R0
+        STORE [_dl_max],      R1
 
         ; Lue hakemisto
         READ  R0, DISK_DIR_BLOCK
         CALL  _disk_read_block
 
-        READ  R6, 0
+        READ  R6, 0               ; R6 = merkintäindeksi
         READ  R7, DISK_DIR_ENTRIES
         READ  R8, 1
+        READ  R9, 0               ; R9 = löytyneiden laskuri
+
 _dl_loop:
         CMP   R6, R7
         JGE   _dl_done
-        ; &entry[R6]
+        ; Puskuri täynnä?
+        READ  R0, [_dl_max]
+        CMP   R9, R0
+        JGE   _dl_done
+
+        ; &entry[R6] = disk_io_buf + R6 * 32
         CPY   R0, R6
         READ  R1, DISK_DIR_ENTRY_SIZE
         MUL   R0, R1
         READ  R1, disk_io_buf
         ADD   R0, R1              ; R0 = &entry[R6]
-        READ  R1, [R0]            ; status
-        CMP   R1, R8
+
+        READ  R1, [R0]            ; status (offset 0)
+        CMP   R1, R8              ; status == 1?
         JNZ   _dl_skip
-        ; Kutsu callback: R0 = indeksi, R1 = &entry
-        CPY   R1, R0
-        CPY   R0, R6
-        READ  R9, [_dl_callback]
-        CALL  R9                  ; Epäsuora kutsu callback:iin
-        READ  R1, 0
-        CMP   R0, R1
-        JNZ   _dl_done            ; callback pyysi keskeytystä
+
+        ; Kirjoita nimen osoitin puskuriin (&entry + 1 = nimi-kenttä)
+        ADD   R0, R8              ; R0 = &entry.name
+        READ  R2, [_dl_dst_ptr]
+        STORE [R2], R0
+        ADD   R2, R8
+        STORE [_dl_dst_ptr], R2
+        ADD   R9, R8              ; laskuri++
+
 _dl_skip:
         ADD   R6, R8
         JUMP  _dl_loop
+
 _dl_done:
-        READ  R0, DISK_OK
+        CPY   R0, R9              ; R0 = löytyneiden määrä
         POP   R9
         POP   R8
         RET
 
 ; --- disk_list apumuuttujat ---
-_dl_callback:
+_dl_dst_ptr:
+        .dw  0
+_dl_max:
         .dw  0
