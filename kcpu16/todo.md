@@ -29,27 +29,6 @@ Tehtävät on merkitty hakasulkeilla, ja niiden tilaa voidaan päivittää seura
 ## Tehtävät
 
 <!-- ============================================================ -->
-<!-- RYHMÄ 1: Selvitystehtävät (itsenäiset, ei riippuvuuksia)     -->
-<!-- Suorita ensin – tulokset voivat vaikuttaa muihin ryhmiin.    -->
-<!-- ============================================================ -->
-
-### Ryhmä 1: Selvitystehtävät
-
-; Kaikki Ryhmä 1 -tehtävät on suoritettu, katso Valmiit tehtävät -osio.
-
-<!-- ============================================================ -->
-<!-- RYHMÄ 2: Assembler-parannukset (assembler.py + cpu.py)       -->
-<!-- Muokkaa assembler.py ja cpu.py yhtä aikaa.                   -->
-<!-- ============================================================ -->
-
-### Ryhmä 2: Assembler-parannukset
-
-[W] Assemblerin antaessa virheilmoitus, on näytettävä virheen aiheuttavan rivin numero, itse rivi ja kuvaus virheestä. Tämä auttaa ohjelmoijaa ymmärtämään, mikä osa koodista aiheuttaa ongelman, ja antaa selkeän viestin siitä, mitä virhe on, jotta se voidaan korjata tehokkaasti.
-[W] Varmista ettö FILL-komennon kohteena oleva muisti alue on kokonaisuudessa kirjoitettavissa, ennen kuin varsinainen kirjoitus aloitetaan. Mikäli kohdealue ei ole kokonaisuutenaa, annetaan virheilmoitus.
-[W] Lisää dokumentaatioon kuvaus siitä, että assemblerin virheilmoitukset sisältävät rivin numeron, itse rivin ja kuvauksen virheestä, ja että tämä auttaa ohjelmoijaa ymmärtämään ja korjaamaan virheet tehokkaasti.
-[W] Lisää dokumentaatioon kuvaus siitä, että FILL-komennon kohteena olevan muistialueen on oltava kokonaisuudessaan kirjoitettavissa ennen kuin kirjoitus aloitetaan, ja että virheilmoitus annetaan, jos alue ei ole kokonaisuudessaan kirjoitettavissa.
-
-<!-- ============================================================ -->
 <!-- RYHMÄ 3: UI – Tiedostohallinta & suoritustila (tui.py)       -->
 <!-- Kaikki koskevat lataus-/tallennus-/käynnistyslogiikkaa.      -->
 <!-- ============================================================ -->
@@ -69,6 +48,8 @@ Tehtävät on merkitty hakasulkeilla, ja niiden tilaa voidaan päivittää seura
 [ ] Lisää dokumentaatioon kuvaus siitä, että ladatun .dsk-levykuvan nimi näkyy käyttöliittymässä tallennuslaitteen kohdalla, ja että nimeä ei näytetä, jos levykuvaa ei ole ladattu.
 [ ] Lisää dokumentaatioon kuvaus siitä, että .dsk- ja .asm-tiedostojen tallennuksen jälkeen ko. nimi näytetään käyttöliittymässä, kuin se olisi juuri ladattu, ja että tämä auttaa käyttäjää ymmärtämään, että tiedosto on tallennettu onnistuneesti.
 [ ] Lisää dokumentaatioon kuvaus siitä, että LOAD-painikkeella voidaan valita ladattava ohjelma ikkunasta, jossa on esillä kaikki code-hakemistossa olevat .asm-tiedostot, ja että tämä helpottaa ohjelman lataamista.
+[ ] Korvaa Flags-ikkunassa oleva State-tieto kahdella ei eri tiedolla FLags-ikkunassa. Ensiimäinen tieto kertoo ohjelman lataukseen ja kääntämiseen liityvän tilan. Toinen tila kertoo prosessotin suorituksen tilan. Varmista että nämä tilat päivittyvät oikein ohjelman latauksen, kääntämisen ja suorituksen aikana, ja että ne antavat käyttäjälle selkeän kuvan siitä, missä vaiheessa ohjelma on ja mikä on sen suoritustila.
+[ ] Poista Toolbarissa mahdollisesti oleva tilatieto, koska Flags-ikkunassa olevat tilatiedot korvaavat sen. Tämä auttaa pitämään käyttöliittymän selkeänä ja välttämään tarpeettoman tilatiedon näyttämistä, joka voisi aiheuttaa sekaannusta käyttäjälle.
 
 <!-- ============================================================ -->
 <!-- RYHMÄ 4: Suoritusaikajärjestelmä (instruction.py/cpu.py/tui) -->
@@ -91,6 +72,20 @@ Tehtävät on merkitty hakasulkeilla, ja niiden tilaa voidaan päivittää seura
 <!-- ============================================================ -->
 
 ### Valmiit tehtävät
+
+[X] Assemblerin antaessa virheilmoitus, on näytettävä virheen aiheuttavan rivin numero, itse rivi ja kuvaus virheestä. Tämä auttaa ohjelmoijaa ymmärtämään, mikä osa koodista aiheuttaa ongelman, ja antaa selkeän viestin siitä, mitä virhe on, jotta se voidaan korjata tehokkaasti.
+; Toteutus: assembler.py seuraa _current_lineno/_current_line jokaisessa passissa.
+; assemble() wrappaa kaikki passit try/except:iin ja lisää kontekstin: "Rivi N: 'lähderivi'\n  kuvaus"
+
+[X] Varmista ettö FILL-komennon kohteena oleva muisti alue on kokonaisuudessa kirjoitettavissa, ennen kuin varsinainen kirjoitus aloitetaan. Mikäli kohdealue ei ole kokonaisuutenaa, annetaan virheilmoitus.
+; Toteutus: cpu.py _check_memory_access() tarkistaa koko alueen check_write_protected():lla
+; ennen kernel-tilan tarkistusta (koskee kaikkia suoritustiloja). Virhe: ReadOnlyMemoryError.
+
+[X] Lisää dokumentaatioon kuvaus siitä, että assemblerin virheilmoitukset sisältävät rivin numeron, itse rivin ja kuvauksen virheestä, ja että tämä auttaa ohjelmoijaa ymmärtämään ja korjaamaan virheet tehokkaasti.
+; Toteutus: docs/assembler.md luku 8 "Virheilmoitukset"
+
+[X] Lisää dokumentaatioon kuvaus siitä, että FILL-komennon kohteena olevan muistialueen on oltava kokonaisuudessaan kirjoitettavissa ennen kuin kirjoitus aloitetaan, ja että virheilmoitus annetaan, jos alue ei ole kokonaisuudessaan kirjoitettavissa.
+; Toteutus: docs/architecture.md FILL-kuvaus päivitetty kirjoitussuojaushuomiolla.
 
 [X] Mitä Flags-ikkunassa näkyvä "State: READY" tieto tarkoittaa?
 ; READY (vihreä)   = CPU pyörii normaalisti (ei halted, ei exit_requested)

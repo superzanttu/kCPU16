@@ -375,8 +375,22 @@ class CPU:
 
         Raises:
             MemoryAccessFaultError: Jos User viittaa suojattuun muistiin
+            ReadOnlyMemoryError: Jos FILL-kohdealue sisältää kirjoitussuojatun osoitteen
         """
-        # Kernel-tilassa kaikki on sallittua
+        # FILL: Tarkista aina koko kohdealue kirjoitettavuuden varalta ennen kirjoitusta.
+        # Tämä tarkistus tehdään ennen kernel-tilan ohitusta, koska read_only_regions ovat
+        # laitteistotasolla suojattuja eikä edes kernel voi kirjoittaa niihin.
+        if ins.mnemonic == "FILL" and len(ins.operands) >= 3:
+            _fill_start = self._get_reg(ins.operands[0])
+            _fill_end = self._get_reg(ins.operands[1])
+            _chk = _fill_start
+            while True:
+                self.memory.check_write_protected(_chk)
+                if _chk == _fill_end:
+                    break
+                _chk = (_chk + 1) & WORD_MASK
+
+        # Kernel-tilassa kaikki on sallittua (käyttäjätilan muistirajoitukset eivät koske)
         if self.regs.in_kernel_mode:
             return
 
@@ -422,21 +436,12 @@ class CPU:
             addr = ins.operands[1]
             self.memory.check_user_access(addr, self.regs.mpr)
 
-        # Tarkista FILL-muistiviittaus (FILL: kirjoittaa [regStart..regEnd])
+        # Tarkista FILL-muistiviittaus (FILL: käyttäjätilan muistialueoikeudet [regStart..regEnd])
         elif ins.mnemonic == "FILL" and len(ins.operands) >= 3:
             start = self._get_reg(ins.operands[0])
             end = self._get_reg(ins.operands[1])
             self.memory.check_user_access(start, self.regs.mpr)
             self.memory.check_user_access(end, self.regs.mpr)
-            # Varmista että koko kohdealue on kirjoitettavissa ennen kuin kirjoitus aloitetaan.
-            # Tarkistus tehdään aina (myös kernel-tilassa), koska read_only_regions ovat
-            # laitteistotasolla suojattuja eikä edes kernel voi kirjoittaa niihin.
-            _chk = start
-            while True:
-                self.memory.check_write_protected(_chk)
-                if _chk == end:
-                    break
-                _chk = (_chk + 1) & WORD_MASK
 
     def _execute(self, ins: DecodedInstruction) -> None:
         """

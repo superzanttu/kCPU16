@@ -377,6 +377,8 @@ Käskyn koko sanoina on `1 + OPS` (opcode-sana + operandisanat).
 
 **FILL** täyttää muistialueen `[rS..rE]` (inklusiivinen molemmista päistä) rekisterin `rV` arvolla. Täyttö etenee osoitteesta `rS` osoitteeseen `rE` yksi sana kerrallaan. Jos `rS > rE`, täyttö kiertää muistin yli: ensin `rS → 0xFFFF`, sitten `0x0000 → rE`. Lippuja ei muokata. Käytetään taulukkojen alustamiseen, muistialueiden nollaamiseen ja Video-RAM:n tyhjentämiseen nopeasti.
 
+> **Kirjoitussuojaus:** Ennen täytön aloitusta FILL tarkistaa, että koko kohdealue `[rS..rE]` on kirjoitettavissa. Jos jokin osoite kuuluu kirjoitussuojattuun alueeseen (MMIO-rekisterit, ROM), prosessori nostaa `ReadOnlyMemoryError`-keskeytyksen (INT 5) ennen kuin yhtäkään sanaa on kirjoitettu. Tämä koskee kaikkia suoritustiloja — myös kernel-tilaa.
+
 ```asm
 ; Täytä taulukko 0x0400–0x043F arvolla 0xFFFF
 LOAD  R0, 0x0400     ; alkuosoite
