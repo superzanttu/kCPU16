@@ -24,7 +24,7 @@ Tehtävät on merkitty hakasulkeilla, ja niiden tilaa voidaan päivittää seura
 - Voit myös ehdottaa tehtävän jakamista pienempiin osiin, jos se vaikuttaa liian suurelta tai monimutkaiselta toteutettavaksi kerralla.
 - Voit analysoida tehtävien vaatimuksia ja suorittaa niitä ryhminä.
 - Mikäli nämä ohjeet ovat epäselvät, kuvaile ongelma tämän listan alle, ja lopeta tehtävien suorittaminen.
-- Suoritettuasi tehtävän, päivitä sen tilaksi [X] ja lisää tehtävän alle sisennettynä "- DONE: YYYY-MM-DD-HH-MM-SS" -rivi, joka kertoo milloin tehtävä saatiin valmiiksi. Tämä auttaa seuraamaan tehtävien suoritusaikoja ja arvioimaan tulevien tehtävien vaatimuksia.
+- Suoritettuasi tehtävän, päivitä sen tilaksi [X] ja siirrä se Tehtävät-kappaleen Valmiit tehtävät -osioon. Älä poista tehtävää, vaan säilytä se dokumentaation vuoksi.
   
 ## Tehtävät
 
@@ -114,3 +114,9 @@ Tehtävät on merkitty hakasulkeilla, ja niiden tilaa voidaan päivittää seura
 [X] Lisää dokumentaatioon kuvaus siitä, että assembler sallii vain READ ja STORE käytön.
 [X] Lisää KCPU16:n näyttöön kaksoisbufferionti, joka mahdollistaa näytön päivittämisen ilman välkkymistä. Tämä tarkoittaa, että kaikki näytölle piirretyt muutokset tehdään ensin taustalla olevaan bufferiin, ja sitten koko buffer kopioidaan kerralla näytölle. Tämä parantaa suorituskykyä ja tekee näytön päivityksestä sujuvampaa, erityisesti silloin, kun piirretään paljon pikseleitä tai tehdään suuria muutoksia näytölle. Säilytä kuitenkin mahdollisuus olla käyttämättä kaksoisbufferointia, jos käyttäjä haluaa nähdä jokaisen käskyn vaikutuksen näytöllä välittömästi.
 [X] Lisää dokumentaatioon kuvaus siitä, miten kaksoisbufferointi toimii ja miten se parantaa näytön päivitystä.
+
+
+### Uudet priorisoimattomat tehtävät
+
+[ ] Luo kirjasto (code/lib-disk.asm) joka toteuttaa tallennuslaaitteen käsittelyn. Tarvitaan yksinkertainen tiedostojärjestelmä, joka mahdollistaa tiedostojen tallentamisen. Hakemistoja ei tarvita. Tiedostoilla on nimi (1-32 merkkiä) ja koko (0-65535 tavua). Kirjasto toteuttaa seuraavat toiminnot: tiedoston luominen, tiedoston kirjoittaminen, tiedoston lukeminen, tiedoston poistaminen, tiedostojen listaaminen ja tiedoston ominaisuuksien lukeminen. Kirjasto käsittelee tallennuslaitteen blockkia (256 tavua) perinteisen tallennuslaitten "sektorina" ja tallentaa yhteen "sektoriin" useamman tiedoston dataa, jakaen ne lohkoihin. TIedostojärjestelmä blokki 0 on varattu ns. boot-sektoriksi, josta kCPU16-lukee käynnistyksen yhteydessä boot-ohjelman.
+[ ] Lisää dokumentaatioon kuvaus uudesta tallennuslaitekirjastosta (code/lib-disk.asm) ja sen tarjoamista toiminnoista.
