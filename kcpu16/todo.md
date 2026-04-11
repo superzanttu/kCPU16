@@ -29,12 +29,35 @@ Tehtävät on merkitty hakasulkeilla, ja niiden tilaa voidaan päivittää seura
 ## Tehtävät
 
 <!-- ============================================================ -->
+<!-- RYHMÄ 1: Selvitystehtävät (itsenäiset, ei riippuvuuksia)     -->
+<!-- Suorita ensin – tulokset voivat vaikuttaa muihin ryhmiin.    -->
+<!-- ============================================================ -->
+
+### Ryhmä 1: Selvitystehtävät
+
+; Kaikki Ryhmä 1 -tehtävät on suoritettu, katso Valmiit tehtävät -osio.
+
+<!-- ============================================================ -->
+<!-- RYHMÄ 2: Assembler-parannukset (assembler.py + cpu.py)       -->
+<!-- Muokkaa assembler.py ja cpu.py yhtä aikaa.                   -->
+<!-- ============================================================ -->
+
+### Ryhmä 2: Assembler-parannukset
+
+[W] Assemblerin antaessa virheilmoitus, on näytettävä virheen aiheuttavan rivin numero, itse rivi ja kuvaus virheestä. Tämä auttaa ohjelmoijaa ymmärtämään, mikä osa koodista aiheuttaa ongelman, ja antaa selkeän viestin siitä, mitä virhe on, jotta se voidaan korjata tehokkaasti.
+[W] Varmista ettö FILL-komennon kohteena oleva muisti alue on kokonaisuudessa kirjoitettavissa, ennen kuin varsinainen kirjoitus aloitetaan. Mikäli kohdealue ei ole kokonaisuutenaa, annetaan virheilmoitus.
+[W] Lisää dokumentaatioon kuvaus siitä, että assemblerin virheilmoitukset sisältävät rivin numeron, itse rivin ja kuvauksen virheestä, ja että tämä auttaa ohjelmoijaa ymmärtämään ja korjaamaan virheet tehokkaasti.
+[W] Lisää dokumentaatioon kuvaus siitä, että FILL-komennon kohteena olevan muistialueen on oltava kokonaisuudessaan kirjoitettavissa ennen kuin kirjoitus aloitetaan, ja että virheilmoitus annetaan, jos alue ei ole kokonaisuudessaan kirjoitettavissa.
+
+<!-- ============================================================ -->
 <!-- RYHMÄ 3: UI – Tiedostohallinta & suoritustila (tui.py)       -->
+<!-- Aloita selvitystehtävällä – tulos voi poistaa muita töitä.   -->
 <!-- Kaikki koskevat lataus-/tallennus-/käynnistyslogiikkaa.      -->
 <!-- ============================================================ -->
 
 ### Ryhmä 3: UI – Tiedostohallinta & suoritustila
 
+[ ] Toolbarissa oli aiemmin ohjelman tilaa kuvaava teksti. Selvitä korvaako Flags-ikkunassa oleva State-tieto toolbarissa olleen tilatiedon. Jos toolbarissa oleva tilatieto on tarpeeton, poista sen.
 [ ] Varmista että käyttöliittymän kaikki osat ovat englanninkielisiä ja johdonmukaisesti nimettyjä, mukaan lukien kaikki painikkeet, valikot, virheilmoitukset. Tämä varmistaa, että käyttöliittymä on yhdenmukainen ja ymmärrettävä kaikille käyttäjille, riippumatta heidän kielitaustastaan.
 [ ] Step/Full/Slow painikkeet eivät saa käynnistää prosessorin toimintaa, ellei load-komennolla ole ladattu muistii ohjelmaa. Pitää antaa virheilmoitus, jos yritetään käynnistää ilman ladattua ohjelmaa. Tämä varmistaa, että käyttäjä ei vahingossa yritä suorittaa ohjelmaa, joka ei ole ladattu, ja antaa selkeän viestin siitä, että ensin on ladattava ohjelma ennen kuin sitä voi suorittaa.
 [ ] Varmista että .asm tai .dsk-tiedoston lataamisen jälkeen ohjelman suoritustila on STOPPED, eikä esimerkiksi STEP tai FULL. Tämä varmistaa, että ohjelma ei ala suorittaa automaattisesti heti lataamisen jälkeen, ja antaa käyttäjälle mahdollisuuden tarkistaa ladatun ohjelman ennen sen suorittamista.
@@ -48,8 +71,6 @@ Tehtävät on merkitty hakasulkeilla, ja niiden tilaa voidaan päivittää seura
 [ ] Lisää dokumentaatioon kuvaus siitä, että ladatun .dsk-levykuvan nimi näkyy käyttöliittymässä tallennuslaitteen kohdalla, ja että nimeä ei näytetä, jos levykuvaa ei ole ladattu.
 [ ] Lisää dokumentaatioon kuvaus siitä, että .dsk- ja .asm-tiedostojen tallennuksen jälkeen ko. nimi näytetään käyttöliittymässä, kuin se olisi juuri ladattu, ja että tämä auttaa käyttäjää ymmärtämään, että tiedosto on tallennettu onnistuneesti.
 [ ] Lisää dokumentaatioon kuvaus siitä, että LOAD-painikkeella voidaan valita ladattava ohjelma ikkunasta, jossa on esillä kaikki code-hakemistossa olevat .asm-tiedostot, ja että tämä helpottaa ohjelman lataamista.
-[ ] Korvaa Flags-ikkunassa oleva State-tieto kahdella ei eri tiedolla FLags-ikkunassa. Ensiimäinen tieto kertoo ohjelman lataukseen ja kääntämiseen liityvän tilan. Toinen tila kertoo prosessotin suorituksen tilan. Varmista että nämä tilat päivittyvät oikein ohjelman latauksen, kääntämisen ja suorituksen aikana, ja että ne antavat käyttäjälle selkeän kuvan siitä, missä vaiheessa ohjelma on ja mikä on sen suoritustila.
-[ ] Poista Toolbarissa mahdollisesti oleva tilatieto, koska Flags-ikkunassa olevat tilatiedot korvaavat sen. Tämä auttaa pitämään käyttöliittymän selkeänä ja välttämään tarpeettoman tilatiedon näyttämistä, joka voisi aiheuttaa sekaannusta käyttäjälle.
 
 <!-- ============================================================ -->
 <!-- RYHMÄ 4: Suoritusaikajärjestelmä (instruction.py/cpu.py/tui) -->
@@ -72,20 +93,6 @@ Tehtävät on merkitty hakasulkeilla, ja niiden tilaa voidaan päivittää seura
 <!-- ============================================================ -->
 
 ### Valmiit tehtävät
-
-[X] Assemblerin antaessa virheilmoitus, on näytettävä virheen aiheuttavan rivin numero, itse rivi ja kuvaus virheestä. Tämä auttaa ohjelmoijaa ymmärtämään, mikä osa koodista aiheuttaa ongelman, ja antaa selkeän viestin siitä, mitä virhe on, jotta se voidaan korjata tehokkaasti.
-; Toteutus: assembler.py seuraa _current_lineno/_current_line jokaisessa passissa.
-; assemble() wrappaa kaikki passit try/except:iin ja lisää kontekstin: "Rivi N: 'lähderivi'\n  kuvaus"
-
-[X] Varmista ettö FILL-komennon kohteena oleva muisti alue on kokonaisuudessa kirjoitettavissa, ennen kuin varsinainen kirjoitus aloitetaan. Mikäli kohdealue ei ole kokonaisuutenaa, annetaan virheilmoitus.
-; Toteutus: cpu.py _check_memory_access() tarkistaa koko alueen check_write_protected():lla
-; ennen kernel-tilan tarkistusta (koskee kaikkia suoritustiloja). Virhe: ReadOnlyMemoryError.
-
-[X] Lisää dokumentaatioon kuvaus siitä, että assemblerin virheilmoitukset sisältävät rivin numeron, itse rivin ja kuvauksen virheestä, ja että tämä auttaa ohjelmoijaa ymmärtämään ja korjaamaan virheet tehokkaasti.
-; Toteutus: docs/assembler.md luku 8 "Virheilmoitukset"
-
-[X] Lisää dokumentaatioon kuvaus siitä, että FILL-komennon kohteena olevan muistialueen on oltava kokonaisuudessaan kirjoitettavissa ennen kuin kirjoitus aloitetaan, ja että virheilmoitus annetaan, jos alue ei ole kokonaisuudessaan kirjoitettavissa.
-; Toteutus: docs/architecture.md FILL-kuvaus päivitetty kirjoitussuojaushuomiolla.
 
 [X] Mitä Flags-ikkunassa näkyvä "State: READY" tieto tarkoittaa?
 ; READY (vihreä)   = CPU pyörii normaalisti (ei halted, ei exit_requested)
@@ -124,15 +131,28 @@ Tehtävät on merkitty hakasulkeilla, ja niiden tilaa voidaan päivittää seura
 [X] Lisää dokumentaatioon kuvaus siitä, miten kaksoisbufferointi toimii ja miten se parantaa näytön päivitystä.
 
 
-### Uudet priorisoimattomat tehtävät
+<!-- ============================================================ -->
+<!-- RYHMÄ 10: 3D-demot – analyysi ja korjaukset                 -->
+<!-- Järjestys: analyysi → J-korjaus → L-korjaus → refaktorointi.-->
+<!-- Kaikki koskevat samaa koodikantaa (lib_3dobjects.asm).       -->
+<!-- ============================================================ -->
 
-[ ] Luo kirjasto (code/lib-disk.asm) joka toteuttaa tallennuslaaitteen käsittelyn. Tarvitaan yksinkertainen tiedostojärjestelmä, joka mahdollistaa tiedostojen tallentamisen. Hakemistoja ei tarvita. Tiedostoilla on nimi (1-32 merkkiä) ja koko (0-65535 tavua). Kirjasto toteuttaa seuraavat toiminnot: tiedoston luominen, tiedoston kirjoittaminen, tiedoston lukeminen, tiedoston poistaminen, tiedostojen listaaminen ja tiedoston ominaisuuksien lukeminen. Kirjasto käsittelee tallennuslaitteen blockkia (256 tavua) perinteisen tallennuslaitten "sektorina" ja tallentaa yhteen "sektoriin" useamman tiedoston dataa, jakaen ne lohkoihin. TIedostojärjestelmä blokki 0 on varattu ns. boot-sektoriksi, josta kCPU16-lukee käynnistyksen yhteydessä boot-ohjelman.
-[ ] Lisää dokumentaatioon kuvaus uudesta tallennuslaitekirjastosta (code/lib-disk.asm) ja sen tarjoamista toiminnoista.
+### Ryhmä 10: 3D-demot – analyysi ja korjaukset
+
 [ ] Analysoi demo_3dcude.asm, demo_3dcube2.asm, lib_3dobjects.asm ja lib_gfx.asm -tiedostot ja varmista että ohjelma näyttää kuution, L-kirjaimen ja J-kijaimmen, 10 sekunnin ajan, vuorotellen B-ja C- grafiikkatilassa. Varmista samalla, että objektteja pyöritetään X, Y, ja Z-akselien ympäri, ja että ne liikkuvat näytöllä.
 [ ] J-kirjain ei ole ollenkaan J-kirjaimen muotoinen.
 [ ] L-kirjain on oikeian muotoinen, mutta renderöityy väärin joissakin asennoissa.
-[ ] Analysoi demo_3dcude.asm, demo_3dcube2.asm, lib_3dobjects.asm ja lib_gfx.asm -tiedostot ja etsi yhteisiä toimintoja, jotka voitaisiin siirtää uuteen lib-gfx.asm-kirjastoon. 
-[ ] Toolbarissa oli aiemmin ohjelman tilaa kuvaava teksti. Selvitä korvaako Flags-ikkunassa oleva State-tieto toolbarissa olleen tilatiedon. Jos toolbarissa oleva tilatieto on tarpeeton, poista sen.
+[ ] Analysoi demo_3dcude.asm, demo_3dcube2.asm, lib_3dobjects.asm ja lib_gfx.asm -tiedostot ja etsi yhteisiä toimintoja, jotka voitaisiin siirtää uuteen lib-gfx.asm-kirjastoon.
+
+<!-- ============================================================ -->
+<!-- RYHMÄ 11: Tallennuslaitekirjasto (lib-disk.asm)             -->
+<!-- Itsenäinen uusi ominaisuus, ei riippuvuuksia muihin ryhmiin. -->
+<!-- ============================================================ -->
+
+### Ryhmä 11: Tallennuslaitekirjasto
+
+[ ] Luo kirjasto (code/lib-disk.asm) joka toteuttaa tallennuslaaitteen käsittelyn. Tarvitaan yksinkertainen tiedostojärjestelmä, joka mahdollistaa tiedostojen tallentamisen. Hakemistoja ei tarvita. Tiedostoilla on nimi (1-32 merkkiä) ja koko (0-65535 tavua). Kirjasto toteuttaa seuraavat toiminnot: tiedoston luominen, tiedoston kirjoittaminen, tiedoston lukeminen, tiedoston poistaminen, tiedostojen listaaminen ja tiedoston ominaisuuksien lukeminen. Kirjasto käsittelee tallennuslaitteen blockkia (256 tavua) perinteisen tallennuslaitten "sektorina" ja tallentaa yhteen "sektoriin" useamman tiedoston dataa, jakaen ne lohkoihin. TIedostojärjestelmä blokki 0 on varattu ns. boot-sektoriksi, josta kCPU16-lukee käynnistyksen yhteydessä boot-ohjelman.
+[ ] Lisää dokumentaatioon kuvaus uudesta tallennuslaitekirjastosta (code/lib-disk.asm) ja sen tarjoamista toiminnoista.
 
 <!-- ============================================================ -->
 <!-- RYHMÄ 5: Suorituskyky – Opcode-pohjainen dispatch (cpu.py)  -->
@@ -147,7 +167,10 @@ Tehtävät on merkitty hakasulkeilla, ja niiden tilaa voidaan päivittää seura
 
 <!-- ============================================================ -->
 <!-- RYHMÄ 6: Suorituskyky – Ajanotto- ja keskeytystarkistukset  -->
-<!-- Vähentää time.monotonic()-kutsujen määrää hot loopissa.      -->
+<!-- Riippuvuus: Ryhmä 4 (suoritusajat) suoritettava ensin, jotta -->
+<!-- TMR/CTMR-optimoinnit ovat yhteensopivia simuloitujen         -->
+<!-- aikojen kanssa. Vähentää time.monotonic()-kutsuja hot        -->
+<!-- loopissa ja korvaa modulo-vertailun next_cycle-vertailulla.  -->
 <!-- ============================================================ -->
 
 ### Ryhmä 6: Suorituskyky – Ajanotto- ja keskeytystarkistukset

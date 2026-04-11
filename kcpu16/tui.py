@@ -69,6 +69,8 @@ from textual.widgets import (
     Button,
     Checkbox,
     Input,
+    ListItem,
+    ListView,
     RichLog,
     Static,
     TabbedContent,
@@ -380,18 +382,18 @@ class SaveConfirmDialog(ModalScreen):
 
     def compose(self) -> ComposeResult:
         with Vertical(id="save-dialog"):
-            yield Static("Tallentamattomat muutokset", id="save-dialog-title")
-            yield Static("Tallenetaanko muuttuneet tiedot?", id="save-dialog-question")
+            yield Static("Unsaved Changes", id="save-dialog-title")
+            yield Static("Save changes before closing?", id="save-dialog-question")
             with Vertical(id="save-dialog-checks"):
                 if self._editor_dirty:
-                    yield Checkbox("Editori (.asm)", value=True, id="chk-editor")
+                    yield Checkbox("Editor (.asm)", value=True, id="chk-editor")
                 if self._disk_dirty:
-                    yield Checkbox("Tallennuslaite (.dsk)", value=True, id="chk-disk")
+                    yield Checkbox("Storage (.dsk)", value=True, id="chk-disk")
             yield Static("", id="save-dialog-error")
             with Horizontal(id="save-dialog-buttons"):
-                yield Button("Kyllä", id="btn-save-yes", variant="primary")
-                yield Button("Ei", id="btn-save-no", variant="default")
-                yield Button("Peruuta", id="btn-save-cancel", variant="warning")
+                yield Button("Yes", id="btn-save-yes", variant="primary")
+                yield Button("No", id="btn-save-no", variant="default")
+                yield Button("Cancel", id="btn-save-cancel", variant="warning")
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         btn_id = event.button.id
@@ -424,18 +426,18 @@ class SaveConfirmDialog(ModalScreen):
             errors: list[str] = []
             if save_editor and not self._editor_has_file:
                 errors.append(
-                    "Editorin .asm-tiedostolla ei ole tallennusnimeä.\n"
-                    "Tallenna ensin komennolla: save <nimi>"
+                    "Editor .asm file has no save path.\n"
+                    "First save with: save <name>"
                 )
             if save_disk and not self._disk_has_file:
                 errors.append(
-                    "Tallennuslaitteen .dsk-tiedostolla ei ole tallennusnimeä.\n"
-                    "Tallenna ensin komennolla: disk save <nimi>"
+                    "Storage .dsk file has no save path.\n"
+                    "First save with: disk save <name>"
                 )
 
             if errors:
                 self.query_one("#save-dialog-error", Static).update("\n".join(errors))
-                return  # Pysytään dialogissa, ei suljeta
+                return  # Stay in dialog, do not close
 
             self.dismiss(("yes", save_editor, save_disk))
 
@@ -552,6 +554,100 @@ class SpeedSlider(Widget):
 
 
 # ===========================================================================
+# FilePickerDialog — valintaikkuna .asm-tiedoston valitsemiseen
+# ===========================================================================
+
+
+class FilePickerDialog(ModalScreen):
+    """Modal dialog for selecting an .asm file from the code directory.
+
+    Shows a scrollable list of all .asm files. The user can:
+    - Click once to highlight a file
+    - Press Load (or Enter) to load the highlighted file
+    - Double-click a file to load it immediately
+    - Press Cancel (or Escape) to dismiss without loading
+
+    Dismisses with the selected filename (str) or None on cancel.
+    """
+
+    CSS = """
+    FilePickerDialog {
+        align: center middle;
+    }
+    #file-picker-dialog {
+        background: $surface;
+        border: thick $primary;
+        padding: 1 2;
+        width: 64;
+        height: 24;
+    }
+    #file-picker-title {
+        text-align: center;
+        text-style: bold;
+        color: $accent;
+        margin-bottom: 1;
+    }
+    #file-picker-list {
+        height: 16;
+        border: solid $primary-darken-2;
+    }
+    #file-picker-buttons {
+        layout: horizontal;
+        align: center middle;
+        height: 3;
+        margin-top: 1;
+    }
+    #file-picker-buttons Button {
+        margin: 0 1;
+    }
+    """
+
+    def __init__(self, files: list[str]) -> None:
+        super().__init__()
+        self._files = files
+        self._selected: str | None = files[0] if files else None
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="file-picker-dialog"):
+            yield Static("Load Program", id="file-picker-title")
+            with VerticalScroll(id="file-picker-list"):
+                with ListView(id="file-picker-listview"):
+                    for f in self._files:
+                        yield ListItem(Static(f))
+            with Horizontal(id="file-picker-buttons"):
+                yield Button("Load", id="btn-picker-load", variant="primary")
+                yield Button("Cancel", id="btn-picker-cancel", variant="default")
+
+    def on_mount(self) -> None:
+        try:
+            self.query_one("#file-picker-listview", ListView).focus()
+        except Exception:
+            pass
+
+    def on_list_view_highlighted(self, event: ListView.Highlighted) -> None:
+        idx = event.list_view.index
+        if idx is not None and 0 <= idx < len(self._files):
+            self._selected = self._files[idx]
+
+    def on_list_view_selected(self, event: ListView.Selected) -> None:
+        """Double-click or Enter on a list item loads the file."""
+        idx = event.list_view.index
+        if idx is not None and 0 <= idx < len(self._files):
+            self._selected = self._files[idx]
+        self.dismiss(self._selected)
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "btn-picker-cancel":
+            self.dismiss(None)
+        elif event.button.id == "btn-picker-load":
+            self.dismiss(self._selected)
+
+    def on_key(self, event) -> None:
+        if event.key == "escape":
+            self.dismiss(None)
+
+
+# ===========================================================================
 # TUI-sovellus
 # ===========================================================================
 
@@ -628,13 +724,6 @@ class KCPU16TUI(App[None]):
     #toolbar .sep {
         width: 1;
         height: 3;
-    }
-    #run-mode-label {
-        min-width: 14;
-        height: 3;
-        padding: 0 1;
-        content-align: center middle;
-        color: $text-muted;
     }
     #speed-control-group {
         height: 3;
@@ -854,7 +943,6 @@ class KCPU16TUI(App[None]):
                     yield Button("x1", id="btn-mult-x1", classes="mult-selected")
                     yield Button("x10", id="btn-mult-x10")
                     yield Button("x100", id="btn-mult-x100")
-            yield Static("\u25a0 STOPPED", id="run-mode-label")
 
         # Content area: left panel (full width)
         with Horizontal(id="content-area"):
@@ -1036,14 +1124,14 @@ class KCPU16TUI(App[None]):
             mode: "step", "fast", "slow" tai "stop"
         """
         if not self.current_file:
-            self._log("[yellow]Ei ladattua ohjelmaa. Käytä 'load <tiedosto>'.[/yellow]")
+            self._log("[yellow]No program loaded. Use 'load <file>'.[/yellow]")
             return
         self.workers.cancel_all()
         self._exec_mode = "stopped"
         self._do_assemble()  # cold_reset + lataa + assembloi
         if not self.is_assembled:
             return
-        self._log(f"[cyan]Uudelleenladattu: {self.current_file.name}[/cyan]")
+        self._log(f"[cyan]Reloaded: {self.current_file.name}[/cyan]")
         if mode == "step":
             try:
                 self.machine.step()
@@ -1101,6 +1189,11 @@ class KCPU16TUI(App[None]):
         if self._exec_mode == "fast":
             self.action_stop_program()
             return
+        if not self.is_assembled:
+            self._log(
+                "[yellow]No program loaded. Use 'load <file>' or Ctrl+O first.[/yellow]"
+            )
+            return
         if self.machine.cpu.halted or self.machine.process_exited:
             self._reload_and_run("fast")
             return
@@ -1120,6 +1213,11 @@ class KCPU16TUI(App[None]):
         if self._exec_mode == "max":
             self.action_stop_program()
             return
+        if not self.is_assembled:
+            self._log(
+                "[yellow]No program loaded. Use 'load <file>' or Ctrl+O first.[/yellow]"
+            )
+            return
         if self.machine.cpu.halted or self.machine.process_exited:
             self._reload_and_run("max")
             return
@@ -1137,6 +1235,11 @@ class KCPU16TUI(App[None]):
         """
         if self._exec_mode == "slow":
             self.action_stop_program()
+            return
+        if not self.is_assembled:
+            self._log(
+                "[yellow]No program loaded. Use 'load <file>' or Ctrl+O first.[/yellow]"
+            )
             return
         if self.machine.cpu.halted or self.machine.process_exited:
             self._reload_and_run("slow")
@@ -1199,17 +1302,22 @@ class KCPU16TUI(App[None]):
         self._refresh_all()
 
     def action_open_file(self) -> None:
-        """Avaa assembly-tiedosto (Ctrl+O).
+        """Open a file picker dialog to load an .asm file (Ctrl+O).
 
-        Asettaa fokuksen syötekenttään ja kirjoittaa "load " alkuun.
-        Käyttäjä kirjoittaa polun ja painaa Enter,
-        jolloin on_input_submitted → _execute_command käsittelee sen.
+        Shows all .asm files in the code directory as a selectable list.
+        Selecting a file loads and assembles it. Cancel dismisses without loading.
         """
-        cmd_input = self.query_one("#cmd-input", Input)
-        cmd_input.focus()
-        if not cmd_input.value.strip().startswith("load "):
-            cmd_input.value = "load "
-        self._log("Type filename after 'load' and press Enter.")
+        files = sorted(p.name for p in self.code_dir.iterdir() if p.suffix == ".asm")
+        if not files:
+            self._log("[yellow]No .asm files found in code directory.[/yellow]")
+            return
+
+        def _on_picked(filename: str | None) -> None:
+            if filename is not None:
+                self._do_open(self.code_dir / filename)
+                self._refresh_all()
+
+        self.push_screen(FilePickerDialog(files), callback=_on_picked)
 
     def action_assemble_code(self) -> None:
         """Assembloi ladattu koodi ja lataa se muistiin (Ctrl+B).
@@ -1253,8 +1361,8 @@ class KCPU16TUI(App[None]):
                         f"[green]Disk saved to {self.current_disk_file.name}[/green]"
                     )
                 except Exception as e:
-                    self._log(f"[red]Levyn tallennus epäonnistui: {e}[/red]")
-                    return  # Älä poistu jos tallennus epäonnistui
+                    self._log(f"[red]Disk save failed: {e}[/red]")
+                    return  # Do not exit if save failed
 
             self.exit()
 
@@ -1395,6 +1503,20 @@ class KCPU16TUI(App[None]):
         else:
             tabs.border_subtitle = name
 
+    def _update_program_title(self) -> None:
+        """Päivitä Screen-paneelin alaotsikko näyttämään ladatun .asm-tiedoston nimi.
+
+        Näyttää tiedoston nimen Screen-paneelin alaosassa kun ohjelma on ladattu.
+        Tyhjentää nimen jos ohjelmaa ei ole ladattu.
+        """
+        try:
+            screen_section = self.query_one("#screen-section")
+            screen_section.border_subtitle = (
+                self.current_file.name if self.current_file else ""
+            )
+        except Exception:
+            pass
+
     def _sync_speed_slider(self) -> None:
         """Synkronoi liukusäätimen arvo _slow_ips:n mukaan."""
         try:
@@ -1413,13 +1535,14 @@ class KCPU16TUI(App[None]):
         """
         try:
             if not path.exists():
-                self._log(f"[red]Tiedostoa ei löydy: {path}[/red]")
+                self._log(f"[red]File not found: {path}[/red]")
                 return
             self.current_file = path
             self.is_assembled = False
             self.addr_to_line = {}
             self._watched_mtime = path.stat().st_mtime_ns
             self._log(f"Loaded: [bold]{path}[/bold]")
+            self._update_program_title()
             self._do_assemble()
         except Exception as e:
             self._log(f"[red]Error: {e}[/red]")
@@ -1440,6 +1563,7 @@ class KCPU16TUI(App[None]):
         Virhetilanteessa (syntaksivirhe, tuntematon käsky) assembly
         keskeytyy ja virhe näytetään lokissa punaisella.
         """
+        self.workers.cancel_all()
         if not self.current_file:
             self._log("[yellow]No file loaded. Use 'load <file>' or Ctrl+O.[/yellow]")
             return
@@ -1473,11 +1597,12 @@ class KCPU16TUI(App[None]):
                 self._disk_dirty = True
                 self._update_disk_title()
                 self._log(
-                    f"[cyan].diskblock: {total_words} sanaa tallennettu "
-                    f"levyblokkiin {blk}.[/cyan]"
+                    f"[cyan].diskblock: {total_words} words written to "
+                    f"disk block {blk}.[/cyan]"
                 )
             self._exec_mode = "stopped"
             self._update_run_mode_ui()
+            self._update_program_title()
             self._refresh_all()
         except Exception as e:
             self._log(f"[red]Assembly error: {e}[/red]")
@@ -1596,19 +1721,10 @@ class KCPU16TUI(App[None]):
     def _update_run_mode_ui(self) -> None:
         """Päivitä toolbar heijastamaan nykyistä suoritustilaa.
 
-        Päivittää #run-mode-label tekstin ja suorituspainikkeiden variantit.
+        Päivittää suorituspainikkeiden variantit.
         Turvallinen kutsua pääsäikeessä tai call_from_thread():n kautta.
         """
         try:
-            label_text = {
-                "stopped": "◼ STOPPED",
-                "step": "◼ STEP",
-                "fast": "▶ FAST",
-                "max": "▶ MAX",
-                "slow": "▶ SLOW",
-                "reset": "◼ RESET",
-            }.get(self._exec_mode, "◼ STOPPED")
-            self.query_one("#run-mode-label", Static).update(label_text)
             btn_full = self.query_one("#btn-run-full", Button)
             btn_max = self.query_one("#btn-run-max", Button)
             btn_slow = self.query_one("#btn-run-slow", Button)
@@ -2091,46 +2207,44 @@ class KCPU16TUI(App[None]):
     def _refresh_cpu_status(self) -> None:
         """Päivitä CPU-tilapaneeli.
 
-        Näyttää:
-        - State: yhdistetty suoritustila + CPU-tila
+        Näyttää kaksi erillistä tilatietoa:
+        - Prog: ohjelman lataus/kääntämistila (NO PROG / NOT LOADED / READY)
+        - CPU:  suoritustila (STOPPED / STEP / FAST / MAX / SLOW / HALTED / EXITED)
         - Cycles: suoritettujen käskyjen kokonaismäärä
         - Breakpoint-lista: kaikki asetetut breakpointit (jos on)
-
-        State-logiikka (prioriteettijärjestyksessä):
-          HALTED  — CPU pysähtyi HLT-käskyyn tai virheeseen
-          EXITED  — ohjelma päättyi hallitusti EXIT-käskyllä
-          RESET   — kone nollattu, ohjelma ei ladattu
-          NO PROG — ohjelmaa ei ole ladattu
-          FAST    — ajossa täydellä nopeudella (F5)
-          MAX     — ajossa maksimaalinen nopeus, ei näyttöpäivitystä (F4)
-          SLOW    — ajossa hitaasti (F6, IPS-rajoitettu)
-          STEP    — askelletaan käsky kerrallaan (F7)
-          STOPPED — pysähtynyt, ohjelma ladattu ja valmis ajettavaksi
         """
         cpu = self.machine.cpu
 
+        # Program state (loading / assembling related)
+        if not self.current_file:
+            prog_state = "[dim]NO PROG[/]"
+        elif not self.is_assembled:
+            prog_state = "[yellow]NOT LOADED[/]"
+        else:
+            prog_state = "[bold green]READY[/]"
+
+        # CPU execution state
         if cpu.halted:
-            state = "[bold red]HALTED[/]"
+            cpu_state = "[bold red]HALTED[/]"
         elif cpu.process_exit_requested:
-            state = "[bold yellow]EXITED[/]"
-        elif self._exec_mode == "reset" or not self.is_assembled:
-            if not self.current_file:
-                state = "[dim]NO PROG[/]"
-            else:
-                state = "[dim]RESET[/]"
+            cpu_state = "[bold yellow]EXITED[/]"
         elif self._exec_mode == "fast":
-            state = "[bold green]▶ FAST[/]"
+            cpu_state = "[bold green]▶ FAST[/]"
         elif self._exec_mode == "max":
-            state = "[bold green]▶ MAX[/]"
+            cpu_state = "[bold green]▶ MAX[/]"
         elif self._exec_mode == "slow":
             ips = self._slow_ips * self._slow_multiplier
-            state = f"[bold green]▶ SLOW ({ips} IPS)[/]"
+            cpu_state = f"[bold green]▶ SLOW ({ips} IPS)[/]"
         elif self._exec_mode == "step":
-            state = "[cyan]◼ STEP[/]"
+            cpu_state = "[cyan]◼ STEP[/]"
         else:
-            state = "[bold green]◼ STOPPED[/]"
+            cpu_state = "[bold green]◼ STOPPED[/]"
 
-        lines = [f"State: {state}", f"Cycles: {cpu.instruction_counter}"]
+        lines = [
+            f"Prog: {prog_state}",
+            f"CPU:  {cpu_state}",
+            f"Cycles: {cpu.instruction_counter}",
+        ]
         if self.dbg.breakpoints:
             bp_list = ", ".join(f"0x{a:04X}" for a in sorted(self.dbg.breakpoints))
             lines.append(f"[dim]BP: {bp_list}[/dim]")
@@ -2287,7 +2401,7 @@ class KCPU16TUI(App[None]):
 
         sep = "[bold red]━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[/bold red]"
         self._log(sep)
-        self._log("[bold red]  CPU KAATUI — SUORITUSVIRHE[/bold red]")
+        self._log("[bold red]  CPU CRASHED — EXECUTION ERROR[/bold red]")
         self._log(f"[red]{type(exc).__name__}: {exc}[/red]")
 
         # Vikaava käsky (disassembloitu)
@@ -2305,10 +2419,10 @@ class KCPU16TUI(App[None]):
         except Exception:
             instr = "???"
         line_no = self.addr_to_line.get(pc)
-        line_str = f" [dim](rivi {line_no})[/dim]" if line_no else ""
+        line_str = f" [dim](line {line_no})[/dim]" if line_no else ""
         self._log(f"PC=0x{pc:04X}:  [bold]{instr}[/bold]{line_str}")
 
-        # Tilaliput
+        # Flags
         flags = [
             ("Z", r.get_flag(SR_FLAG_Z)),
             ("N", r.get_flag(SR_FLAG_N)),
@@ -2321,7 +2435,7 @@ class KCPU16TUI(App[None]):
             f"[bold green]{n}:1[/]" if v else f"[dim]{n}:0[/]" for n, v in flags
         )
         mode_str = "[bold green]KERNEL[/]" if r.in_kernel_mode else "[yellow]USER[/]"
-        self._log(f"Liput:  {flag_str}  Mode: {mode_str}")
+        self._log(f"Flags:  {flag_str}  Mode: {mode_str}")
 
         # Rekisteriarvot (R0–R15, FP, SP, PC, SR)
         reg_pairs = [(f"R{i}", getattr(r, f"r{i}")) for i in range(16)]
@@ -2339,7 +2453,7 @@ class KCPU16TUI(App[None]):
                 addr = (sp + offset) & 0xFFFF
                 val = self.machine.memory.read(addr)
                 items.append(f"0x{addr:04X}→0x{val:04X}")
-            self._log(f"[dim]Pino (SP=0x{sp:04X}): {' | '.join(items)}[/dim]")
+            self._log(f"[dim]Stack (SP=0x{sp:04X}): {' | '.join(items)}[/dim]")
         except Exception:
             pass
 
@@ -2647,6 +2761,9 @@ class KCPU16TUI(App[None]):
                 path = self.storage_dir / path
             self.machine.storage.load_from_file(path)
             self.current_disk_file = path
+            self.workers.cancel_all()
+            self._exec_mode = "stopped"
+            self._update_run_mode_ui()
             self._update_disk_title()
             return CommandResult(True, f"[green]Disk loaded from {path.name}[/green]")
         if sub == "save":
@@ -2661,7 +2778,7 @@ class KCPU16TUI(App[None]):
                     )
                 return CommandResult(
                     False,
-                    "[yellow]Ei tallennettua levytiedostoa. Käytä: disk save <nimi>[/yellow]",
+                    "[yellow]No disk file loaded. Use: disk save <name>[/yellow]",
                 )
             path = Path(" ".join(args[1:]))
             if path.suffix.lower() != ".dsk":
