@@ -44,10 +44,10 @@ Tehtävät on merkitty hakasulkeilla, ja niiden tilaa voidaan päivittää seura
 
 ### Ryhmä 2: Assembler-parannukset
 
-[ ] Assemblerin antaessa virheilmoitus, on näytettävä virheen aiheuttavan rivin numero, itse rivi ja kuvaus virheestä. Tämä auttaa ohjelmoijaa ymmärtämään, mikä osa koodista aiheuttaa ongelman, ja antaa selkeän viestin siitä, mitä virhe on, jotta se voidaan korjata tehokkaasti.
-[ ] Varmista ettö FILL-komennon kohteena oleva muisti alue on kokonaisuudessa kirjoitettavissa, ennen kuin varsinainen kirjoitus aloitetaan. Mikäli kohdealue ei ole kokonaisuutenaa, annetaan virheilmoitus.
-[ ] Lisää dokumentaatioon kuvaus siitä, että assemblerin virheilmoitukset sisältävät rivin numeron, itse rivin ja kuvauksen virheestä, ja että tämä auttaa ohjelmoijaa ymmärtämään ja korjaamaan virheet tehokkaasti.
-[ ] Lisää dokumentaatioon kuvaus siitä, että FILL-komennon kohteena olevan muistialueen on oltava kokonaisuudessaan kirjoitettavissa ennen kuin kirjoitus aloitetaan, ja että virheilmoitus annetaan, jos alue ei ole kokonaisuudessaan kirjoitettavissa.
+[W] Assemblerin antaessa virheilmoitus, on näytettävä virheen aiheuttavan rivin numero, itse rivi ja kuvaus virheestä. Tämä auttaa ohjelmoijaa ymmärtämään, mikä osa koodista aiheuttaa ongelman, ja antaa selkeän viestin siitä, mitä virhe on, jotta se voidaan korjata tehokkaasti.
+[W] Varmista ettö FILL-komennon kohteena oleva muisti alue on kokonaisuudessa kirjoitettavissa, ennen kuin varsinainen kirjoitus aloitetaan. Mikäli kohdealue ei ole kokonaisuutenaa, annetaan virheilmoitus.
+[W] Lisää dokumentaatioon kuvaus siitä, että assemblerin virheilmoitukset sisältävät rivin numeron, itse rivin ja kuvauksen virheestä, ja että tämä auttaa ohjelmoijaa ymmärtämään ja korjaamaan virheet tehokkaasti.
+[W] Lisää dokumentaatioon kuvaus siitä, että FILL-komennon kohteena olevan muistialueen on oltava kokonaisuudessaan kirjoitettavissa ennen kuin kirjoitus aloitetaan, ja että virheilmoitus annetaan, jos alue ei ole kokonaisuudessaan kirjoitettavissa.
 
 <!-- ============================================================ -->
 <!-- RYHMÄ 3: UI – Tiedostohallinta & suoritustila (tui.py)       -->
@@ -138,3 +138,52 @@ Tehtävät on merkitty hakasulkeilla, ja niiden tilaa voidaan päivittää seura
 [ ] L-kirjain on oikeian muotoinen, mutta renderöityy väärin joissakin asennoissa.
 [ ] Analysoi demo_3dcude.asm, demo_3dcube2.asm, lib_3dobjects.asm ja lib_gfx.asm -tiedostot ja etsi yhteisiä toimintoja, jotka voitaisiin siirtää uuteen lib-gfx.asm-kirjastoon. 
 [ ] Toolbarissa oli aiemmin ohjelman tilaa kuvaava teksti. Selvitä korvaako Flags-ikkunassa oleva State-tieto toolbarissa olleen tilatiedon. Jos toolbarissa oleva tilatieto on tarpeeton, poista sen.
+
+<!-- ============================================================ -->
+<!-- RYHMÄ 5: Suorituskyky – Opcode-pohjainen dispatch (cpu.py)  -->
+<!-- Korvaa merkkijonopohjainen dispatch handler-taululla.        -->
+<!-- ============================================================ -->
+
+### Ryhmä 5: Suorituskyky – Opcode-pohjainen dispatch
+
+[ ] Korvaa `DecodedInstruction`-olion luonti jokaisessa askeleessa kevyemmällä rakenteella (esim. kiinteä tuple tai paikalliset muuttujat), jotta olion luomisen overhead poistuu hot loopista.
+[ ] Korvaa `if/elif ins.mnemonic == ...` -ketju opcode-pohjaisella handler-taululla (funktioviitteet: opcode → handler + metadata), jotta merkkijonovertailut poistuvat kuumasta suorituspolusta.
+[ ] Yhdistä privilege- ja muistitarkistus handler-metadataan, jotta samoja mnemonic-vertailuja ei tehdä useassa eri vaiheessa per käsky.
+
+<!-- ============================================================ -->
+<!-- RYHMÄ 6: Suorituskyky – Ajanotto- ja keskeytystarkistukset  -->
+<!-- Vähentää time.monotonic()-kutsujen määrää hot loopissa.      -->
+<!-- ============================================================ -->
+
+### Ryhmä 6: Suorituskyky – Ajanotto- ja keskeytystarkistukset
+
+[ ] Poista `time.monotonic()`-kutsu jokaiselta käskykierrokselta; tarkista uptime/CTMR vain harvennetusti (esim. joka N:s käsky) tai deadline-pohjaisesti.
+[ ] Korvaa timer-keskeytyksen modulovertailu (`instruction_counter % tmr == 0`) seuraavan laukaisusyklin vertailulla (`next_timer_cycle`), jotta modulo-operaatio poistuu hot loopista.
+
+<!-- ============================================================ -->
+<!-- RYHMÄ 7: Suorituskyky – Taulukkopohjaiset rekisterit        -->
+<!-- Korvaa if/elif-rekisteriketjut indeksoinnilla cpu.py:ssä.   -->
+<!-- ============================================================ -->
+
+### Ryhmä 7: Suorituskyky – Taulukkopohjaiset rekisterit
+
+[ ] Korvaa `_get_reg`/`_set_reg`-metodien pitkät `if/elif`-ketjut taulukkoindeksoinnilla CPU:n suorituspolussa (lista tai array), jotta haarautumisoverhead poistuu jokaisesta rekisteriviittauksesta.
+[ ] Säilytä julkinen rajapinta (r0…r15, fp, sp) ennallaan esim. propertyjen kautta; anna `execute`-polun käyttää suoraa taulukkorakennetta.
+
+<!-- ============================================================ -->
+<!-- RYHMÄ 8: Suorituskyky – Memory.write O(1)-suojaustarkistus  -->
+<!-- Korvaa alue-listan läpikäynti maskitaulukolla.              -->
+<!-- ============================================================ -->
+
+### Ryhmä 8: Suorituskyky – Memory.write O(1)-suojaustarkistus
+
+[ ] Korvaa `read_only_regions`-listan läpikäynti jokaisella kirjoituksella maskitaulukolla (`bytearray`/bool-taulukko), joka päivitetään vain silloin, kun suojattuja alueita muutetaan.
+
+<!-- ============================================================ -->
+<!-- RYHMÄ 9: Suorituskyky – Fast run -suorituspolku (cpu.py)    -->
+<!-- Erillinen optimoitu hot loop jatkuvaan ajoon.               -->
+<!-- ============================================================ -->
+
+### Ryhmä 9: Suorituskyky – Fast run -suorituspolku
+
+[ ] Lisää `run()`-metodiin optimoitu fast-path-silmukka: paikalliset viittaukset usein käytettyihin metodeihin/muuttujiin, vähemmän funktiokutsuja per käsky ja poikkeuspolku erotettuna normaalista nopeasta polusta. Nykyinen `step()` säilytetään debuggausta varten.
