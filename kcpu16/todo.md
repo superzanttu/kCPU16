@@ -29,44 +29,6 @@ Tehtävät on merkitty hakasulkeilla, ja niiden tilaa voidaan päivittää seura
 ## Tehtävät
 
 <!-- ============================================================ -->
-<!-- RYHMÄ 1: Selvitystehtävät (itsenäiset, ei riippuvuuksia)     -->
-<!-- Suorita ensin – tulokset voivat vaikuttaa muihin ryhmiin.    -->
-<!-- ============================================================ -->
-
-### Ryhmä 1: Selvitystehtävät
-
-; Kaikki Ryhmä 1 -tehtävät on suoritettu, katso Valmiit tehtävät -osio.
-
-<!-- ============================================================ -->
-<!-- RYHMÄ 2: Assembler-parannukset (assembler.py + cpu.py)       -->
-<!-- Muokkaa assembler.py ja cpu.py yhtä aikaa.                   -->
-<!-- ============================================================ -->
-
-### Ryhmä 2: Assembler-parannukset
-
-; Kaikki Ryhmä 2 -tehtävät on suoritettu, katso Valmiit tehtävät -osio.
-
-<!-- ============================================================ -->
-<!-- RYHMÄ 3: UI – Tiedostohallinta & suoritustila (tui.py)       -->
-<!-- Aloita selvitystehtävällä – tulos voi poistaa muita töitä.   -->
-<!-- Kaikki koskevat lataus-/tallennus-/käynnistyslogiikkaa.      -->
-<!-- ============================================================ -->
-
-### Ryhmä 3: UI – Tiedostohallinta & suoritustila
-
-; Kaikki Ryhmä 3 -tehtävät on suoritettu, katso Valmiit tehtävät -osio.
-
-<!-- ============================================================ -->
-<!-- RYHMÄ 4: Suoritusaikajärjestelmä (instruction.py/cpu.py/tui) -->
-<!-- Isoin muutos. Tehtävät ovat ketjutettuja: suoritusajat ensin,-->
-<!-- sitten uptime, sitten TMR/CTMR, sitten Flags-ikkuna.         -->
-<!-- ============================================================ -->
-
-### Ryhmä 4: Suoritusaikajärjestelmä
-
-; Kaikki Ryhmä 4 -tehtävät on suoritettu, katso Valmiit tehtävät -osio.
-
-<!-- ============================================================ -->
 <!-- VALMIIT TEHTÄVÄT                                             -->
 <!-- ============================================================ -->
 
@@ -88,7 +50,6 @@ Tehtävät on merkitty hakasulkeilla, ja niiden tilaa voidaan päivittää seura
 ; Dokumentoitu architecture.md luvuissa 5.4 ja 5.5 sekä 12.3 (Ajastinkeskeytykset simuloidun ajan perusteella).
 [X] Lisää dokumentaatioon kuvaus siitä, miten TMR- ja CTMR-keskeytyksiin liittyvät tiedot näytetään Flags-ikkunassa ja miten se auttaa käyttäjää ymmärtämään ohjelman suoritusta.
 ; Dokumentoitu tui.md luvussa 11 (TMR ja CTMR — ajastinkeskeytystiedot).
-
 [X] Toolbarissa oli aiemmin ohjelman tilaa kuvaava teksti. Selvitä korvaako Flags-ikkunassa oleva State-tieto toolbarissa olleen tilatiedon. Jos toolbarissa oleva tilatieto on tarpeeton, poista sen.
 ; Toolbarissa ei ole erillistä tilatekstiä — pelkät painikkeet + SpeedSlider. Flags-paneeli (cpu-content) hoitaa tilanäytön. Ei muutoksia tarvittu.
 [X] Varmista että käyttöliittymän kaikki osat ovat englanninkielisiä ja johdonmukaisesti nimettyjä, mukaan lukien kaikki painikkeet, valikot, virheilmoitukset. Tämä varmistaa, että käyttöliittymä on yhdenmukainen ja ymmärrettävä kaikille käyttäjille, riippumatta heidän kielitaustastaan.
@@ -117,12 +78,10 @@ Tehtävät on merkitty hakasulkeilla, ja niiden tilaa voidaan päivittää seura
 ; Dokumentoitu tui.md:n luvussa 10 ("Ladattujen tiedostojen nimet käyttöliittymässä").
 [X] Lisää dokumentaatioon kuvaus siitä, että LOAD-painikkeella voidaan valita ladattava ohjelma ikkunasta, jossa on esillä kaikki code-hakemistossa olevat .asm-tiedostot, ja että tämä helpottaa ohjelman lataamista.
 ; Dokumentoitu tui.md:n luvussa 10 ("Load-painike ja tiedostonvalintaikkuna").
-
 [X] Mitä Flags-ikkunassa näkyvä "State: READY" tieto tarkoittaa?
 ; READY (vihreä)   = CPU pyörii normaalisti (ei halted, ei exit_requested)
 ; HALTED (punainen) = HLT-käsky tai virhe pysäytti suorituksen
-; EXITED (keltainen)= ohjelma päättyi hallitusti EXIT-käskyllä
-
+; EXITED (keltainen)= ohjelmaättyi hallitusti EXIT-käskyllä
 [X] Assemblerin antaessa virheilmoitus, on näytettävä virheen aiheuttavan rivin numero, itse rivi ja kuvaus virheestä. Tämä auttaa ohjelmoijaa ymmärtämään, mikä osa koodista aiheuttaa ongelman, ja antaa selkeän viestin siitä, mitä virhe on, jotta se voidaan korjata tehokkaasti.
 ; Toteutettu assembler.py:ssä (_current_lineno + _current_line) ja dokumentoitu assembler.md luvussa 8.
 [X] Varmista ettö FILL-komennon kohteena oleva muisti alue on kokonaisuudessa kirjoitettavissa, ennen kuin varsinainen kirjoitus aloitetaan. Mikäli kohdealue ei ole kokonaisuutenaa, annetaan virheilmoitus.
@@ -131,17 +90,14 @@ Tehtävät on merkitty hakasulkeilla, ja niiden tilaa voidaan päivittää seura
 ; Dokumentoitu assembler.md luvussa 8 (muoto, esimerkki, huomiot rivinumeroinnista).
 [X] Lisää dokumentaatioon kuvaus siitä, että FILL-komennon kohteena olevan muistialueen on oltava kokonaisuudessaan kirjoitettavissa ennen kuin kirjoitus aloitetaan, ja että virheilmoitus annetaan, jos alue ei ole kokonaisuudessaan kirjoitettavissa.
 ; Dokumentoitu architecture.md:ssä FILL-käskyn kuvauksessa (Kirjoitussuojaus-huomio).
-
 [X] Analysoi kaikki muistialueet-, -rekisterit ja -varaukset päällekkäisyyksien varalta, ja varmista että niissä ei ole päällekkäisyyksiä, jotka voisivat aiheuttaa ongelmia ohjelman suorituksessa. Tämä tarkoittaa, että jokaisella muistialueella, rekisterillä ja varauksella on oma selkeä osoitealueensa, eikä mikään niistä ylitä toisen alueen rajoja. Tämä auttaa varmistamaan, että ohjelma toimii oikein ja että muistiviittaukset tapahtuvat turvallisesti ja oikein.
 ; Muistikartta analysoitu: ei kriittisiä päällekkäisyyksiä.
 ; GFX_MODE_REG (0xFF80) == KERNEL_STACK_START (0xFF80) on tarkoituksellinen design:
 ; GFX_MODE_REG sijaitsee kerneli-pinon pohjassa; pino kasvaa alas 0xFFFF:stä.
 ; Stack overflow -suojaus laukeaa ennen kuin pino ehtii ylikirjoittaa 0xFF80:n.
-
 [X] Tarkista että demo_lib_gfx.asm ja lib_gfx.asm käyttävät FILL-käskyä taulukkojen alustamiseen tai muistialueiden nollaamiseen, missä se on hyödyllinen. Tämä auttaa tekemään demoista tehokkaampia ja selkeämpiä, ja varmistaa että ne hyödyntävät uusia käskyjä parhaalla mahdollisella tavalla.
 ; lib-gfx.asm käyttää jo FILL:ä gfx_clear-funktiossa (koko VRAM nollataan yhdellä käskyllä).
 ; demo_lib_gfx.asm:ssä ei ole sopivia kohteita: vain yksi phase-byte, ei taulukoita.
-
 [X] Lisää prosessorille käsky, jolla muistialueen voi täyttää nopeasti annetulla arvolla. Tämä voisi olla esimerkiksi "FILL" -käsky, joka ottaa kolme operandia: alku- ja loppuosoitteet sekä täytettävän arvon. Tämä käsky voisi olla hyödyllinen esimerkiksi taulukkojen alustamiseen tai muistialueiden nollaamiseen nopeasti.
 [X] Lisää dokumentaatioon kuvaus uudesta FILL-käskystä.
 [X] Lisää FILL-käskyyn liittyvä testitapaus, joka varmistaa, että käsky toimii oikein eri tilanteissa, kuten erikokoisilla muistialueilla ja erilaisilla täytettävillä arvoilla.
@@ -196,7 +152,6 @@ Tehtävät on merkitty hakasulkeilla, ja niiden tilaa voidaan päivittää seura
 ; päivitetään `rebuild_write_mask()`:lla. `check_write_protected()` käyttää O(1)-indeksointia;
 ; virhepolku käy read_only_regions läpi vain rikkomuksen tapahtuessa. Vaatii manuaalisen
 ; `rebuild_write_mask()`-kutsun, jos read_only_regions-listaa muutetaan latauksen jälkeen.
-
 [X] Lisää `run()`-metodiin optimoitu fast-path-silmukka (esim. kiinteä tuple tai paikalliset muuttujat), jotta olion luomisen overhead poistuu hot loopista.
 ; Toteutettu _Ins-luokka __slots__:lla (opcode, operands, size_words). DecodedInstruction-dataclass poistettu hot polulta.
 [X] Korvaa `if/elif ins.mnemonic == ...` -ketju opcode-pohjaisella handler-taululla (funktioviitteet: opcode → handler + metadata), jotta merkkijonovertailut poistuvat kuumasta suorituspolusta.
@@ -206,7 +161,6 @@ Tehtävät on merkitty hakasulkeilla, ja niiden tilaa voidaan päivittää seura
 ; Privilege: tarkistetaan opcode-bitin 15 perusteella (ins.opcode & 0x8000) suoraan step():ssä.
 ; Muisti: _mem_check_table: dict[int, Callable] — 6 _mcheck_*-metodia per käskytyyppi.
 ; _get_exec_cycles() poistettu; syklilasku inline step():ssä _cycles_table[opcode]-taululla.
-
 [X] Poista `time.monotonic()`-kutsu jokaiselta käskykierrokselta; tarkista uptime/CTMR vain harvennetusti (esim. joka N:s käsky) tai deadline-pohjaisesti.
 ; Poistettu `import time` ja käyttämätön `_clock_start`-kenttä. Poistettu `_update_uptime_if_needed()` hot loopista
 ; (uptime päivitetään laiskanmaisesti vain MMIO-luvun yhteydessä _read_clock_mmio():ssa).
@@ -217,7 +171,6 @@ Tehtävät on merkitty hakasulkeilla, ja niiden tilaa voidaan päivittää seura
 ; `_exec_stmr`: jos new_tmr==0 → `_next_tmr_time_us = _TMR_DISABLED` (ei koskaan laukea)
 ; `_exec_sctmr`/`_write_word` (CLOCK_INT_INTERVAL): vastaava sentinel.
 ; reset(): käyttää myös sentineliä alkuarvoina. Modulo-operaatiota ei koskaan ollutkaan (Ryhmä 5 toteutti deadline-vertailun).
-
 [X] Korvaa `_get_reg`/`_set_reg`-metodien pitkät `if/elif`-ketjut taulukkoindeksoinnilla CPU:n suorituspolussa (lista tai array), jotta haarautumisoverhead poistuu jokaisesta rekisteriviittauksesta.
 ; RegisterFile:iin lisätty `_regs: list[int]` (18 alkiota: r0=0... r15=15, fp=16, sp=17).
 ; Kaikki `r0`...`r15`, `fp`, `sp` muutettu propertyksi jotka lukevat/kirjoittavat `_regs`-listaan.
@@ -227,6 +180,43 @@ Tehtävät on merkitty hakasulkeilla, ja niiden tilaa voidaan päivittää seura
 ; `_get_reg`: yksi bounds-check (`idx < 18`) + `self._reg_array[idx]` – ei if/elif-ketjua.
 ; `_set_reg`: vastaava `self._reg_array[idx] = value & WORD_MASK`.
 
+<!-- ============================================================ -->
+<!-- RYHMÄ 1: Selvitystehtävät (itsenäiset, ei riippuvuuksia)     -->
+<!-- Suorita ensin – tulokset voivat vaikuttaa muihin ryhmiin.    -->
+<!-- ============================================================ -->
+
+### Ryhmä 1: Selvitystehtävät
+
+; Kaikki Ryhmä 1 -tehtävät on suoritettu, katso Valmiit tehtävät -osio.
+
+<!-- ============================================================ -->
+<!-- RYHMÄ 2: Assembler-parannukset (assembler.py + cpu.py)       -->
+<!-- Muokkaa assembler.py ja cpu.py yhtä aikaa.                   -->
+<!-- ============================================================ -->
+
+### Ryhmä 2: Assembler-parannukset
+
+; Kaikki Ryhmä 2 -tehtävät on suoritettu, katso Valmiit tehtävät -osio.
+
+<!-- ============================================================ -->
+<!-- RYHMÄ 3: UI – Tiedostohallinta & suoritustila (tui.py)       -->
+<!-- Aloita selvitystehtävällä – tulos voi poistaa muita töitä.   -->
+<!-- Kaikki koskevat lataus-/tallennus-/käynnistyslogiikkaa.      -->
+<!-- ============================================================ -->
+
+### Ryhmä 3: UI – Tiedostohallinta & suoritustila
+
+; Kaikki Ryhmä 3 -tehtävät on suoritettu, katso Valmiit tehtävät -osio.
+
+<!-- ============================================================ -->
+<!-- RYHMÄ 4: Suoritusaikajärjestelmä (instruction.py/cpu.py/tui) -->
+<!-- Isoin muutos. Tehtävät ovat ketjutettuja: suoritusajat ensin,-->
+<!-- sitten uptime, sitten TMR/CTMR, sitten Flags-ikkuna.         -->
+<!-- ============================================================ -->
+
+### Ryhmä 4: Suoritusaikajärjestelmä
+
+; Kaikki Ryhmä 4 -tehtävät on suoritettu, katso Valmiit tehtävät -osio.
 
 <!-- ============================================================ -->
 <!-- RYHMÄ 10: 3D-demot – analyysi ja korjaukset                 -->
@@ -295,15 +285,48 @@ Tehtävät on merkitty hakasulkeilla, ja niiden tilaa voidaan päivittää seura
 
 [ ] Lisää `run()`-metodiin optimoitu fast-path-silmukka: paikalliset viittaukset usein käytettyihin metodeihin/muuttujiin, vähemmän funktiokutsuja per käsky ja poikkeuspolku erotettuna normaalista nopeasta polusta. Nykyinen `step()` säilytetään debuggausta varten.
 
+<!-- ============================================================ -->
+<!-- RYHMÄ A: Screen-kirjasto (lib-screen.asm)                   -->
+<!-- Uusi itsenäinen kirjasto, ei riippuvuuksia muihin ryhmiin.  -->
+<!-- Järjestys: teksti ensin, sitten input (riippuu tekstistä).  -->
+<!-- ============================================================ -->
 
+### Ryhmä A: Screen-kirjasto
 
-### Priorisoimattomat tehtävät
 [ ] Kirjoita lib-screen.asm-kirjastoon funktio, joka mahdollistaa tekstin piirtämisen näytölle käyttäen kCPU16:n A-grafiikkatilaa, jotta näyttöä voi käyttää kuten yksinkertaista terminaalia, joka osaa skrollata tekstiä ylös.
 [ ] Lisää lib-screen.asm-kirjastoon funktio, jolla käyttäjältä voi pyytää inputia.
+
+<!-- ============================================================ -->
+<!-- RYHMÄ B: Disk-laajennukset (lib-disk.asm + disk_test.asm)   -->
+<!-- Järjestys: hakemistot → tarkistus → testi (ketjutettu).     -->
+<!-- Huom: disk_format on JO TOTEUTETTU – katso [?]-tehtävä.     -->
+<!-- ============================================================ -->
+
+### Ryhmä B: Disk-laajennukset
+
 [ ] Lisää kirjastoon lib-disk.asm tuki hakemistoille. Tämä mahdollistaisi tiedostojen järjestämisen hierarkkisesti, ja vaatisi hakemistokohteiden ja polkujen käsittelyn.
-[ ] Lisää kirjastoon lib-disk.asm tuki levyn formatointiin, joka alustaa tallennuslaitteen tyhjäksi ja luo tarvittavat rakenteet tiedostojärjestelmälle.
+[?] Lisää kirjastoon lib-disk.asm tuki levyn formatointiin, joka alustaa tallennuslaitteen tyhjäksi ja luo tarvittavat rakenteet tiedostojärjestelmälle.
+; EPÄSELVÄ: disk_format on jo toteutettu lib-disk.asm:ssä (Ryhmä 11). Tarkista onko tässä tarkoitettu
+; jotain muuta (esim. matalan tason alustus ilman kirjastoa), vai onko tehtävä redundantti.
 [ ] Lisää kirjastoon lib-disk.asm tuki levyn tarkistukseen, joka skannaa tallennuslaitteen ja raportoi mahdollisista vioista tai epäjohdonmukaisuuksista tiedostojärjestelmässä.
 [ ] Lisää disk_test.asm:iin lib-disk.asm-kirjaston kaikkien ominaisuuksien esittely
-[ ] Paranna FILL-kopioin toteutuksen suorituskykyä.
+
+<!-- ============================================================ -->
+<!-- RYHMÄ C: Pienet optimoinnit (cpu.py + tui.py)               -->
+<!-- Itsenäiset pienet muutokset, ei riippuvuuksia toisistaan.   -->
+<!-- ============================================================ -->
+
+### Ryhmä C: Pienet optimoinnit
+
+[ ] Paranna FILL-käskyn toteutuksen suorituskykyä.
 [ ] Suoritustilan ollessa MAX, tietojen joita ei päivitetä tulee olla väriltään harmaita, jotta käyttäjä ymmärtää että ne eivät päivity reaaliajassa. Poistuttaessa MAX-tilasta, tiedot palautuvat normaalivärisiksi ja päivittyvät uudestaan.
+
+<!-- ============================================================ -->
+<!-- RYHMÄ D: Tiedostorakenteen uudistus (kaikki tiedostot)      -->
+<!-- KORKEA RISKI: muuttaa kaikkia tiedostopolkuja ja importteja. -->
+<!-- Suorita viimeisenä, kun muut ryhmät on tehty.               -->
+<!-- ============================================================ -->
+
+### Ryhmä D: Tiedostorakenteen uudistus
+
 [ ] Muuta projektin tiedostorakennetta, niin että devices-hakemistossa sijaitsevat erilaisten laitteiden ohjelmatiedostot, luo muille ohjelmatiedostoille samaalla tavalla logiikalla omat hakemistot, ja siirrä tiedostot niihin. Varmista että kaikki tiedostopolut ja importit päivitetään, eikä mitään hajoa.
