@@ -191,6 +191,15 @@ Tehtävät on merkitty hakasulkeilla, ja niiden tilaa voidaan päivittää seura
 [X] Kirjoita code-hakemistoon esimerkkiohjelma (esim. disk_test.asm), joka käyttää lib-disk.asm-kirjastoa luodakseen tiedoston, kirjoittaakseen dataa siihen, lukeakseen dataa takaisin ja poistaakseen tiedoston, ja varmista että kaikki toiminnot toimivat oikein.
 ; Toteutettu: disk_test.asm testaa disk_format, disk_create, disk_write, disk_read, disk_stat, disk_list, disk_delete.
 ; Kaikki 10 .expect_mem ja .expect_storage -tarkistusta läpäisevät.
+[X] Korvaa `DecodedInstruction`-olion luonti jokaisessa askeleessa kevyemmällä rakenteella (esim. kiinteä tuple tai paikalliset muuttujat), jotta olion luomisen overhead poistuu hot loopista.
+; Toteutettu _Ins-luokka __slots__:lla (opcode, operands, size_words). DecodedInstruction-dataclass poistettu hot polulta.
+[X] Korvaa `if/elif ins.mnemonic == ...` -ketju opcode-pohjaisella handler-taululla (funktioviitteet: opcode → handler + metadata), jotta merkkijonovertailut poistuvat kuumasta suorituspolusta.
+; Toteutettu _exec_table: dict[int, Callable] — 45+ handler-metodia (_exec_load, _exec_add jne.).
+; _build_dispatch_table() rakentaa taulun OPCODE_TABLE:sta CPU.__post_init__():ssa.
+[X] Yhdistä privilege- ja muistitarkistus handler-metadataan, jotta samoja mnemonic-vertailuja ei tehdä useassa eri vaiheessa per käsky.
+; Privilege: tarkistetaan opcode-bitin 15 perusteella (ins.opcode & 0x8000) suoraan step():ssä.
+; Muisti: _mem_check_table: dict[int, Callable] — 6 _mcheck_*-metodia per käskytyyppi.
+; _get_exec_cycles() poistettu; syklilasku inline step():ssä _cycles_table[opcode]-taululla.
 
 
 <!-- ============================================================ -->
@@ -219,9 +228,7 @@ Tehtävät on merkitty hakasulkeilla, ja niiden tilaa voidaan päivittää seura
 
 ### Ryhmä 5: Suorituskyky – Opcode-pohjainen dispatch
 
-[ ] Korvaa `DecodedInstruction`-olion luonti jokaisessa askeleessa kevyemmällä rakenteella (esim. kiinteä tuple tai paikalliset muuttujat), jotta olion luomisen overhead poistuu hot loopista.
-[ ] Korvaa `if/elif ins.mnemonic == ...` -ketju opcode-pohjaisella handler-taululla (funktioviitteet: opcode → handler + metadata), jotta merkkijonovertailut poistuvat kuumasta suorituspolusta.
-[ ] Yhdistä privilege- ja muistitarkistus handler-metadataan, jotta samoja mnemonic-vertailuja ei tehdä useassa eri vaiheessa per käsky.
+; Kaikki Ryhmä 5 -tehtävät on suoritettu, katso Valmiit tehtävät -osio.
 
 <!-- ============================================================ -->
 <!-- RYHMÄ 6: Suorituskyky – Ajanotto- ja keskeytystarkistukset  -->
@@ -272,4 +279,5 @@ Tehtävät on merkitty hakasulkeilla, ja niiden tilaa voidaan päivittää seura
 [ ] Lisää kirjastoon lib-disk.asm tuki hakemistoille. Tämä mahdollistaisi tiedostojen järjestämisen hierarkkisesti, ja vaatisi hakemistokohteiden ja polkujen käsittelyn.
 [ ] Lisää kirjastoon lib-disk.asm tuki levyn formatointiin, joka alustaa tallennuslaitteen tyhjäksi ja luo tarvittavat rakenteet tiedostojärjestelmälle.
 [ ] Lisää kirjastoon lib-disk.asm tuki levyn tarkistukseen, joka skannaa tallennuslaitteen ja raportoi mahdollisista vioista tai epäjohdonmukaisuuksista tiedostojärjestelmässä.
-[ ] Lisää disk_test.asm:iin lib-disk.asm-kirjaston kaikkien ominaisuuksien esittely.
+[ ] Lisää disk_test.asm:iin lib-disk.asm-kirjaston kaikkien ominaisuuksien esittely
+[ ] Paranna FILL-kopioin toteutuksen suorituskykyä.
