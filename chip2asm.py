@@ -40,6 +40,25 @@ def format_word(value: int) -> str:
     return f"0x{value:04X}"
 
 
+def compute_module_end_addr_word(load_addr: int, data_size: int) -> int:
+    """
+    Return module end address as 16-bit word.
+
+    For empty modules this returns the last address before load_addr in modulo
+    16-bit space, i.e. (load_addr - 1) & 0xFFFF.
+    """
+    if data_size < 0:
+        raise ValueError("data size must be >= 0")
+    if data_size == 0:
+        return (load_addr - 1) & 0xFFFF
+    end_addr = load_addr + data_size - 1
+    if end_addr > 0xFFFF:
+        raise ValueError(
+            "module does not fit in 16-bit address space with given load address"
+        )
+    return end_addr
+
+
 def build_output(
     *,
     source_path: Path,
@@ -49,8 +68,7 @@ def build_output(
     bytes_per_line: int,
 ) -> str:
     prefix = f"chip8_mod_{sanitize_module_name(module_name)}"
-    end_addr = load_addr + len(data) - 1 if data else (load_addr - 1)
-    end_addr_word = 0xFFFF if end_addr < 0 else end_addr
+    end_addr_word = compute_module_end_addr_word(load_addr, len(data))
     source_name = source_path.name.replace("\\", "\\\\").replace('"', '\\"')
 
     lines: list[str] = [
@@ -105,10 +123,7 @@ def convert_file(
         raise ValueError("bytes-per-line must be >= 1")
 
     data = input_path.read_bytes()
-    if data and (load_addr + len(data) - 1) > 0xFFFF:
-        raise ValueError(
-            "module does not fit in 16-bit address space with given load address"
-        )
+    compute_module_end_addr_word(load_addr, len(data))
     output_text = build_output(
         source_path=input_path,
         module_name=module_name,
