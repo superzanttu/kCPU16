@@ -73,3 +73,79 @@ Perustelut:
 2. Toteutetaan init/reset-rakenne muistille ja rekistereille.
 3. Toteutetaan fetch/decode-runko (`PC`, opcode, nibble-kentät).
 4. Lisätään vaiheittain käskyryhmät ja testit.
+
+## 9. Ohjelman rakennehahmotelma
+
+Suositus: emulaattori jaetaan pieniin, selkeärajaisiin osiin.
+
+### 9.1 Moduulit ja vastuut
+
+- **chip8_state.py**
+  - Pitää emulaattorin kaiken ajonaikaisen tilan:
+    - rekisterit `V0..VF`, `I`, `PC`, `SP`
+    - ajastimet `DT`, `ST`
+    - `memory[4096]`, `stack[16]`, `keys[16]`, `framebuffer[64*32]`
+- **chip8_loader.py**
+  - Vastaa ROM-latauksesta muistialueelle `0x200..`.
+  - Tarkistaa, ettei ROM ylitä muistia.
+- **chip8_cpu.py**
+  - `fetch()` lukee opcode:n kahdesta tavusta
+  - `decode_execute(opcode)` ohjaa opcode-ryhmittäin oikeaan toteutukseen
+  - sisäiset toteutukset esimerkiksi:
+    - ohjauskäskyt (`1NNN`, `2NNN`, `00EE`)
+    - rekisteri-/ALU-käskyt (`6XNN`, `7XNN`, `8XY*`)
+    - muistikäskyt (`ANNN`, `FX55`, `FX65`, `FX33`)
+    - piirto ja syöte (`DXYN`, `EX9E`, `EXA1`, `FX0A`)
+- **chip8_timers.py**
+  - Päivittää `DT` ja `ST` taajuudella 60 Hz.
+- **chip8_platform.py** (adapteri)
+  - Kytkee CHIP-8:n kCPU16-projektin olemassa oleviin laitteisiin:
+    - näppäimistösyötteet
+    - näytön piirto (framebuffer → näkyvä ulostulo)
+    - ääni (kun `ST > 0`)
+- **chip8_emulator.py**
+  - Korkean tason ohjaus:
+    - `reset()`
+    - `load_rom(path)`
+    - `step()` (yksi opcode)
+    - `run_frame()` (N opcodea + ajastinpäivitys)
+
+### 9.2 Pääsilmukan runko
+
+1. Käsittele syöte (`keys`-tila).
+2. Aja haluttu määrä CHIP-8-opcodeja.
+3. Päivitä 60 Hz ajastimet.
+4. Piirrä framebuffer ulostuloon.
+5. Toista kunnes ohjelma lopetetaan.
+
+## 10. Toteutushahmotelma vaiheittain
+
+### Vaihe 1: Perusta
+- Tee `State`-rakenne ja reset-logiikka.
+- Lisää fonttidatan lataus varatulle alueelle (`0x050..0x09F`).
+- Lisää ROM-loader osoitteesta `0x200`.
+
+### Vaihe 2: CPU-runko
+- Toteuta fetch/decode/execute-rakenne.
+- Lisää opcode-apukentät (`nnn`, `nn`, `n`, `x`, `y`).
+- Lisää tuntemattoman opcode:n virheenkäsittely.
+
+### Vaihe 3: Minimikäskyt (ohjelmat käyntiin)
+- `00E0`, `00EE`
+- `1NNN`, `2NNN`, `3XNN`, `4XNN`
+- `6XNN`, `7XNN`
+- `ANNN`, `DXYN`
+
+### Vaihe 4: Täysi käskyjoukko
+- Lisää loput 8XY*, EX**, FX**-käskyt.
+- Lukitse yhteensopivuuslinjaukset (legacy/modern) avoimista kohdista.
+
+### Vaihe 5: Ajastus, syöte, renderöinti
+- Toteuta `DT/ST` 60 Hz.
+- Toteuta `FX0A` odottava näppäinluku.
+- Toteuta ruudun päivitysrajapinta kCPU16-ympäristöön.
+
+### Vaihe 6: Testaus ja validointi
+- Lisää opcode-yksikkötestit (normal + edge case).
+- Lisää ROM-tason testit tunnetuilla CHIP-8 testiohjelmilla.
+- Varmista resetin, pinon, rajojen ja collision-lipun (`VF`) oikea toiminta.
