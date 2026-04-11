@@ -2088,17 +2088,43 @@ class KCPU16TUI(App[None]):
         """Päivitä CPU-tilapaneeli.
 
         Näyttää:
-        - Tila: READY (vihreä), HALTED (punainen) tai EXITED (keltainen)
-        - Syklit: CPU:n suorittamien käskyjen kokonaismäärä
+        - State: yhdistetty suoritustila + CPU-tila
+        - Cycles: suoritettujen käskyjen kokonaismäärä
         - Breakpoint-lista: kaikki asetetut breakpointit (jos on)
+
+        State-logiikka (prioriteettijärjestyksessä):
+          HALTED  — CPU pysähtyi HLT-käskyyn tai virheeseen
+          EXITED  — ohjelma päättyi hallitusti EXIT-käskyllä
+          RESET   — kone nollattu, ohjelma ei ladattu
+          NO PROG — ohjelmaa ei ole ladattu
+          FAST    — ajossa täydellä nopeudella (F5)
+          MAX     — ajossa maksimaalinen nopeus, ei näyttöpäivitystä (F4)
+          SLOW    — ajossa hitaasti (F6, IPS-rajoitettu)
+          STEP    — askelletaan käsky kerrallaan (F7)
+          STOPPED — pysähtynyt, ohjelma ladattu ja valmis ajettavaksi
         """
         cpu = self.machine.cpu
+
         if cpu.halted:
             state = "[bold red]HALTED[/]"
         elif cpu.process_exit_requested:
             state = "[bold yellow]EXITED[/]"
+        elif self._exec_mode == "reset" or not self.is_assembled:
+            if not self.current_file:
+                state = "[dim]NO PROG[/]"
+            else:
+                state = "[dim]RESET[/]"
+        elif self._exec_mode == "fast":
+            state = "[bold green]▶ FAST[/]"
+        elif self._exec_mode == "max":
+            state = "[bold green]▶ MAX[/]"
+        elif self._exec_mode == "slow":
+            ips = self._slow_ips * self._slow_multiplier
+            state = f"[bold green]▶ SLOW ({ips} IPS)[/]"
+        elif self._exec_mode == "step":
+            state = "[cyan]◼ STEP[/]"
         else:
-            state = "[bold green]READY[/]"
+            state = "[bold green]◼ STOPPED[/]"
 
         lines = [f"State: {state}", f"Cycles: {cpu.instruction_counter}"]
         if self.dbg.breakpoints:

@@ -35,9 +35,7 @@ Tehtävät on merkitty hakasulkeilla, ja niiden tilaa voidaan päivittää seura
 
 ### Ryhmä 1: Selvitystehtävät
 
-[ ] Mitä Flags-ikkunassa näkyvä "State: READY" tieto tarkoittaa?
-[ ] Analysoi kaikki muistialueet-, -rekisterit ja -varaukset päälekkäisyyksien varalta, ja varmista että niissä ei ole päällekkäisyyksiä, jotka voisivat aiheuttaa ongelmia ohjelman suorituksessa. Tämä tarkoittaa, että jokaisella muistialueella, rekisterillä ja varauksella on oma selkeä osoitealueensa, eikä mikään niistä ylitä toisen alueen rajoja. Tämä auttaa varmistamaan, että ohjelma toimii oikein ja että muistiviittaukset tapahtuvat turvallisesti ja oikein.
-[ ] Tarkista että demo_lib_gfx.asm ja lib_gfx.asm käyttävät FILL-käskyä taulukkojen alustamiseen tai muistialueiden nollaamiseen, missä se on hyödyllinen. Tämä auttaa tekemään demoista tehokkaampia ja selkeämpiä, ja varmistaa että ne hyödyntävät uusia käskyjä parhaalla mahdollisella tavalla.
+; Kaikki Ryhmä 1 -tehtävät on suoritettu, katso Valmiit tehtävät -osio.
 
 <!-- ============================================================ -->
 <!-- RYHMÄ 2: Assembler-parannukset (assembler.py + cpu.py)       -->
@@ -93,6 +91,21 @@ Tehtävät on merkitty hakasulkeilla, ja niiden tilaa voidaan päivittää seura
 <!-- ============================================================ -->
 
 ### Valmiit tehtävät
+
+[X] Mitä Flags-ikkunassa näkyvä "State: READY" tieto tarkoittaa?
+; READY (vihreä)   = CPU pyörii normaalisti (ei halted, ei exit_requested)
+; HALTED (punainen) = HLT-käsky tai virhe pysäytti suorituksen
+; EXITED (keltainen)= ohjelma päättyi hallitusti EXIT-käskyllä
+
+[X] Analysoi kaikki muistialueet-, -rekisterit ja -varaukset päällekkäisyyksien varalta, ja varmista että niissä ei ole päällekkäisyyksiä, jotka voisivat aiheuttaa ongelmia ohjelman suorituksessa. Tämä tarkoittaa, että jokaisella muistialueella, rekisterillä ja varauksella on oma selkeä osoitealueensa, eikä mikään niistä ylitä toisen alueen rajoja. Tämä auttaa varmistamaan, että ohjelma toimii oikein ja että muistiviittaukset tapahtuvat turvallisesti ja oikein.
+; Muistikartta analysoitu: ei kriittisiä päällekkäisyyksiä.
+; GFX_MODE_REG (0xFF80) == KERNEL_STACK_START (0xFF80) on tarkoituksellinen design:
+; GFX_MODE_REG sijaitsee kerneli-pinon pohjassa; pino kasvaa alas 0xFFFF:stä.
+; Stack overflow -suojaus laukeaa ennen kuin pino ehtii ylikirjoittaa 0xFF80:n.
+
+[X] Tarkista että demo_lib_gfx.asm ja lib_gfx.asm käyttävät FILL-käskyä taulukkojen alustamiseen tai muistialueiden nollaamiseen, missä se on hyödyllinen. Tämä auttaa tekemään demoista tehokkaampia ja selkeämpiä, ja varmistaa että ne hyödyntävät uusia käskyjä parhaalla mahdollisella tavalla.
+; lib-gfx.asm käyttää jo FILL:ä gfx_clear-funktiossa (koko VRAM nollataan yhdellä käskyllä).
+; demo_lib_gfx.asm:ssä ei ole sopivia kohteita: vain yksi phase-byte, ei taulukoita.
 
 [X] Lisää prosessorille käsky, jolla muistialueen voi täyttää nopeasti annetulla arvolla. Tämä voisi olla esimerkiksi "FILL" -käsky, joka ottaa kolme operandia: alku- ja loppuosoitteet sekä täytettävän arvon. Tämä käsky voisi olla hyödyllinen esimerkiksi taulukkojen alustamiseen tai muistialueiden nollaamiseen nopeasti.
 [X] Lisää dokumentaatioon kuvaus uudesta FILL-käskystä.
