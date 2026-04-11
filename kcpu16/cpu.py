@@ -404,6 +404,12 @@ class CPU:
         """
         Suorita kaskyjä kunnes pysaytysehto tayttyy.
 
+        Optimoitu fast-path: paikalliset viittaukset usein kaytettyihin
+        tietorakenteisiin, inlinattu fetch/decode yleiselle tapaukselle ja
+        poikkeuspolku erotettuna normaalista suorituspolusta. Tallentaminen
+        paikallisiin muuttujiin vahentaa Python LOAD_ATTR -kutsujen maaraa
+        hot loopissa (LOAD_FAST on nopeampi kuin LOAD_ATTR).
+
         Pysaytysehdot:
         1. HALT-kasky suoritettu (halted = True)
         2. EXIT-kasky suoritettu (process_exit_requested = True)
@@ -412,12 +418,136 @@ class CPU:
         Args:
             max_cycles: Maksimi suoritettavien kaskyjen maara.
                         None (oletus) = ei rajaa, aja kunnes HALT tai EXIT.
+
+        Note:
+            step()-metodi sailytetaan debuggausta ja yksittaista askellusta varten.
         """
+        # --- Paikalliset viittaukset hot-loop-muuttujiin ---
+        # Python LOAD_FAST (lokaalit) on nopeampi kuin LOAD_ATTR (self.xxx).
+        regs = self.regs
+        mem_words = self.memory.words  # Suora lista — ei method call per muistiluku
+        exec_table = self._exec_table
+        mem_check_table = self._mem_check_table
+        cycles_table = self._cycles_table
+        reg_array = self._reg_array
+        word_mask = WORD_MASK  # Vakio lokaalina (ei module-tason lookup)
+        nops_shift = OPCODE_NOPS_SHIFT
+        nops_mask_val = OPCODE_NOPS_MASK
+        opcode_jmpi = _OPCODE_JMPI
+        opcode_calli = _OPCODE_CALLI
+        opcode_fill = _OPCODE_FILL
+        opcode_table = OPCODE_TABLE
+
         cycles = 0
         while not self.halted and not self.process_exit_requested:
             if max_cycles is not None and cycles >= max_cycles:
                 break
-            self.step()
+
+            # ---- NORMAALI SUORITUSPOLKU (fast path) ----
+            try:
+                # FETCH: suora lista-indeksointi, ei method call
+                pc = regs.pc
+                opcode = mem_words[pc & word_mask]
+
+                # PRIVILEGE CHECK
+                if opcode & 0x8000 and not regs.in_kernel_mode:
+                    raise PrivilegeViolationError(
+                        opcode_table.get(opcode, ("?", 0, True))[0]
+                    )
+
+                # DECODE: inlinattu fast path yleisille kaskyille;
+                # JMPI/CALLI ovat muuttuvamittaisia ja kaytetaan hidasta polkua.
+                if opcode == opcode_jmpi or opcode == opcode_calli:
+                    ins = self._fetch_decode(pc)
+                else:
+                    if opcode not in opcode_table:
+                        raise InvalidOpcodeError(f"Unknown opcode: 0x{opcode:04X}")
+                    nops = (opcode >> nops_shift) & nops_mask_val
+                    if nops == 0:
+                        operands: list[int] = []
+                    elif nops == 1:
+                        operands = [mem_words[(pc + 1) & word_mask]]
+                    elif nops == 2:
+                        operands = [
+                            mem_words[(pc + 1) & word_mask],
+                            mem_words[(pc + 2) & word_mask],
+                        ]
+                    else:  # nops == 3
+                        operands = [
+                            mem_words[(pc + 1) & word_mask],
+                            mem_words[(pc + 2) & word_mask],
+                            mem_words[(pc + 3) & word_mask],
+                        ]
+                    ins = _Ins(opcode, operands, 1 + nops)
+
+                # MEMORY CHECK
+                check_fn = mem_check_table.get(opcode)
+                if check_fn is not None:
+                    check_fn(ins)
+
+                # EXECUTE
+                exec_cycles = cycles_table.get(opcode, 1)
+                if opcode == opcode_fill and len(ins.operands) >= 2:
+                    start = reg_array[ins.operands[0]] & word_mask
+                    end = reg_array[ins.operands[1]] & word_mask
+                    exec_cycles += ((end - start) & word_mask) + 1
+
+                handler = exec_table.get(opcode)
+                if handler is None:
+                    raise InvalidOpcodeError(f"Unknown opcode: 0x{opcode:04X}")
+                handler(ins)
+
+                # PC UPDATE
+                regs.pc = (regs.pc + ins.size_words) & word_mask
+
+                # LASKURIT JA KESKEYTYKSET
+                self.instruction_counter += 1
+                self._simulated_time_us += exec_cycles
+                self._handle_keyboard_interrupt_if_needed()
+                sim_time = self._simulated_time_us
+                if sim_time >= self._next_tmr_time_us:
+                    self._handle_timer_interrupt_if_needed()
+                if sim_time >= self._next_ctmr_time_us:
+                    self._handle_clock_interrupt_if_needed()
+
+            # ---- POIKKEUSPOLKU (erotettu normaalista suorituksesta) ----
+            except PrivilegeViolationError:
+                try:
+                    self._trigger_interrupt(INT_PRIVILEGE_VIOLATION)
+                except Exception:
+                    self.halted = True
+                    raise
+            except MemoryAccessFaultError:
+                try:
+                    self._trigger_interrupt(INT_MEMORY_ACCESS_FAULT)
+                except Exception:
+                    self.halted = True
+                    raise
+            except ReadOnlyMemoryError:
+                try:
+                    self._trigger_interrupt(INT_MEMORY_ACCESS_FAULT)
+                except Exception:
+                    self.halted = True
+                    raise
+            except InvalidOpcodeError:
+                try:
+                    self._trigger_interrupt(INT_INVALID_OPCODE)
+                except Exception:
+                    self.halted = True
+                    raise
+            except ZeroDivisionError:
+                try:
+                    self._trigger_interrupt(INT_DIV_ZERO)
+                except Exception:
+                    self.halted = True
+                    raise
+            except StackOverflowError:
+                try:
+                    self._trigger_interrupt(INT_STACK_OVERFLOW)
+                except Exception:
+                    self.halted = True
+                    raise
+
             cycles += 1
 
     # ==========================================================================

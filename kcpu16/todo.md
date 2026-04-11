@@ -34,6 +34,14 @@ Tehtävät on merkitty hakasulkeilla, ja niiden tilaa voidaan päivittää seura
 
 ### Valmiit tehtävät
 
+[X] Lisää `run()`-metodiin optimoitu fast-path-silmukka: paikalliset viittaukset usein käytettyihin metodeihin/muuttujiin, vähemmän funktiokutsuja per käsky ja poikkeuspolku erotettuna normaalista nopeasta polusta. Nykyinen `step()` säilytetään debuggausta varten.
+; Toteutettu cpu.py:ssä: `run()` käyttää paikallisia viittauksia (`regs`, `mem_words`, `exec_table`,
+; `mem_check_table`, `cycles_table`, `reg_array`) Python LOAD_FAST -optimointia varten.
+; Fetch/decode inlinattu: suora lista-indeksointi `mem_words[pc & mask]` ilman method call'ia;
+; JMPI/CALLI käyttävät edelleen hidasta `_fetch_decode()`-polkua.
+; Poikkeuspolku on erillinen try/except-lohko normaalin suorituspolun jälkeen.
+; Korjattu bugi: PC-päivitys käyttää `regs.pc` (handler-muokattu arvo), ei `pc` (alkuperäinen).
+; step()-metodi säilytetty debuggausta varten.
 [X] Määritä kaikille käskyille suoritusajat, jotka kuvaavat kuinka kauan kunkin käskyn suorittaminen kestää.
 ; Toteutettu EXEC_CYCLES-taulukko instruction.py:ssä. Yksikkö: 1 µs simuloidulla 1 MHz kellolla.
 ; Yksinkertaiset käskyt: 1 sykli. MUL=4, DIV=8, DREAD/DWRITE=10, INT/IRET/EXIT=4. FILL: 1 + N (dynaaminen).
@@ -182,7 +190,7 @@ Tehtävät on merkitty hakasulkeilla, ja niiden tilaa voidaan päivittää seura
 
 ### Ryhmä 9: Suorituskyky – Fast run -suorituspolku
 
-[ ] Lisää `run()`-metodiin optimoitu fast-path-silmukka: paikalliset viittaukset usein käytettyihin metodeihin/muuttujiin, vähemmän funktiokutsuja per käsky ja poikkeuspolku erotettuna normaalista nopeasta polusta. Nykyinen `step()` säilytetään debuggausta varten.
+; Kaikki Ryhmä 9 -tehtävät on suoritettu, katso Valmiit tehtävät -osio.
 
 <!-- ============================================================ -->
 <!-- RYHMÄ A: Screen-kirjasto (lib-screen.asm)                   -->
@@ -204,9 +212,7 @@ Tehtävät on merkitty hakasulkeilla, ja niiden tilaa voidaan päivittää seura
 ### Ryhmä B: Disk-laajennukset
 
 [ ] Lisää kirjastoon lib-disk.asm tuki hakemistoille. Tämä mahdollistaisi tiedostojen järjestämisen hierarkkisesti, ja vaatisi hakemistokohteiden ja polkujen käsittelyn.
-[?] Lisää kirjastoon lib-disk.asm tuki levyn formatointiin, joka alustaa tallennuslaitteen tyhjäksi ja luo tarvittavat rakenteet tiedostojärjestelmälle.
-; EPÄSELVÄ: disk_format on jo toteutettu lib-disk.asm:ssä (Ryhmä 11). Tarkista onko tässä tarkoitettu
-; jotain muuta (esim. matalan tason alustus ilman kirjastoa), vai onko tehtävä redundantti.
+[?] Varmista että kirjastossa lib-disk.asm on tuki levyn formatointiin, joka alustaa tallennuslaitteen tyhjäksi ja luo tarvittavat rakenteet tiedostojärjestelmälle.
 [ ] Lisää kirjastoon lib-disk.asm tuki levyn tarkistukseen, joka skannaa tallennuslaitteen ja raportoi mahdollisista vioista tai epäjohdonmukaisuuksista tiedostojärjestelmässä.
 [ ] Lisää disk_test.asm:iin lib-disk.asm-kirjaston kaikkien ominaisuuksien esittely
 
@@ -228,4 +234,8 @@ Tehtävät on merkitty hakasulkeilla, ja niiden tilaa voidaan päivittää seura
 
 ### Ryhmä D: Tiedostorakenteen uudistus
 
-[ ] Muuta projektin tiedostorakennetta, niin että devices-hakemistossa sijaitsevat erilaisten laitteiden ohjelmatiedostot, luo muille ohjelmatiedostoille samaalla tavalla logiikalla omat hakemistot, ja siirrä tiedostot niihin. Varmista että kaikki tiedostopolut ja importit päivitetään, eikä mitään hajoa.
+[ ] Muuta projektin hakemistorakennetta, niin että se vastaa fyysisen tietokoneen komponentteja ja rakennetta.  Varmista että kaikki tiedostopolut ja importit päivitetään, eikä mitään hajoa.
+
+
+### Priorisoimattomat tehtävät
+[ ] Klikattaessa hiirellä Reset-nappia, Flags-ikkunassa on tieto "Pprog: NOT LOADED", mutta silti Screen-ikkunan alareunassa lukee "demo_3dcube.asm". Tarkista myös levynkuvan nimen näkyminen Reset-napista klikkaamisen jälkeen. 
