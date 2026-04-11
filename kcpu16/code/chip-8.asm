@@ -35,6 +35,7 @@
 .const TICK_MS,      17
 .const SCR_OFS_X,    8
 .const SCR_OFS_Y,    8
+.const CH8_RPL_LAST, 7
 
 ; -----------------------------------------------------------------------------
 ; Emulaattorin tila
@@ -58,6 +59,8 @@ chip8_wait_vx:
         .db 0xFFFF      ; 0..15 = odottaa tähän VX:ään, 0xFFFF = ei odotusta
 chip8_last_key:
         .db 0
+chip8_rpl:
+        .db 0, 0, 0, 0, 0, 0, 0, 0
 
 chip8_stack:
         .db 0, 0, 0, 0, 0, 0, 0, 0
@@ -674,6 +677,10 @@ op_fxxx:
         JZ    fx_55
         CMP   R13, 0x65
         JZ    fx_65
+        CMP   R13, 0x75
+        JZ    fx_75
+        CMP   R13, 0x85
+        JZ    fx_85
         RET
 
 fx_07:
@@ -781,6 +788,46 @@ fx65_loop:
 fx65_done:
         RET
 
+fx_75:
+        READ  R2, chip8_rpl
+        READ  R3, chip8_v
+        READ  R4, 0
+        READ  R5, R10
+        CMP   R5, CH8_RPL_LAST
+        JLE   fx75_loop
+        READ  R5, CH8_RPL_LAST
+fx75_loop:
+        CMP   R4, R5
+        JGT   fx75_done
+        READ  R1, [R3]
+        STORE [R2], R1
+        ADD   R2, 1
+        ADD   R3, 1
+        ADD   R4, 1
+        JUMP  fx75_loop
+fx75_done:
+        RET
+
+fx_85:
+        READ  R2, chip8_rpl
+        READ  R3, chip8_v
+        READ  R4, 0
+        READ  R5, R10
+        CMP   R5, CH8_RPL_LAST
+        JLE   fx85_loop
+        READ  R5, CH8_RPL_LAST
+fx85_loop:
+        CMP   R4, R5
+        JGT   fx85_done
+        READ  R1, [R2]
+        STORE [R3], R1
+        ADD   R2, 1
+        ADD   R3, 1
+        ADD   R4, 1
+        JUMP  fx85_loop
+fx85_done:
+        RET
+
 ; -----------------------------------------------------------------------------
 ; Main
 ; -----------------------------------------------------------------------------
@@ -803,6 +850,11 @@ main:
         STORE [chip8_keymask], 0
         STORE [chip8_wait_vx], 0xFFFF
         STORE [chip8_last_key], 0
+        READ  R0, chip8_rpl
+        READ  R1, chip8_rpl
+        ADD   R1, CH8_RPL_LAST
+        READ  R2, 0
+        FILL  R0, R1, R2
 
         ; Nollaa framebuffer ja CHIP-8-muisti
         READ  R0, CH8_FB
