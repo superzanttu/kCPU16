@@ -428,6 +428,15 @@ class CPU:
             end = self._get_reg(ins.operands[1])
             self.memory.check_user_access(start, self.regs.mpr)
             self.memory.check_user_access(end, self.regs.mpr)
+            # Varmista että koko kohdealue on kirjoitettavissa ennen kuin kirjoitus aloitetaan.
+            # Tarkistus tehdään aina (myös kernel-tilassa), koska read_only_regions ovat
+            # laitteistotasolla suojattuja eikä edes kernel voi kirjoittaa niihin.
+            _chk = start
+            while True:
+                self.memory.check_write_protected(_chk)
+                if _chk == end:
+                    break
+                _chk = (_chk + 1) & WORD_MASK
 
     def _execute(self, ins: DecodedInstruction) -> None:
         """
