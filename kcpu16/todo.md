@@ -201,6 +201,17 @@ Tehtävät on merkitty hakasulkeilla, ja niiden tilaa voidaan päivittää seura
 ; Muisti: _mem_check_table: dict[int, Callable] — 6 _mcheck_*-metodia per käskytyyppi.
 ; _get_exec_cycles() poistettu; syklilasku inline step():ssä _cycles_table[opcode]-taululla.
 
+[X] Poista `time.monotonic()`-kutsu jokaiselta käskykierrokselta; tarkista uptime/CTMR vain harvennetusti (esim. joka N:s käsky) tai deadline-pohjaisesti.
+; Poistettu `import time` ja käyttämätön `_clock_start`-kenttä. Poistettu `_update_uptime_if_needed()` hot loopista
+; (uptime päivitetään laiskanmaisesti vain MMIO-luvun yhteydessä _read_clock_mmio():ssa).
+; Lisätty threshold-guardit: `if _simulated_time_us >= _next_tmr_time_us:` / `_next_ctmr_time_us`
+; jotta ajastin-metodeja ei kutsuta ollenkaan ennen kuin aika on täyttynyt.
+[X] Korvaa timer-keskeytyksen modulovertailu (`instruction_counter % tmr == 0`) seuraavan laukaisusyklin vertailulla (`next_timer_cycle`), jotta modulo-operaatio poistuu hot loopista.
+; Lisätty `_TMR_DISABLED = 0x7FFF_FFFF_FFFF_FFFF` sentinel disabled-ajastimille:
+; `_exec_stmr`: jos new_tmr==0 → `_next_tmr_time_us = _TMR_DISABLED` (ei koskaan laukea)
+; `_exec_sctmr`/`_write_word` (CLOCK_INT_INTERVAL): vastaava sentinel.
+; reset(): käyttää myös sentineliä alkuarvoina. Modulo-operaatiota ei koskaan ollutkaan (Ryhmä 5 toteutti deadline-vertailun).
+
 
 <!-- ============================================================ -->
 <!-- RYHMÄ 10: 3D-demot – analyysi ja korjaukset                 -->
@@ -240,8 +251,7 @@ Tehtävät on merkitty hakasulkeilla, ja niiden tilaa voidaan päivittää seura
 
 ### Ryhmä 6: Suorituskyky – Ajanotto- ja keskeytystarkistukset
 
-[ ] Poista `time.monotonic()`-kutsu jokaiselta käskykierrokselta; tarkista uptime/CTMR vain harvennetusti (esim. joka N:s käsky) tai deadline-pohjaisesti.
-[ ] Korvaa timer-keskeytyksen modulovertailu (`instruction_counter % tmr == 0`) seuraavan laukaisusyklin vertailulla (`next_timer_cycle`), jotta modulo-operaatio poistuu hot loopista.
+; Kaikki Ryhmä 6 -tehtävät on suoritettu, katso Valmiit tehtävät -osio.
 
 <!-- ============================================================ -->
 <!-- RYHMÄ 7: Suorituskyky – Taulukkopohjaiset rekisterit        -->
@@ -281,3 +291,4 @@ Tehtävät on merkitty hakasulkeilla, ja niiden tilaa voidaan päivittää seura
 [ ] Lisää kirjastoon lib-disk.asm tuki levyn tarkistukseen, joka skannaa tallennuslaitteen ja raportoi mahdollisista vioista tai epäjohdonmukaisuuksista tiedostojärjestelmässä.
 [ ] Lisää disk_test.asm:iin lib-disk.asm-kirjaston kaikkien ominaisuuksien esittely
 [ ] Paranna FILL-kopioin toteutuksen suorituskykyä.
+[ ] Suoritustilan ollessa MAX, tietojen joita ei päivitetä tulee olla väriltään harmaita, jotta käyttäjä ymmärtää että ne eivät päivity reaaliajassa. Poistuttaessa MAX-tilasta, tiedot palautuvat normaalivärisiksi ja päivittyvät uudestaan.

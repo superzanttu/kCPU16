@@ -28,7 +28,6 @@ Operandeissa rekisterit koodataan indekseilla 0-5:
 
 from __future__ import annotations
 
-import time
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import TYPE_CHECKING
@@ -120,6 +119,9 @@ class _Ins:
 _OPCODE_JMPI: int = _op(0, 5, 9, 0)  # Indeksoitu hyppy (muuttuvanmittainen)
 _OPCODE_CALLI: int = _op(0, 5, 10, 0)  # Indeksoitu kutsu (muuttuvanmittainen)
 _OPCODE_FILL: int = _op(0, 1, 11, 3)  # Täyttökäsky (dynaaminen syklilasku)
+
+# Sentinel-arvo: disabled ajastimelle niin suuri, että se ei koskaan laukea
+_TMR_DISABLED: int = 0x7FFF_FFFF_FFFF_FFFF
 from .registers import RegisterFile
 
 # TYPE_CHECKING-lohko estaa syklisen importin ajonaikana
@@ -158,16 +160,15 @@ class CPU:
     # juuri sillä hetkellä kun kehys on valmis — ennen kuin gfx_clear tyhjentää sen.
     flip_callback: object = field(default=None, init=False, repr=False)
 
-    # Kellonseuranta: reaaliaikaiset pisteet (time.monotonic())
-    _clock_start: float = field(default_factory=time.monotonic, init=False)
     _uptime_counter: int = field(default=0, init=False)
 
     # Simuloitu suoritusaika mikrosekunteina (kertyy käskyjen suoritussykleistä)
     _simulated_time_us: int = field(default=0, init=False)
     # Seuraava simuloitu aika (µs) jolloin TMR-keskeytys laukeaa
-    _next_tmr_time_us: int = field(default=0, init=False)
+    # (_TMR_DISABLED = ajastin poissa päältä, ei koskaan laukea)
+    _next_tmr_time_us: int = field(default=_TMR_DISABLED, init=False)
     # Seuraava simuloitu aika (µs) jolloin CTMR-keskeytys laukeaa
-    _next_ctmr_time_us: int = field(default=0, init=False)
+    _next_ctmr_time_us: int = field(default=_TMR_DISABLED, init=False)
 
     # 16-bittinen Galois LFSR satunnaislukugeneraattorille ($0022)
     _lfsr: int = field(default=RAND_LFSR_SEED, init=False)
@@ -272,11 +273,9 @@ class CPU:
         self.process_exit_requested = False
         self._uptime_counter = 0
         self._lfsr = RAND_LFSR_SEED
-        now = time.monotonic()
-        self._clock_start = now
         self._simulated_time_us = 0
-        self._next_tmr_time_us = 0
-        self._next_ctmr_time_us = 0
+        self._next_tmr_time_us = _TMR_DISABLED
+        self._next_ctmr_time_us = _TMR_DISABLED
         self.regs.reset()
 
     def step(self) -> None:
@@ -344,10 +343,11 @@ class CPU:
             # Paivita laskurit ja tarkista keskeytykset
             self.instruction_counter += 1
             self._simulated_time_us += exec_cycles
-            self._handle_timer_interrupt_if_needed()
             self._handle_keyboard_interrupt_if_needed()
-            self._update_uptime_if_needed()
-            self._handle_clock_interrupt_if_needed()
+            if self._simulated_time_us >= self._next_tmr_time_us:
+                self._handle_timer_interrupt_if_needed()
+            if self._simulated_time_us >= self._next_ctmr_time_us:
+                self._handle_clock_interrupt_if_needed()
 
         # ----------------------------------------------------------------------
         # VIRHEENKASITTELY: Muunna poikkeukset keskeytyksiksi
@@ -839,13 +839,19 @@ class CPU:
         (reg_idx,) = ins.operands
         new_tmr = self._get_reg(reg_idx)
         self.regs.tmr = new_tmr
-        self._next_tmr_time_us = self._simulated_time_us + new_tmr
+        self._next_tmr_time_us = (
+            _TMR_DISABLED if new_tmr == 0
+            else self._simulated_time_us + new_tmr
+        )
 
     def _exec_sctmr(self, ins: _Ins) -> None:
         (reg_idx,) = ins.operands
         new_ctmr = self._get_reg(reg_idx)
         self.regs.ctmr = new_ctmr
-        self._next_ctmr_time_us = self._simulated_time_us + new_ctmr * 1000
+        self._next_ctmr_time_us = (
+            _TMR_DISABLED if new_ctmr == 0
+            else self._simulated_time_us + new_ctmr * 1000
+        )
 
     def _exec_dread(self, ins: _Ins) -> None:
         reg_dst, reg_addr = ins.operands
@@ -988,7 +994,10 @@ class CPU:
         value &= WORD_MASK
         if addr == CLOCK_INT_INTERVAL:
             self.regs.ctmr = value
-            self._next_ctmr_time_us = self._simulated_time_us + value * 1000
+            self._next_ctmr_time_us = (
+                _TMR_DISABLED if value == 0
+                else self._simulated_time_us + value * 1000
+            )
             return
         # Muut kellolohkon osoitteet ovat vain luettavia — ohita hiljainen kirjoitus
         if CLOCK_MMIO_START <= addr <= CLOCK_MMIO_END:
