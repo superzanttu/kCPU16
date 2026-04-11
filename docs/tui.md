@@ -260,12 +260,12 @@ GFX_FLIP_REG:llä ole vaikutusta.
 
 ## GFX_FLIP_REG — flippirekisteri
 
-| Ominaisuus | Arvo |
-| ---------- | ---- |
-| Osoite     | `0xFF81` (`GFX_FLIP_REG`) |
-| Koko       | 1 sana (16 bittiä) |
+| Ominaisuus | Arvo                                                   |
+| ---------- | ------------------------------------------------------ |
+| Osoite     | `0xFF81` (`GFX_FLIP_REG`)                              |
+| Koko       | 1 sana (16 bittiä)                                     |
 | Kirjoitus  | Mikä tahansa nollasta poikkeava arvo käynnistää flipin |
-| Lukeminen  | Aina 0 flipin jälkeen (TUI nollaa automaattisesti) |
+| Lukeminen  | Aina 0 flipin jälkeen (TUI nollaa automaattisesti)     |
 
 ## Toimintaperiaate
 
@@ -298,18 +298,97 @@ STORE R0, GFX_FLIP_REG  ; käynnistää flipin
 
 ## Käyttäytyminen eri suoritustiloissa
 
-| Tila   | Käyttäytyminen |
-| ------ | -------------- |
-| FAST   | Flip havaitaan ~200 ms päivityssyklissä |
-| MAX    | Flip havaitaan ~200 ms päivityssyklissä |
-| SLOW   | Flip havaitaan jokaisen käskyn jälkeen (force-renderöinti) |
-| STEP   | Etupuskuri ohitetaan, VRAM renderöidään suoraan (näet jokaisen käskyn vaikutuksen) |
-| RESET  | Etupuskuri tyhjennetään — seuraava päivitys renderöi VRAMista |
+| Tila  | Käyttäytyminen                                                                     |
+| ----- | ---------------------------------------------------------------------------------- |
+| FAST  | Flip havaitaan ~200 ms päivityssyklissä                                            |
+| MAX   | Flip havaitaan ~200 ms päivityssyklissä                                            |
+| SLOW  | Flip havaitaan jokaisen käskyn jälkeen (force-renderöinti)                         |
+| STEP  | Etupuskuri ohitetaan, VRAM renderöidään suoraan (näet jokaisen käskyn vaikutuksen) |
+| RESET | Etupuskuri tyhjennetään — seuraava päivitys renderöi VRAMista                      |
 
 ## Muistiosoitteet
 
-| Symboli        | Osoite   | Kuvaus |
-| -------------- | -------- | ------ |
+| Symboli        | Osoite   | Kuvaus                                                               |
+| -------------- | -------- | -------------------------------------------------------------------- |
 | `GFX_MODE_REG` | `0xFF80` | Grafiikkatila: 0=A (teksti), 1=B (puoliblokkipikseli), 2=C (braille) |
-| `GFX_FLIP_REG` | `0xFF81` | Kirjoita ≠ 0 → flip; luetaan aina 0 flipin jälkeen |
+| `GFX_FLIP_REG` | `0xFF81` | Kirjoita ≠ 0 → flip; luetaan aina 0 flipin jälkeen                   |
+
+---
+
+# 10. Tiedostohallinta
+
+## Load-painike ja tiedostonvalintaikkuna
+
+**Load**-painike (tai `Ctrl+O`) avaa tiedostonvalintaikkunan, jossa näkyy kaikki `code/`-hakemistossa olevat `.asm`-tiedostot. Käyttäjä voi valita ladattavan ohjelman listasta:
+
+- **Hiiren kaksoisklikki** tiedostonimellä lataa ohjelman välittömästi
+- **Valitse** tiedosto ensin klikkaamalla, sitten paina **Load**-nappia
+- **Cancel** (tai `Escape`) sulkee ikkunan lataamatta mitään
+
+Tiedosto ladataan aina `code/`-hakemistosta — ulkoisia polkuja ei voi valita tästä ikkunasta. Jos haluat ladata tiedoston muualta, käytä `load`-komentoa komentokentässä.
+
+## Ladattujen tiedostojen nimet käyttöliittymässä
+
+- **Ladattu `.asm`-ohjelma**: tiedoston nimi näkyy Screen-paneelin alaosassa (border_subtitle). Jos ohjelmaa ei ole ladattu, nimi on tyhjä.
+- **Ladattu `.dsk`-levykuva**: tiedoston nimi näkyy Disassembly-paneelin alaosassa. Kun levyllä on tallentamattomia muutoksia, nimen perässä näkyy `*`. Jos levykuvaa ei ole ladattu, nimi on tyhjä.
+
+Nimet päivittyvät myös tallennuksen jälkeen — tallennuksen jälkeen käyttöliittymässä näkyy tallennetun tiedoston nimi samoin kuin se olisi juuri ladattu.
+
+## Suoritustila latauksen jälkeen
+
+`.asm`- tai `.dsk`-tiedoston lataamisen jälkeen ohjelman suoritustila on aina **STOPPED**. Tämä estää ohjelman automaattisen suorituksen heti lataamisen jälkeen ja antaa käyttäjälle mahdollisuuden tarkistaa ladattu ohjelma ennen sen suorittamista.
+
+Jos CPU oli käynnissä (FAST/MAX/SLOW) ennen latausta, taustayöntekijä peruutetaan automaattisesti latauksen yhteydessä.
+
+## Step/Fast/Max/Slow — ohjelman latausvaatimus
+
+**Step** (F7), **Fast** (F5), **Max** (F4) ja **Slow** (F6) -painikkeet vaativat, että ohjelma on ensin ladattu ja käännetty onnistuneesti. Jos ohjelmaa ei ole ladattu, painiket eivät käynnistä suoritusta vaan antavat virheilmoituksen:
+
+```
+No program loaded. Use 'load <file>' or Ctrl+O first.
+```
+
+---
+
+# 11. Flags-paneelin tilatiedot
+
+Flags-paneelin alaosassa näytetään kaksi erillistä tilatietoa:
+
+## Prog — ohjelman lataus/kääntämistila
+
+| Tila         | Kuvaus                                                        |
+| ------------ | ------------------------------------------------------------- |
+| `NO PROG`    | Ohjelmaa ei ole ladattu. Käytä `load <tiedosto>` tai Ctrl+O.  |
+| `NOT LOADED` | Tiedosto on määritelty, mutta kääntäminen epäonnistui.        |
+| `READY`      | Ohjelma on käännetty ja ladattu muistiin. Valmis ajettavaksi. |
+
+## CPU — suoritustila
+
+| Tila             | Kuvaus                                                    |
+| ---------------- | --------------------------------------------------------- |
+| `STOPPED`        | CPU pysähtyneenä. Valmis askellettavaksi tai ajettavaksi. |
+| `STEP`           | Yksi käsky suoritettu. Odottaa seuraavaa komentoa.        |
+| `▶ FAST`         | CPU ajaa maksimiteholla (F5).                             |
+| `▶ MAX`          | CPU ajaa maksimiteholla ilman näytön päivitystä (F4).     |
+| `▶ SLOW (N IPS)` | CPU ajaa hitaasti N käskyä/sekunti (F6).                  |
+| `HALTED`         | CPU pysähtyi HLT-käskyyn tai virheeseen. Punainen.        |
+| `EXITED`         | Ohjelma päättyi hallitusti EXIT-käskyllä. Keltainen.      |
+
+Molemmat tilat päivittyvät reaaliaikaisesti ohjelma latauksen, kääntämisen ja suorituksen aikana.
+
+## TMR ja CTMR — ajastinkeskeytystiedot
+
+Flags-paneelissa näytetään TMR- ja CTMR-ajastimien tila sekä aika seuraavaan laukaisukertaan.
+
+| Kenttä | Tila                | Kuvaus                                                     |
+| ------ | ------------------- | ---------------------------------------------------------- |
+| TMR    | `off`               | Ajastinkeskeytys pois päältä (TMR = 0)                     |
+| TMR    | `N µs (next: M µs)` | Ajastinkeskeytys päällä; väli N µs, seuraava M µs:n päästä |
+| CTMR   | `off`               | Kellokeskeytys pois päältä (CTMR = 0)                      |
+| CTMR   | `N ms (next: M ms)` | Kellokeskeytys päällä; väli N ms, seuraava M ms:n päästä   |
+
+Ajanyksiköt ovat **simuloitua aikaa** (ks. architecture.md luku 12):
+- TMR: mikrosekunteja (µs). `STMR R` asettaa välin rekisterin arvona.
+- CTMR: millisekunteja (ms). `SCTMR R` asettaa välin rekisterin arvona.
+- Jäljellä oleva aika lasketaan `next_fire_time − simulated_time_us`.
 

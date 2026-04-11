@@ -1,0 +1,35 @@
+{
+    "name": "kcpu16-asm",
+    "displayName": "kCPU16 Assembler",
+    "description": "kCPU16-assemblerin syntaksiväritys, kommentit ja kielituki Visual Studio Codessa.",
+    "version": "0.1.0",
+    "publisher": "superzanttu",
+    "engines": {
+        "vscode": "^1.75.0"
+    },
+    "categories": [
+        "Programming Languages"
+    ],
+    "contributes": {
+        "languages": [
+            {
+                "id": "kcpu16-asm",
+                "aliases": [
+                    "kCPU16 Assembler",
+                    "kcpu16"
+                ],
+                "extensions": [
+                    ".k16"
+                ],
+                "configuration": "./language-configuration.json"
+            }
+        ],
+        "grammars": [
+            {
+                "language": "kcpu16-asm",
+                "scopeName": "source.kcpu16-asm",
+                "path": "./syntaxes/kcpu16-asm.tmLanguage.json"
+            }
+        ]
+    }
+}

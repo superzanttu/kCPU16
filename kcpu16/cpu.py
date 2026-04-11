@@ -28,7 +28,6 @@ Operandeissa rekisterit koodataan indekseilla 0-5:
 
 from __future__ import annotations
 
-import time
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import TYPE_CHECKING
@@ -90,13 +89,39 @@ from .exceptions import (
     StackOverflowError,
 )
 from .instruction import (
-    DecodedInstruction,
     OPCODE_TABLE,
-    OPCODE_PRIV_SHIFT,
     OPCODE_NOPS_SHIFT,
     OPCODE_NOPS_MASK,
+    EXEC_CYCLES,
+    _op,
 )
 from .memory import Memory
+
+
+# ---------------------------------------------------------------------------
+# Kevyt käskyn sisäinen esitysrakenne — korvaa DecodedInstruction-dataclass.
+# __slots__ poistaa __dict__-allokaation per käsky hot loopissa.
+# ---------------------------------------------------------------------------
+
+
+class _Ins:
+    """Dekoodattu käsky — __slots__-rakenne käskyjen esittämiseen suorituspolulla."""
+
+    __slots__ = ("opcode", "operands", "size_words")
+
+    def __init__(self, opcode: int, operands: list, size_words: int) -> None:
+        self.opcode = opcode
+        self.operands = operands
+        self.size_words = size_words
+
+
+# Vakio-opcodet erityislogiikkaa varten (lasketaan kerran moduulin latautuessa)
+_OPCODE_JMPI: int = _op(0, 5, 9, 0)  # Indeksoitu hyppy (muuttuvanmittainen)
+_OPCODE_CALLI: int = _op(0, 5, 10, 0)  # Indeksoitu kutsu (muuttuvanmittainen)
+_OPCODE_FILL: int = _op(0, 1, 11, 3)  # Täyttökäsky (dynaaminen syklilasku)
+
+# Sentinel-arvo: disabled ajastimelle niin suuri, että se ei koskaan laukea
+_TMR_DISABLED: int = 0x7FFF_FFFF_FFFF_FFFF
 from .registers import RegisterFile
 
 # TYPE_CHECKING-lohko estaa syklisen importin ajonaikana
@@ -135,14 +160,107 @@ class CPU:
     # juuri sillä hetkellä kun kehys on valmis — ennen kuin gfx_clear tyhjentää sen.
     flip_callback: object = field(default=None, init=False, repr=False)
 
-    # Kellonseuranta: reaaliaikaiset pisteet (time.monotonic())
-    _clock_start: float = field(default_factory=time.monotonic, init=False)
     _uptime_counter: int = field(default=0, init=False)
-    _last_uptime_update: float = field(default_factory=time.monotonic, init=False)
-    _last_clock_int_time: float = field(default_factory=time.monotonic, init=False)
+
+    # Simuloitu suoritusaika mikrosekunteina (kertyy käskyjen suoritussykleistä)
+    _simulated_time_us: int = field(default=0, init=False)
+    # Seuraava simuloitu aika (µs) jolloin TMR-keskeytys laukeaa
+    # (_TMR_DISABLED = ajastin poissa päältä, ei koskaan laukea)
+    _next_tmr_time_us: int = field(default=_TMR_DISABLED, init=False)
+    # Seuraava simuloitu aika (µs) jolloin CTMR-keskeytys laukeaa
+    _next_ctmr_time_us: int = field(default=_TMR_DISABLED, init=False)
 
     # 16-bittinen Galois LFSR satunnaislukugeneraattorille ($0022)
     _lfsr: int = field(default=RAND_LFSR_SEED, init=False)
+
+    def __post_init__(self) -> None:
+        """Rakenna opcode-pohjaiset käsittelytaulukot CPU:n alustuksen jälkeen."""
+        # Suoritustaulukko: opcode → handler-metodi
+        self._exec_table: dict[int, object] = {}
+        # Muistitarkistustaulukko: opcode → check-metodi (tai None)
+        self._mem_check_table: dict[int, object] = {}
+        # Sykliarvotaulukko: opcode → perus-exec-cycles
+        self._cycles_table: dict[int, int] = {}
+        # Suora viite RegisterFile:n sisäiseen rekisterilistaan (r0-r15, fp, sp)
+        # Sama lista kuin regs._regs — ei kopiota, ei synkronointia tarvita.
+        self._reg_array: list[int] = self.regs._regs
+        self._build_dispatch_table()
+
+    def _build_dispatch_table(self) -> None:
+        """Täytä _exec_table, _mem_check_table ja _cycles_table OPCODE_TABLE:sta."""
+        handler_map = {
+            "LOAD": self._exec_load,
+            "CPY": self._exec_cpy,
+            "READ": self._exec_read,
+            "STORE": self._exec_store,
+            "READ_IND": self._exec_read_ind,
+            "STORE_IND": self._exec_store_ind,
+            "READ_REL": self._exec_read_rel,
+            "STORE_REL": self._exec_store_rel,
+            "STOREI": self._exec_storei,
+            "STOREI_IND": self._exec_storei_ind,
+            "STOREI_REL": self._exec_storei_rel,
+            "FILL": self._exec_fill,
+            "ADD": self._exec_add,
+            "SUB": self._exec_sub,
+            "MUL": self._exec_mul,
+            "DIV": self._exec_div,
+            "CMP": self._exec_cmp,
+            "ADC": self._exec_adc,
+            "AND": self._exec_and,
+            "OR": self._exec_or,
+            "XOR": self._exec_xor,
+            "NOT": self._exec_not,
+            "SHL": self._exec_shl,
+            "SHR": self._exec_shr,
+            "PUSH": self._exec_push,
+            "POP": self._exec_pop,
+            "SWSP": self._exec_swsp,
+            "JUMP": self._exec_jump,
+            "CALL": self._exec_call,
+            "RET": self._exec_ret,
+            "JZ": self._exec_jz,
+            "JNZ": self._exec_jnz,
+            "JLT": self._exec_jlt,
+            "JGT": self._exec_jgt,
+            "JLE": self._exec_jle,
+            "JGE": self._exec_jge,
+            "JMPI": self._exec_jmpi,
+            "CALLI": self._exec_calli,
+            "INT": self._exec_int,
+            "IRET": self._exec_iret,
+            "STI": self._exec_sti,
+            "CLI": self._exec_cli,
+            "HALT": self._exec_halt,
+            "EXIT": self._exec_exit,
+            "SMPR": self._exec_smpr,
+            "STMR": self._exec_stmr,
+            "SCTMR": self._exec_sctmr,
+            "DREAD": self._exec_dread,
+            "DWRITE": self._exec_dwrite,
+            "TSL": self._exec_tsl,
+            "NOP": self._exec_nop,
+        }
+        # Muistitarkistustaulukko: opcode → check-metodi
+        mem_check_map = {
+            "READ": self._mcheck_direct,
+            "STORE": self._mcheck_direct,
+            "STOREI": self._mcheck_direct,
+            "TSL": self._mcheck_direct,
+            "READ_IND": self._mcheck_ind_src,
+            "STORE_IND": self._mcheck_ind_dst,
+            "STOREI_IND": self._mcheck_ind_dst,
+            "READ_REL": self._mcheck_rel_src,
+            "STORE_REL": self._mcheck_rel_dst,
+            "STOREI_REL": self._mcheck_rel_dst,
+            "FILL": self._mcheck_fill,
+        }
+        for opcode, (mnemonic, _, _) in OPCODE_TABLE.items():
+            if mnemonic in handler_map:
+                self._exec_table[opcode] = handler_map[mnemonic]
+            if mnemonic in mem_check_map:
+                self._mem_check_table[opcode] = mem_check_map[mnemonic]
+            self._cycles_table[opcode] = EXEC_CYCLES.get(mnemonic, 1)
 
     def reset(self) -> None:
         """
@@ -158,10 +276,9 @@ class CPU:
         self.process_exit_requested = False
         self._uptime_counter = 0
         self._lfsr = RAND_LFSR_SEED
-        now = time.monotonic()
-        self._clock_start = now
-        self._last_uptime_update = now
-        self._last_clock_int_time = now
+        self._simulated_time_us = 0
+        self._next_tmr_time_us = _TMR_DISABLED
+        self._next_ctmr_time_us = _TMR_DISABLED
         self.regs.reset()
 
     def step(self) -> None:
@@ -187,38 +304,53 @@ class CPU:
             # VAIHE 1: FETCH & DECODE
             # Lue opcode ja operandit muistista PC:n osoitteesta
             # ------------------------------------------------------------------
-            decoded = self._fetch_decode(self.regs.pc)
+            ins = self._fetch_decode(self.regs.pc)
 
             # ------------------------------------------------------------------
             # VAIHE 2: PRIVILEGE CHECK
-            # Tarkista onko User-tilalla oikeus suorittaa tata kaskya
+            # Tarkista opcode-bitin 15 perusteella onko käsky privileged
             # ------------------------------------------------------------------
-            self._check_privilege(decoded)
+            if ins.opcode & 0x8000 and not self.regs.in_kernel_mode:
+                mnemonic = OPCODE_TABLE.get(ins.opcode, ("?", 0, True))[0]
+                raise PrivilegeViolationError(mnemonic)
 
             # ------------------------------------------------------------------
             # VAIHE 3: MEMORY CHECK
-            # Tarkista etta kaikki muistiviittaukset ovat sallittuja
+            # Tarkista muistiviittaukset taulukosta haetulla tarkistajalla
             # ------------------------------------------------------------------
-            self._check_memory_access(decoded)
+            check_fn = self._mem_check_table.get(ins.opcode)
+            if check_fn is not None:
+                check_fn(ins)  # type: ignore[operator]
 
             # ------------------------------------------------------------------
             # VAIHE 4: EXECUTE
-            # Suorita kaskyn varsinainen toiminto
+            # Suorita käsky opcode-taulukosta haetulla käsittelijällä
             # ------------------------------------------------------------------
-            self._execute(decoded)
+            exec_cycles = self._cycles_table.get(ins.opcode, 1)
+            if ins.opcode == _OPCODE_FILL and len(ins.operands) >= 2:
+                start = self._get_reg(ins.operands[0]) & WORD_MASK
+                end = self._get_reg(ins.operands[1]) & WORD_MASK
+                exec_cycles += ((end - start) & WORD_MASK) + 1
+
+            handler = self._exec_table.get(ins.opcode)
+            if handler is None:
+                raise InvalidOpcodeError(f"Unknown opcode: 0x{ins.opcode:04X}")
+            handler(ins)  # type: ignore[operator]
 
             # ------------------------------------------------------------------
             # VAIHE 5: PC UPDATE
             # Siirra ohjealaskuri seuraavaan kaskyyn (paitsi jos hypattiin)
             # ------------------------------------------------------------------
-            self.regs.pc = (self.regs.pc + decoded.size_words) & WORD_MASK
+            self.regs.pc = (self.regs.pc + ins.size_words) & WORD_MASK
 
-            # Paivita laskuri ja tarkista ajastinkeskeytys
+            # Paivita laskurit ja tarkista keskeytykset
             self.instruction_counter += 1
-            self._handle_timer_interrupt_if_needed()
+            self._simulated_time_us += exec_cycles
             self._handle_keyboard_interrupt_if_needed()
-            self._update_uptime_if_needed()
-            self._handle_clock_interrupt_if_needed()
+            if self._simulated_time_us >= self._next_tmr_time_us:
+                self._handle_timer_interrupt_if_needed()
+            if self._simulated_time_us >= self._next_ctmr_time_us:
+                self._handle_clock_interrupt_if_needed()
 
         # ----------------------------------------------------------------------
         # VIRHEENKASITTELY: Muunna poikkeukset keskeytyksiksi
@@ -272,6 +404,12 @@ class CPU:
         """
         Suorita kaskyjä kunnes pysaytysehto tayttyy.
 
+        Optimoitu fast-path: paikalliset viittaukset usein kaytettyihin
+        tietorakenteisiin, inlinattu fetch/decode yleiselle tapaukselle ja
+        poikkeuspolku erotettuna normaalista suorituspolusta. Tallentaminen
+        paikallisiin muuttujiin vahentaa Python LOAD_ATTR -kutsujen maaraa
+        hot loopissa (LOAD_FAST on nopeampi kuin LOAD_ATTR).
+
         Pysaytysehdot:
         1. HALT-kasky suoritettu (halted = True)
         2. EXIT-kasky suoritettu (process_exit_requested = True)
@@ -280,30 +418,154 @@ class CPU:
         Args:
             max_cycles: Maksimi suoritettavien kaskyjen maara.
                         None (oletus) = ei rajaa, aja kunnes HALT tai EXIT.
+
+        Note:
+            step()-metodi sailytetaan debuggausta ja yksittaista askellusta varten.
         """
+        # --- Paikalliset viittaukset hot-loop-muuttujiin ---
+        # Python LOAD_FAST (lokaalit) on nopeampi kuin LOAD_ATTR (self.xxx).
+        regs = self.regs
+        mem_words = self.memory.words  # Suora lista — ei method call per muistiluku
+        exec_table = self._exec_table
+        mem_check_table = self._mem_check_table
+        cycles_table = self._cycles_table
+        reg_array = self._reg_array
+        word_mask = WORD_MASK  # Vakio lokaalina (ei module-tason lookup)
+        nops_shift = OPCODE_NOPS_SHIFT
+        nops_mask_val = OPCODE_NOPS_MASK
+        opcode_jmpi = _OPCODE_JMPI
+        opcode_calli = _OPCODE_CALLI
+        opcode_fill = _OPCODE_FILL
+        opcode_table = OPCODE_TABLE
+
         cycles = 0
         while not self.halted and not self.process_exit_requested:
             if max_cycles is not None and cycles >= max_cycles:
                 break
-            self.step()
+
+            # ---- NORMAALI SUORITUSPOLKU (fast path) ----
+            try:
+                # FETCH: suora lista-indeksointi, ei method call
+                pc = regs.pc
+                opcode = mem_words[pc & word_mask]
+
+                # PRIVILEGE CHECK
+                if opcode & 0x8000 and not regs.in_kernel_mode:
+                    raise PrivilegeViolationError(
+                        opcode_table.get(opcode, ("?", 0, True))[0]
+                    )
+
+                # DECODE: inlinattu fast path yleisille kaskyille;
+                # JMPI/CALLI ovat muuttuvamittaisia ja kaytetaan hidasta polkua.
+                if opcode == opcode_jmpi or opcode == opcode_calli:
+                    ins = self._fetch_decode(pc)
+                else:
+                    if opcode not in opcode_table:
+                        raise InvalidOpcodeError(f"Unknown opcode: 0x{opcode:04X}")
+                    nops = (opcode >> nops_shift) & nops_mask_val
+                    if nops == 0:
+                        operands: list[int] = []
+                    elif nops == 1:
+                        operands = [mem_words[(pc + 1) & word_mask]]
+                    elif nops == 2:
+                        operands = [
+                            mem_words[(pc + 1) & word_mask],
+                            mem_words[(pc + 2) & word_mask],
+                        ]
+                    else:  # nops == 3
+                        operands = [
+                            mem_words[(pc + 1) & word_mask],
+                            mem_words[(pc + 2) & word_mask],
+                            mem_words[(pc + 3) & word_mask],
+                        ]
+                    ins = _Ins(opcode, operands, 1 + nops)
+
+                # MEMORY CHECK
+                check_fn = mem_check_table.get(opcode)
+                if check_fn is not None:
+                    check_fn(ins)
+
+                # EXECUTE
+                exec_cycles = cycles_table.get(opcode, 1)
+                if opcode == opcode_fill and len(ins.operands) >= 2:
+                    start = reg_array[ins.operands[0]] & word_mask
+                    end = reg_array[ins.operands[1]] & word_mask
+                    exec_cycles += ((end - start) & word_mask) + 1
+
+                handler = exec_table.get(opcode)
+                if handler is None:
+                    raise InvalidOpcodeError(f"Unknown opcode: 0x{opcode:04X}")
+                handler(ins)
+
+                # PC UPDATE
+                regs.pc = (regs.pc + ins.size_words) & word_mask
+
+                # LASKURIT JA KESKEYTYKSET
+                self.instruction_counter += 1
+                self._simulated_time_us += exec_cycles
+                self._handle_keyboard_interrupt_if_needed()
+                sim_time = self._simulated_time_us
+                if sim_time >= self._next_tmr_time_us:
+                    self._handle_timer_interrupt_if_needed()
+                if sim_time >= self._next_ctmr_time_us:
+                    self._handle_clock_interrupt_if_needed()
+
+            # ---- POIKKEUSPOLKU (erotettu normaalista suorituksesta) ----
+            except PrivilegeViolationError:
+                try:
+                    self._trigger_interrupt(INT_PRIVILEGE_VIOLATION)
+                except Exception:
+                    self.halted = True
+                    raise
+            except MemoryAccessFaultError:
+                try:
+                    self._trigger_interrupt(INT_MEMORY_ACCESS_FAULT)
+                except Exception:
+                    self.halted = True
+                    raise
+            except ReadOnlyMemoryError:
+                try:
+                    self._trigger_interrupt(INT_MEMORY_ACCESS_FAULT)
+                except Exception:
+                    self.halted = True
+                    raise
+            except InvalidOpcodeError:
+                try:
+                    self._trigger_interrupt(INT_INVALID_OPCODE)
+                except Exception:
+                    self.halted = True
+                    raise
+            except ZeroDivisionError:
+                try:
+                    self._trigger_interrupt(INT_DIV_ZERO)
+                except Exception:
+                    self.halted = True
+                    raise
+            except StackOverflowError:
+                try:
+                    self._trigger_interrupt(INT_STACK_OVERFLOW)
+                except Exception:
+                    self.halted = True
+                    raise
+
             cycles += 1
 
     # ==========================================================================
-    # SISAISET METODIT: FETCH, DECODE, CHECK, EXECUTE
+    # SISAISET METODIT: FETCH, DECODE, MUISTITARKISTUKSET, KÄSITTELIJÄT
     # ==========================================================================
 
-    def _fetch_decode(self, pc: int) -> DecodedInstruction:
+    def _fetch_decode(self, pc: int) -> _Ins:
         """
-        Hae kasky muistista ja dekoodaa se.
+        Hae kasky muistista ja dekoodaa se kevyeksi _Ins-olioksi.
 
         Lukee opcoden PC:n osoitteesta ja mahdolliset lisaoperandit
-        seuraavista osoitteista. Palauttaa puretun kaskyn.
+        seuraavista osoitteista.
 
         Args:
             pc: Ohjelmalaskurin osoite (mista kasky luetaan)
 
         Returns:
-            DecodedInstruction-olio kaskymetatietoineen
+            _Ins-olio kaskymetatietoineen
 
         Raises:
             InvalidOpcodeError: Jos opcode ei ole taulukossa
@@ -311,595 +573,440 @@ class CPU:
         # Lue opcode-sana
         opcode = self.memory.read(pc)
 
-        # Etsi mnemonic taulukosta (taulukko on opcode -> (mnemonic, nops, priv))
+        # Validoi opcode
         if opcode not in OPCODE_TABLE:
             raise InvalidOpcodeError(f"Unknown opcode: 0x{opcode:04X}")
 
-        mnemonic, operand_count, _ = OPCODE_TABLE[opcode]
+        mnemonic = OPCODE_TABLE[opcode][0]
 
         # Erityistapaus: JMPI/CALLI — muuttuvanmittainen indeksoitu hyppy/kutsu
         # Rakenne muistissa: opcode | reg_id | count | addr[0] | ... | addr[count-1]
-        if mnemonic in ("JMPI", "CALLI"):
+        if opcode == _OPCODE_JMPI or opcode == _OPCODE_CALLI:
             reg_id = self.memory.read(pc + 1)
             count = self.memory.read(pc + 2)
             targets = [self.memory.read(pc + 3 + i) for i in range(count)]
-            return DecodedInstruction(
-                mnemonic=mnemonic,
+            return _Ins(
+                opcode=opcode,
                 operands=[reg_id, count] + targets,
                 size_words=3 + count,
-                privileged=False,
             )
 
-        # Johda operandien maara ja privilege suoraan opcode-biteista
-        # (OPS-kentta bits 7:6, P-bitti bit 15)
+        # Johda operandien maara suoraan opcode-biteista (OPS-kentta bits 7:6)
         operand_count = (opcode >> OPCODE_NOPS_SHIFT) & OPCODE_NOPS_MASK
-        privileged = bool((opcode >> OPCODE_PRIV_SHIFT) & 1)
 
         # Lue operandit perakkaisista muistiosoitteista
-        operands: list[int] = []
-        for i in range(operand_count):
-            operands.append(self.memory.read(pc + 1 + i))
+        operands: list[int] = [
+            self.memory.read(pc + 1 + i) for i in range(operand_count)
+        ]
 
-        return DecodedInstruction(
-            mnemonic=mnemonic,
+        return _Ins(
+            opcode=opcode,
             operands=operands,
-            size_words=1 + operand_count,  # opcode + operandien maara
-            privileged=privileged,
+            size_words=1 + operand_count,
         )
 
-    def _check_privilege(self, ins: DecodedInstruction) -> None:
-        """
-        Tarkista onko kaskylle oikeutta suorittaa.
+    # ==========================================================================
+    # MUISTITARKISTUSMETODIT (yhdistetty handler-metadataan, Task 3)
+    # Kukin metodi tarkistaa yhden käskytyypin muistiviittauksen.
+    # Privilege-tarkistus tehdään step():ssä opcode-bitin perusteella.
+    # ==========================================================================
 
-        Kernel-kaskyt (privileged=True) ovat sallittuja vain
-        Kernel-tilassa (P=1).
+    def _mcheck_direct(self, ins: _Ins) -> None:
+        """READ, STORE, STOREI, TSL — operands[1] on muistiosoite."""
+        if not self.regs.in_kernel_mode:
+            self.memory.check_user_access(ins.operands[1], self.regs.mpr)
 
-        Args:
-            ins: Dekoodattu kasky
+    def _mcheck_ind_src(self, ins: _Ins) -> None:
+        """READ_IND — osoite tulee _get_reg(operands[1]):stä."""
+        if not self.regs.in_kernel_mode:
+            self.memory.check_user_access(self._get_reg(ins.operands[1]), self.regs.mpr)
 
-        Raises:
-            PrivilegeViolationError: Jos User yrittaa ajaa Kernel-kaskya
-        """
-        if ins.privileged and not self.regs.in_kernel_mode:
-            raise PrivilegeViolationError(ins.mnemonic)
+    def _mcheck_ind_dst(self, ins: _Ins) -> None:
+        """STORE_IND, STOREI_IND — osoite tulee _get_reg(operands[0]):sta."""
+        if not self.regs.in_kernel_mode:
+            self.memory.check_user_access(self._get_reg(ins.operands[0]), self.regs.mpr)
 
-    def _check_memory_access(self, ins: DecodedInstruction) -> None:
-        """
-        Tarkista etta muistiviittaukset ovat sallittuja.
-
-        User-tilassa ei saa lukea/kirjoittaa osoitteisiin alle MPR:n
-        (paitsi VRAM joka on aina sallittu).
-
-        Args:
-            ins: Dekoodattu kasky
-
-        Raises:
-            MemoryAccessFaultError: Jos User viittaa suojattuun muistiin
-        """
-        # Kernel-tilassa kaikki on sallittua
-        if self.regs.in_kernel_mode:
-            return
-
-        # Tarkista suora muistiviittaus (READ/STORE/STOREI osoite operandissa)
-        if ins.mnemonic in {"READ", "STORE"} and len(ins.operands) >= 2:
-            addr = ins.operands[1]  # toinen operandi on osoite
-            self.memory.check_user_access(addr, self.regs.mpr)
-
-        elif ins.mnemonic == "STOREI" and len(ins.operands) >= 2:
-            addr = ins.operands[1]  # toinen operandi on osoite
-            self.memory.check_user_access(addr, self.regs.mpr)
-
-        # Tarkista epasuora lukuviittaus (READ_IND: osoite rekisterissa)
-        elif ins.mnemonic == "READ_IND" and len(ins.operands) >= 2:
-            addr = self._get_reg(ins.operands[1])  # regS sisaltaa osoitteen
-            self.memory.check_user_access(addr, self.regs.mpr)
-
-        # Tarkista epasuora kirjoitusviittaus (STORE_IND/STOREI_IND: osoite rekisterissa)
-        elif ins.mnemonic == "STORE_IND" and len(ins.operands) >= 2:
-            addr = self._get_reg(ins.operands[0])  # regD sisaltaa kohdeosoitteen
-            self.memory.check_user_access(addr, self.regs.mpr)
-
-        elif ins.mnemonic == "STOREI_IND" and len(ins.operands) >= 2:
-            addr = self._get_reg(ins.operands[0])  # regD sisaltaa kohdeosoitteen
-            self.memory.check_user_access(addr, self.regs.mpr)
-
-        # Tarkista FP-suhteellinen lukuviittaus (READ_REL: [FP + imm])
-        elif ins.mnemonic == "READ_REL" and len(ins.operands) >= 2:
+    def _mcheck_rel_src(self, ins: _Ins) -> None:
+        """READ_REL — osoite = FP + operands[1]."""
+        if not self.regs.in_kernel_mode:
             addr = (self.regs.fp + ins.operands[1]) & WORD_MASK
             self.memory.check_user_access(addr, self.regs.mpr)
 
-        # Tarkista FP-suhteellinen kirjoitusviittaus (STORE_REL/STOREI_REL: [FP + imm])
-        elif ins.mnemonic == "STORE_REL" and len(ins.operands) >= 2:
+    def _mcheck_rel_dst(self, ins: _Ins) -> None:
+        """STORE_REL, STOREI_REL — osoite = FP + operands[1]."""
+        if not self.regs.in_kernel_mode:
             addr = (self.regs.fp + ins.operands[1]) & WORD_MASK
             self.memory.check_user_access(addr, self.regs.mpr)
 
-        elif ins.mnemonic == "STOREI_REL" and len(ins.operands) >= 2:
-            addr = (self.regs.fp + ins.operands[1]) & WORD_MASK
-            self.memory.check_user_access(addr, self.regs.mpr)
-
-        # Tarkista TSL-muistiviittaus (TSL: lukee ja kirjoittaa addr)
-        elif ins.mnemonic == "TSL" and len(ins.operands) >= 2:
-            addr = ins.operands[1]
-            self.memory.check_user_access(addr, self.regs.mpr)
-
-        # Tarkista FILL-muistiviittaus (FILL: kirjoittaa [regStart..regEnd])
-        elif ins.mnemonic == "FILL" and len(ins.operands) >= 3:
-            start = self._get_reg(ins.operands[0])
-            end = self._get_reg(ins.operands[1])
+    def _mcheck_fill(self, ins: _Ins) -> None:
+        """FILL — kirjoitussuojaustarkistus aina; käyttäjäalueen tarkistus user-tilassa."""
+        start = self._get_reg(ins.operands[0])
+        end = self._get_reg(ins.operands[1])
+        addr = start
+        while True:
+            self.memory.check_write_protected(addr)
+            if addr == end:
+                break
+            addr = (addr + 1) & WORD_MASK
+        if not self.regs.in_kernel_mode:
             self.memory.check_user_access(start, self.regs.mpr)
             self.memory.check_user_access(end, self.regs.mpr)
 
-    def _execute(self, ins: DecodedInstruction) -> None:
-        """
-        Suorita dekoodattu kasky.
+    # ==========================================================================
+    # KÄSITTELYMETODIT: yksi metodi per käsky (opcode-handler-taulukko)
+    # Kukin metodi suorittaa tasan yhden käskyn logiikan.
+    # Kutsutaan step():stä self._exec_table[opcode](ins)-taulukolla.
+    # ==========================================================================
 
-        Tama on prosessorin "lihas" - tassa tapahtuu varsinainen
-        laskenta, muistinkaytto ja tilamuutokset.
+    # --- Tiedonsiirtokäskyt ---
 
-        Args:
-            ins: Dekoodattu kasky mnemonic- ja operandi-tietoineen
+    def _exec_load(self, ins: _Ins) -> None:
+        reg_idx, imm = ins.operands
+        self._set_reg(reg_idx, imm)
 
-        Raises:
-            ZeroDivisionError: Jos DIV-kaskyn jakaja on 0
-            InvalidOpcodeError: Jos kaskya ei tunnisteta
-        """
-        # ======================================================================
-        # TIEDONSIIRTOKASKYT
-        # ======================================================================
+    def _exec_cpy(self, ins: _Ins) -> None:
+        dst, src = ins.operands
+        self._set_reg(dst, self._get_reg(src))
 
-        if ins.mnemonic == "LOAD":
-            # LOAD reg, imm - Lataa vakioarvo rekisteriin
-            reg_idx, imm = ins.operands
-            self._set_reg(reg_idx, imm)
+    def _exec_read(self, ins: _Ins) -> None:
+        reg_idx, addr = ins.operands
+        self._set_reg(reg_idx, self._read_word(addr))
 
-        elif ins.mnemonic == "CPY":
-            # CPY regD, regS - Kopioi lahderekisterista kohteeseen
-            dst, src = ins.operands
-            self._set_reg(dst, self._get_reg(src))
+    def _exec_store(self, ins: _Ins) -> None:
+        reg_idx, addr = ins.operands
+        self._write_word(addr, self._get_reg(reg_idx))
 
-        elif ins.mnemonic == "READ":
-            # READ reg, addr - Lue muistiosoitteen arvo rekisteriin
-            reg_idx, addr = ins.operands
-            self._set_reg(reg_idx, self._read_word(addr))
+    def _exec_read_ind(self, ins: _Ins) -> None:
+        # regD = [regS]
+        reg_dst, reg_addr = ins.operands
+        self._set_reg(reg_dst, self._read_word(self._get_reg(reg_addr)))
 
-        elif ins.mnemonic == "STORE":
-            # STORE reg, addr - Tallenna rekisterin arvo muistiin
-            reg_idx, addr = ins.operands
-            self._write_word(addr, self._get_reg(reg_idx))
+    def _exec_store_ind(self, ins: _Ins) -> None:
+        # [regD] = regS
+        reg_addr, reg_src = ins.operands
+        self._write_word(self._get_reg(reg_addr), self._get_reg(reg_src))
 
-        elif ins.mnemonic == "READ_IND":
-            # READ_IND regD, regS - Lue muistista regS:n osoittamasta paikasta
-            # regD = [regS]
-            reg_dst, reg_addr = ins.operands
-            self._set_reg(reg_dst, self._read_word(self._get_reg(reg_addr)))
+    def _exec_read_rel(self, ins: _Ins) -> None:
+        # reg = [FP + imm]
+        reg_idx, offset = ins.operands
+        self._set_reg(reg_idx, self._read_word((self.regs.fp + offset) & WORD_MASK))
 
-        elif ins.mnemonic == "STORE_IND":
-            # STORE_IND regD, regS - Kirjoita regS regD:n osoittamaan paikkaan
-            # [regD] = regS
-            reg_addr, reg_src = ins.operands
-            self._write_word(self._get_reg(reg_addr), self._get_reg(reg_src))
+    def _exec_store_rel(self, ins: _Ins) -> None:
+        # [FP + imm] = reg
+        reg_idx, offset = ins.operands
+        self._write_word((self.regs.fp + offset) & WORD_MASK, self._get_reg(reg_idx))
 
-        elif ins.mnemonic == "READ_REL":
-            # READ_REL reg, imm - Lue muistista FP + imm rekisteriin
-            # reg = [FP + imm]
-            reg_idx, offset = ins.operands
-            addr = (self.regs.fp + offset) & WORD_MASK
-            self._set_reg(reg_idx, self._read_word(addr))
+    def _exec_storei(self, ins: _Ins) -> None:
+        # [addr] = imm
+        imm, addr = ins.operands
+        self._write_word(addr, imm & WORD_MASK)
 
-        elif ins.mnemonic == "STORE_REL":
-            # STORE_REL reg, imm - Kirjoita rekisteri muistiin FP + imm
-            # [FP + imm] = reg
-            reg_idx, offset = ins.operands
-            addr = (self.regs.fp + offset) & WORD_MASK
-            self._write_word(addr, self._get_reg(reg_idx))
+    def _exec_storei_ind(self, ins: _Ins) -> None:
+        # [regD] = imm
+        reg_addr, imm = ins.operands
+        self._write_word(self._get_reg(reg_addr), imm & WORD_MASK)
 
-        elif ins.mnemonic == "STOREI":
-            # STOREI imm, addr - Kirjoita välitön arvo muistiosoitteeseen
-            # [addr] = imm
-            imm, addr = ins.operands
-            self._write_word(addr, imm & WORD_MASK)
+    def _exec_storei_rel(self, ins: _Ins) -> None:
+        # [FP + offset] = imm
+        imm, offset = ins.operands
+        self._write_word((self.regs.fp + offset) & WORD_MASK, imm & WORD_MASK)
 
-        elif ins.mnemonic == "STOREI_IND":
-            # STOREI_IND regD, imm - Kirjoita välitön arvo regD:n osoittamaan paikkaan
-            # [regD] = imm
-            reg_addr, imm = ins.operands
-            self._write_word(self._get_reg(reg_addr), imm & WORD_MASK)
+    def _exec_fill(self, ins: _Ins) -> None:
+        # Täytä muistialue [regStart..regEnd] arvolla regVal
+        start_reg, end_reg, val_reg = ins.operands
+        start = self._get_reg(start_reg)
+        end = self._get_reg(end_reg)
+        val = self._get_reg(val_reg) & WORD_MASK
+        addr = start
+        while True:
+            self._write_word(addr, val)
+            if addr == end:
+                break
+            addr = (addr + 1) & WORD_MASK
 
-        elif ins.mnemonic == "STOREI_REL":
-            # STOREI_REL imm, offset - Kirjoita välitön arvo [FP + offset]:een
-            # [FP + offset] = imm
-            imm, offset = ins.operands
-            addr = (self.regs.fp + offset) & WORD_MASK
-            self._write_word(addr, imm & WORD_MASK)
+    # --- Aritmeettiset käskyt ---
 
-        elif ins.mnemonic == "FILL":
-            # FILL regStart, regEnd, regVal - Täytä muistialue arvolla
-            # Kirjoittaa regVal:n arvo osoitteisiin [regStart..regEnd] inklusiivisesti.
-            # Toimii myös kiertoalueilla (regStart > regEnd): täyttää regStart->0xFFFF->regEnd.
-            start_reg, end_reg, val_reg = ins.operands
-            start = self._get_reg(start_reg)
-            end = self._get_reg(end_reg)
-            val = self._get_reg(val_reg) & WORD_MASK
-            addr = start
-            while True:
-                self._write_word(addr, val)
-                if addr == end:
-                    break
-                addr = (addr + 1) & WORD_MASK
+    def _exec_add(self, ins: _Ins) -> None:
+        dst, src = ins.operands
+        a = self._get_reg(dst)
+        b = self._get_reg(src)
+        result = a + b
+        self._set_reg(dst, result)
+        self.regs.set_zn_flags(result)
+        masked = result & WORD_MASK
+        overflow = bool(((a ^ masked) & (b ^ masked)) & WORD_SIGN_BIT)
+        self.regs.set_carry_overflow(result > WORD_MASK, overflow)
 
-        # ======================================================================
-        # ARITMEETTISET KASKYT
-        # ======================================================================
+    def _exec_sub(self, ins: _Ins) -> None:
+        dst, src = ins.operands
+        a = self._get_reg(dst)
+        b = self._get_reg(src)
+        result = (a - b) & WORD_MASK
+        self._set_reg(dst, result)
+        self.regs.set_zn_flags(result)
+        overflow = bool(((a ^ b) & (a ^ result)) & WORD_SIGN_BIT)
+        self.regs.set_carry_overflow(a < b, overflow)
 
-        elif ins.mnemonic == "ADD":
-            # ADD regD, regS - Yhteenlasku: regD = regD + regS
-            dst, src = ins.operands
-            a = self._get_reg(dst)
-            b = self._get_reg(src)
-            result = a + b
-            self._set_reg(dst, result)
-            self.regs.set_zn_flags(result)
-            # Carry jos tulos ylitti 16 bittia
-            # Overflow jos molemmat samanmerkkiset ja tulos erimerkkinen
-            masked = result & WORD_MASK
-            overflow = bool(((a ^ masked) & (b ^ masked)) & WORD_SIGN_BIT)
-            self.regs.set_carry_overflow(result > WORD_MASK, overflow)
+    def _exec_mul(self, ins: _Ins) -> None:
+        dst, src = ins.operands
+        a = self._get_reg(dst)
+        b = self._get_reg(src)
+        result = a * b
+        self._set_reg(dst, result)
+        self.regs.set_zn_flags(result)
+        masked = result & WORD_MASK
+        overflow = bool(((a ^ masked) & (b ^ masked)) & WORD_SIGN_BIT)
+        self.regs.set_carry_overflow(result > WORD_MASK, overflow)
 
-        elif ins.mnemonic == "MUL":
-            # MUL regD, regS - Kertolasku: regD = regD * regS
-            dst, src = ins.operands
-            a = self._get_reg(dst)
-            b = self._get_reg(src)
-            result = a * b
-            self._set_reg(dst, result)
-            self.regs.set_zn_flags(result)
-            masked = result & WORD_MASK
-            overflow = bool(((a ^ masked) & (b ^ masked)) & WORD_SIGN_BIT)
-            self.regs.set_carry_overflow(result > WORD_MASK, overflow)
+    def _exec_div(self, ins: _Ins) -> None:
+        dst, src = ins.operands
+        divisor = self._get_reg(src)
+        if divisor == 0:
+            raise ZeroDivisionError()
+        result = self._get_reg(dst) // divisor
+        self._set_reg(dst, result)
+        self.regs.set_zn_flags(result)
 
-        elif ins.mnemonic == "SUB":
-            # SUB regD, regS - Vahennyslasku: regD = regD - regS
-            dst, src = ins.operands
-            a = self._get_reg(dst)
-            b = self._get_reg(src)
-            result = (a - b) & WORD_MASK  # Varmista positiivinen tulos
-            self._set_reg(dst, result)
-            self.regs.set_zn_flags(result)
-            # Carry (borrow) jos a < b
-            # Overflow jos operandit erimerkkiset ja tulos erimerkkinen kuin a
-            overflow = bool(((a ^ b) & (a ^ result)) & WORD_SIGN_BIT)
-            self.regs.set_carry_overflow(a < b, overflow)
+    def _exec_cmp(self, ins: _Ins) -> None:
+        reg_a, reg_b = ins.operands
+        a = self._get_reg(reg_a)
+        b = self._get_reg(reg_b)
+        result = (a - b) & WORD_MASK
+        self.regs.set_zn_flags(result)
+        overflow = bool(((a ^ b) & (a ^ result)) & WORD_SIGN_BIT)
+        self.regs.set_carry_overflow(a < b, overflow)
 
-        elif ins.mnemonic == "DIV":
-            # DIV regD, regS - Jakolasku: regD = regD / regS
-            dst, src = ins.operands
-            divisor = self._get_reg(src)
-            if divisor == 0:
-                # Jako nollalla -> keskeytys (kasitellaan step()-metodissa)
-                raise ZeroDivisionError()
-            result = self._get_reg(dst) // divisor  # Kokonaislukujakoa
-            self._set_reg(dst, result)
-            self.regs.set_zn_flags(result)
+    def _exec_adc(self, ins: _Ins) -> None:
+        dst, src = ins.operands
+        a = self._get_reg(dst)
+        b = self._get_reg(src)
+        c = self.regs.get_flag(SR_FLAG_C)
+        result = a + b + c
+        self._set_reg(dst, result)
+        self.regs.set_zn_flags(result)
+        masked = result & WORD_MASK
+        overflow = bool(((a ^ masked) & (b ^ masked)) & WORD_SIGN_BIT)
+        self.regs.set_carry_overflow(result > WORD_MASK, overflow)
 
-        # ======================================================================
-        # LOGIIKKAKASKYT
-        # ======================================================================
+    # --- Logiikkakäskyt ---
 
-        elif ins.mnemonic == "AND":
-            # AND regD, regS - Bittitason JA: regD = regD & regS
-            dst, src = ins.operands
-            result = self._get_reg(dst) & self._get_reg(src)
-            self._set_reg(dst, result)
-            self.regs.set_zn_flags(result)
-            self.regs.set_carry_overflow(False, False)
+    def _exec_and(self, ins: _Ins) -> None:
+        dst, src = ins.operands
+        result = self._get_reg(dst) & self._get_reg(src)
+        self._set_reg(dst, result)
+        self.regs.set_zn_flags(result)
+        self.regs.set_carry_overflow(False, False)
 
-        elif ins.mnemonic == "OR":
-            # OR regD, regS - Bittitason TAI: regD = regD | regS
-            dst, src = ins.operands
-            result = self._get_reg(dst) | self._get_reg(src)
-            self._set_reg(dst, result)
-            self.regs.set_zn_flags(result)
-            self.regs.set_carry_overflow(False, False)
+    def _exec_or(self, ins: _Ins) -> None:
+        dst, src = ins.operands
+        result = self._get_reg(dst) | self._get_reg(src)
+        self._set_reg(dst, result)
+        self.regs.set_zn_flags(result)
+        self.regs.set_carry_overflow(False, False)
 
-        elif ins.mnemonic == "XOR":
-            # XOR regD, regS - Bittitason XOR: regD = regD ^ regS
-            dst, src = ins.operands
-            result = self._get_reg(dst) ^ self._get_reg(src)
-            self._set_reg(dst, result)
-            self.regs.set_zn_flags(result)
-            self.regs.set_carry_overflow(False, False)
+    def _exec_xor(self, ins: _Ins) -> None:
+        dst, src = ins.operands
+        result = self._get_reg(dst) ^ self._get_reg(src)
+        self._set_reg(dst, result)
+        self.regs.set_zn_flags(result)
+        self.regs.set_carry_overflow(False, False)
 
-        elif ins.mnemonic == "NOT":
-            # NOT reg - Bittitason komplementti: reg = ~reg
-            (reg_idx,) = ins.operands
-            result = (~self._get_reg(reg_idx)) & WORD_MASK
-            self._set_reg(reg_idx, result)
-            self.regs.set_zn_flags(result)
-            self.regs.set_carry_overflow(False, False)
+    def _exec_not(self, ins: _Ins) -> None:
+        (reg_idx,) = ins.operands
+        result = (~self._get_reg(reg_idx)) & WORD_MASK
+        self._set_reg(reg_idx, result)
+        self.regs.set_zn_flags(result)
+        self.regs.set_carry_overflow(False, False)
 
-        elif ins.mnemonic == "SHL":
-            # SHL regD, regS - Siirto vasemmalle: regD = regD << regS
-            # Carry = viimeisin ulos siirtynyt bitti
-            dst, src = ins.operands
-            a = self._get_reg(dst)
-            shift = self._get_reg(src) & WORD_MASK
-            if shift == 0:
-                result = a
-                carry = False
-            elif shift > WORD_BITS:
-                result = 0
-                carry = False
-            else:
-                carry = bool((a >> (WORD_BITS - shift)) & 1)
-                result = (a << shift) & WORD_MASK
-            self._set_reg(dst, result)
-            self.regs.set_zn_flags(result)
-            self.regs.set_carry_overflow(carry, False)
-
-        elif ins.mnemonic == "SHR":
-            # SHR regD, regS - Looginen siirto oikealle: regD = regD >> regS
-            # Carry = viimeisin ulos siirtynyt bitti
-            dst, src = ins.operands
-            a = self._get_reg(dst)
-            shift = self._get_reg(src) & WORD_MASK
-            if shift == 0:
-                result = a
-                carry = False
-            elif shift > WORD_BITS:
-                result = 0
-                carry = False
-            else:
-                carry = bool((a >> (shift - 1)) & 1)
-                result = (a >> shift) & WORD_MASK
-            self._set_reg(dst, result)
-            self.regs.set_zn_flags(result)
-            self.regs.set_carry_overflow(carry, False)
-
-        elif ins.mnemonic == "ADC":
-            # ADC regD, regS - Yhteenlasku Carry-lipun kanssa
-            # regD = regD + regS + C
-            dst, src = ins.operands
-            a = self._get_reg(dst)
-            b = self._get_reg(src)
-            c = self.regs.get_flag(SR_FLAG_C)
-            result = a + b + c
-            self._set_reg(dst, result)
-            self.regs.set_zn_flags(result)
-            masked = result & WORD_MASK
-            overflow = bool(((a ^ masked) & (b ^ masked)) & WORD_SIGN_BIT)
-            self.regs.set_carry_overflow(result > WORD_MASK, overflow)
-
-        # ======================================================================
-        # PINOKASKYT
-        # ======================================================================
-
-        elif ins.mnemonic == "PUSH":
-            # PUSH reg - Tallenna rekisterin arvo pinoon
-            # [SP] = reg; SP = SP - 1
-            (reg_idx,) = ins.operands
-            self._push(self._get_reg(reg_idx))
-
-        elif ins.mnemonic == "POP":
-            # POP reg - Hae arvo pinosta rekisteriin
-            # SP = SP + 1; reg = [SP]
-            (reg_idx,) = ins.operands
-            self._set_reg(reg_idx, self._pop())
-
-        elif ins.mnemonic == "SWSP":
-            # SWSP regD, regS - Vaihda pinon osoitinta
-            # regD = SP; SP = regS (atominen kontekstin vaihto)
-            dst, src = ins.operands
-            old_sp = self.regs.sp
-            self.regs.sp = self._get_reg(src) & WORD_MASK
-            self._set_reg(dst, old_sp)
-
-        # ======================================================================
-        # HYPPYKASKYT
-        # ======================================================================
-
-        elif ins.mnemonic == "JUMP":
-            # JUMP addr - Ehdoton hyppy osoitteeseen
-            # Huom: PC-paivitys step()-metodissa lisaa size_words,
-            # joten vahennamme sen etukateeen
-            (addr,) = ins.operands
-            self.regs.pc = (addr - ins.size_words) & WORD_MASK
-
-        elif ins.mnemonic == "JMPI":
-            # JMPI reg, addr... - Indeksoitu epäsuora hyppy
-            # reg sisältää indeksin; hypätään osoitteeseen targets[index]
-            reg_id, count, *targets = ins.operands
-            index = self._get_reg(reg_id)
-            if index >= count:
-                raise InvalidOpcodeError(
-                    f"JMPI: indeksi {index} sallitun alueen ulkopuolella (määrä={count})"
-                )
-            addr = targets[index]
-            self.regs.pc = (addr - ins.size_words) & WORD_MASK
-
-        elif ins.mnemonic == "CALL":
-            # CALL addr - Aliohjelmakutsu
-            # PUSH (paluuosoite), JUMP addr
-            (addr,) = ins.operands
-            # Paluuosoite = seuraava kasky = PC + size_words
-            self._push((self.regs.pc + ins.size_words) & WORD_MASK)
-            self.regs.pc = (addr - ins.size_words) & WORD_MASK
-
-        elif ins.mnemonic == "CALLI":
-            # CALLI reg, addr... - Indeksoitu epäsuora aliohjelmakutsu
-            # Kuten CALL mutta kohde valitaan reg:n sisältämällä indeksillä
-            reg_id, count, *targets = ins.operands
-            index = self._get_reg(reg_id)
-            if index >= count:
-                raise InvalidOpcodeError(
-                    f"CALLI: indeksi {index} sallitun alueen ulkopuolella (määrä={count})"
-                )
-            addr = targets[index]
-            self._push((self.regs.pc + ins.size_words) & WORD_MASK)
-            self.regs.pc = (addr - ins.size_words) & WORD_MASK
-
-        elif ins.mnemonic == "RET":
-            # RET - Paluu aliohjelmasta
-            # POP PC (paluuosoite)
-            self.regs.pc = (self._pop() - ins.size_words) & WORD_MASK
-
-        elif ins.mnemonic == "INT":
-            # INT imm - Ohjelmallinen keskeytys (syscall)
-            # Ensin paivita PC paluuosoitteeksi (seuraava kasky INT:n jalkeen)
-            # jotta _trigger_interrupt tallentaa oikean paluuosoitteen pinoon.
-            (int_no,) = ins.operands
-            self.regs.pc = (self.regs.pc + ins.size_words) & WORD_MASK
-            self._trigger_interrupt(int_no)
-            # Kompensoi step():n PC-paivitys
-            self.regs.pc = (self.regs.pc - ins.size_words) & WORD_MASK
-
-        elif ins.mnemonic == "IRET":
-            # IRET - Paluu keskeytyksesta
-            # POP SR (palauta tilaliput), POP PC (palauta ohjelmalaskuri)
-            old_sr = self._pop()
-            old_pc = self._pop()
-            self.regs.sr = old_sr & WORD_MASK
-            # Kompensoi PC-paivitys
-            self.regs.pc = (old_pc - ins.size_words) & WORD_MASK
-
-        # ======================================================================
-        # KESKEYTYSTEN HALLINTA
-        # ======================================================================
-
-        elif ins.mnemonic == "STI":
-            # STI - Set Interrupt flag (salli laitteistokeskeytykset)
-            self.regs.set_flag(SR_FLAG_I, 1)
-
-        elif ins.mnemonic == "CLI":
-            # CLI - Clear Interrupt flag (esta laitteistokeskeytykset)
-            self.regs.set_flag(SR_FLAG_I, 0)
-
-        elif ins.mnemonic == "HALT":
-            # HALT - Pysayta prosessori
-            self.halted = True
-
-        elif ins.mnemonic == "EXIT":
-            # EXIT - Prosessin hallittu lopetus
-            # Aseta lippu ja laukaise keskeytys OS:lle
-            self.process_exit_requested = True
-            self.regs.pc = (self.regs.pc + ins.size_words) & WORD_MASK
-            self._trigger_interrupt(INT_PROCESS_EXIT)
-            self.regs.pc = (self.regs.pc - ins.size_words) & WORD_MASK
-
-        # ======================================================================
-        # JARJESTELMAKASKYT
-        # ======================================================================
-
-        elif ins.mnemonic == "SMPR":
-            # SMPR reg - Set Memory Protection Register
-            # Asettaa User-tilan muistirajan
-            (reg_idx,) = ins.operands
-            self.regs.mpr = self._get_reg(reg_idx)
-
-        elif ins.mnemonic == "CMP":
-            # CMP regA, regB - Vertaa rekistereita
-            # Laskee regA - regB ja asettaa liput, mutta ei tallenna tulosta
-            reg_a, reg_b = ins.operands
-            a = self._get_reg(reg_a)
-            b = self._get_reg(reg_b)
-            result = (a - b) & WORD_MASK
-            self.regs.set_zn_flags(result)
-            overflow = bool(((a ^ b) & (a ^ result)) & WORD_SIGN_BIT)
-            self.regs.set_carry_overflow(a < b, overflow)
-
-        elif ins.mnemonic == "JZ":
-            # JZ addr - Jump if Zero (hyppa jos Z=1)
-            # Kaytetaan CMP:n jalkeen tarkistamaan yhtasuuruus
-            (addr,) = ins.operands
-            if self.regs.get_flag(SR_FLAG_Z):
-                self.regs.pc = (addr - ins.size_words) & WORD_MASK
-
-        elif ins.mnemonic == "JNZ":
-            # JNZ addr - Jump if Not Zero (hyppa jos Z=0)
-            (addr,) = ins.operands
-            if not self.regs.get_flag(SR_FLAG_Z):
-                self.regs.pc = (addr - ins.size_words) & WORD_MASK
-
-        elif ins.mnemonic == "JLT":
-            # JLT addr - Jump if Less Than (hyppa jos N != V)
-            # Toimii oikein myös etumerkillisilla luvuilla
-            (addr,) = ins.operands
-            if self.regs.get_flag(SR_FLAG_N) != self.regs.get_flag(SR_FLAG_V):
-                self.regs.pc = (addr - ins.size_words) & WORD_MASK
-
-        elif ins.mnemonic == "JGT":
-            # JGT addr - Jump if Greater Than (hyppa jos Z=0 ja N=V)
-            # Suurempi kuin: ei yhtasuuri ja ei pienempi kuin
-            (addr,) = ins.operands
-            z = self.regs.get_flag(SR_FLAG_Z)
-            n = self.regs.get_flag(SR_FLAG_N)
-            v = self.regs.get_flag(SR_FLAG_V)
-            if z == 0 and n == v:
-                self.regs.pc = (addr - ins.size_words) & WORD_MASK
-
-        elif ins.mnemonic == "JLE":
-            # JLE addr - Jump if Less or Equal (hyppa jos Z=1 tai N!=V)
-            # Pienempi tai yhtasuuri: yhtasuuri tai pienempi kuin
-            (addr,) = ins.operands
-            z = self.regs.get_flag(SR_FLAG_Z)
-            n = self.regs.get_flag(SR_FLAG_N)
-            v = self.regs.get_flag(SR_FLAG_V)
-            if z == 1 or n != v:
-                self.regs.pc = (addr - ins.size_words) & WORD_MASK
-
-        elif ins.mnemonic == "JGE":
-            # JGE addr - Jump if Greater or Equal (hyppa jos N=V)
-            # Suurempi tai yhtasuuri: ei pienempi kuin
-            (addr,) = ins.operands
-            if self.regs.get_flag(SR_FLAG_N) == self.regs.get_flag(SR_FLAG_V):
-                self.regs.pc = (addr - ins.size_words) & WORD_MASK
-
-        elif ins.mnemonic == "STMR":
-            # STMR reg - Set Timer Register
-            # Asettaa ajastinkeskeytyksen valin (0 = pois paalta)
-            (reg_idx,) = ins.operands
-            self.regs.tmr = self._get_reg(reg_idx)
-
-        elif ins.mnemonic == "SCTMR":
-            # SCTMR reg - Set Clock Timer Register (ms-vali, 0 = pois)
-            (reg_idx,) = ins.operands
-            self.regs.ctmr = self._get_reg(reg_idx)
-            # Nollaa ajastin heti jotta ensimmainen keskeytys tulee oikeaan aikaan
-            self._last_clock_int_time = time.monotonic()
-
-        elif ins.mnemonic == "DREAD":
-            # DREAD regD, regS - Lue tallennuslaitteelta
-            # regD = storage[regS]
-            reg_dst, reg_addr = ins.operands
-            if self.storage is None:
-                raise InvalidOpcodeError("Storage device not connected")
-            storage_addr = self._get_reg(reg_addr)
-            self._set_reg(reg_dst, self.storage.read_word(storage_addr))
-
-        elif ins.mnemonic == "DWRITE":
-            # DWRITE regS, regD - Kirjoita tallennuslaitteelle
-            # storage[regD] = regS
-            reg_src, reg_addr = ins.operands
-            if self.storage is None:
-                raise InvalidOpcodeError("Storage device not connected")
-            storage_addr = self._get_reg(reg_addr)
-            self.storage.write_word(storage_addr, self._get_reg(reg_src))
-
-        elif ins.mnemonic == "TSL":
-            # TSL reg, addr - Test and Set Lock (atominen)
-            # reg = [addr]; [addr] = 1
-            reg_idx, addr = ins.operands
-            old_value = self.memory.read(addr)
-            self._set_reg(reg_idx, old_value)
-            self.memory.write(addr, 1)
-            self.regs.set_zn_flags(old_value)
-
-        elif ins.mnemonic == "NOP":
-            # NOP - Ei tee mitaan; kayttaa yhden syklin
-            pass
-
+    def _exec_shl(self, ins: _Ins) -> None:
+        dst, src = ins.operands
+        a = self._get_reg(dst)
+        shift = self._get_reg(src) & WORD_MASK
+        if shift == 0:
+            result, carry = a, False
+        elif shift > WORD_BITS:
+            result, carry = 0, False
         else:
-            # Tuntematon kasky
-            raise InvalidOpcodeError(ins.mnemonic)
+            carry = bool((a >> (WORD_BITS - shift)) & 1)
+            result = (a << shift) & WORD_MASK
+        self._set_reg(dst, result)
+        self.regs.set_zn_flags(result)
+        self.regs.set_carry_overflow(carry, False)
+
+    def _exec_shr(self, ins: _Ins) -> None:
+        dst, src = ins.operands
+        a = self._get_reg(dst)
+        shift = self._get_reg(src) & WORD_MASK
+        if shift == 0:
+            result, carry = a, False
+        elif shift > WORD_BITS:
+            result, carry = 0, False
+        else:
+            carry = bool((a >> (shift - 1)) & 1)
+            result = (a >> shift) & WORD_MASK
+        self._set_reg(dst, result)
+        self.regs.set_zn_flags(result)
+        self.regs.set_carry_overflow(carry, False)
+
+    # --- Pinokäskyt ---
+
+    def _exec_push(self, ins: _Ins) -> None:
+        (reg_idx,) = ins.operands
+        self._push(self._get_reg(reg_idx))
+
+    def _exec_pop(self, ins: _Ins) -> None:
+        (reg_idx,) = ins.operands
+        self._set_reg(reg_idx, self._pop())
+
+    def _exec_swsp(self, ins: _Ins) -> None:
+        dst, src = ins.operands
+        old_sp = self.regs.sp
+        self.regs.sp = self._get_reg(src) & WORD_MASK
+        self._set_reg(dst, old_sp)
+
+    # --- Hyppykäskyt ---
+
+    def _exec_jump(self, ins: _Ins) -> None:
+        (addr,) = ins.operands
+        self.regs.pc = (addr - ins.size_words) & WORD_MASK
+
+    def _exec_call(self, ins: _Ins) -> None:
+        (addr,) = ins.operands
+        self._push((self.regs.pc + ins.size_words) & WORD_MASK)
+        self.regs.pc = (addr - ins.size_words) & WORD_MASK
+
+    def _exec_ret(self, ins: _Ins) -> None:
+        self.regs.pc = (self._pop() - ins.size_words) & WORD_MASK
+
+    def _exec_jz(self, ins: _Ins) -> None:
+        (addr,) = ins.operands
+        if self.regs.get_flag(SR_FLAG_Z):
+            self.regs.pc = (addr - ins.size_words) & WORD_MASK
+
+    def _exec_jnz(self, ins: _Ins) -> None:
+        (addr,) = ins.operands
+        if not self.regs.get_flag(SR_FLAG_Z):
+            self.regs.pc = (addr - ins.size_words) & WORD_MASK
+
+    def _exec_jlt(self, ins: _Ins) -> None:
+        (addr,) = ins.operands
+        if self.regs.get_flag(SR_FLAG_N) != self.regs.get_flag(SR_FLAG_V):
+            self.regs.pc = (addr - ins.size_words) & WORD_MASK
+
+    def _exec_jgt(self, ins: _Ins) -> None:
+        (addr,) = ins.operands
+        z = self.regs.get_flag(SR_FLAG_Z)
+        n = self.regs.get_flag(SR_FLAG_N)
+        v = self.regs.get_flag(SR_FLAG_V)
+        if z == 0 and n == v:
+            self.regs.pc = (addr - ins.size_words) & WORD_MASK
+
+    def _exec_jle(self, ins: _Ins) -> None:
+        (addr,) = ins.operands
+        z = self.regs.get_flag(SR_FLAG_Z)
+        n = self.regs.get_flag(SR_FLAG_N)
+        v = self.regs.get_flag(SR_FLAG_V)
+        if z == 1 or n != v:
+            self.regs.pc = (addr - ins.size_words) & WORD_MASK
+
+    def _exec_jge(self, ins: _Ins) -> None:
+        (addr,) = ins.operands
+        if self.regs.get_flag(SR_FLAG_N) == self.regs.get_flag(SR_FLAG_V):
+            self.regs.pc = (addr - ins.size_words) & WORD_MASK
+
+    def _exec_jmpi(self, ins: _Ins) -> None:
+        reg_id, count, *targets = ins.operands
+        index = self._get_reg(reg_id)
+        if index >= count:
+            raise InvalidOpcodeError(
+                f"JMPI: indeksi {index} sallitun alueen ulkopuolella (määrä={count})"
+            )
+        self.regs.pc = (targets[index] - ins.size_words) & WORD_MASK
+
+    def _exec_calli(self, ins: _Ins) -> None:
+        reg_id, count, *targets = ins.operands
+        index = self._get_reg(reg_id)
+        if index >= count:
+            raise InvalidOpcodeError(
+                f"CALLI: indeksi {index} sallitun alueen ulkopuolella (määrä={count})"
+            )
+        self._push((self.regs.pc + ins.size_words) & WORD_MASK)
+        self.regs.pc = (targets[index] - ins.size_words) & WORD_MASK
+
+    # --- Keskeytykset ---
+
+    def _exec_int(self, ins: _Ins) -> None:
+        (int_no,) = ins.operands
+        self.regs.pc = (self.regs.pc + ins.size_words) & WORD_MASK
+        self._trigger_interrupt(int_no)
+        self.regs.pc = (self.regs.pc - ins.size_words) & WORD_MASK
+
+    def _exec_iret(self, ins: _Ins) -> None:
+        old_sr = self._pop()
+        old_pc = self._pop()
+        self.regs.sr = old_sr & WORD_MASK
+        self.regs.pc = (old_pc - ins.size_words) & WORD_MASK
+
+    def _exec_sti(self, ins: _Ins) -> None:
+        self.regs.set_flag(SR_FLAG_I, 1)
+
+    def _exec_cli(self, ins: _Ins) -> None:
+        self.regs.set_flag(SR_FLAG_I, 0)
+
+    # --- Järjestelmäkäskyt ---
+
+    def _exec_halt(self, ins: _Ins) -> None:
+        self.halted = True
+
+    def _exec_exit(self, ins: _Ins) -> None:
+        self.process_exit_requested = True
+        self.regs.pc = (self.regs.pc + ins.size_words) & WORD_MASK
+        self._trigger_interrupt(INT_PROCESS_EXIT)
+        self.regs.pc = (self.regs.pc - ins.size_words) & WORD_MASK
+
+    def _exec_smpr(self, ins: _Ins) -> None:
+        (reg_idx,) = ins.operands
+        self.regs.mpr = self._get_reg(reg_idx)
+
+    def _exec_stmr(self, ins: _Ins) -> None:
+        (reg_idx,) = ins.operands
+        new_tmr = self._get_reg(reg_idx)
+        self.regs.tmr = new_tmr
+        self._next_tmr_time_us = (
+            _TMR_DISABLED if new_tmr == 0 else self._simulated_time_us + new_tmr
+        )
+
+    def _exec_sctmr(self, ins: _Ins) -> None:
+        (reg_idx,) = ins.operands
+        new_ctmr = self._get_reg(reg_idx)
+        self.regs.ctmr = new_ctmr
+        self._next_ctmr_time_us = (
+            _TMR_DISABLED
+            if new_ctmr == 0
+            else self._simulated_time_us + new_ctmr * 1000
+        )
+
+    def _exec_dread(self, ins: _Ins) -> None:
+        reg_dst, reg_addr = ins.operands
+        if self.storage is None:
+            raise InvalidOpcodeError("Storage device not connected")
+        self._set_reg(reg_dst, self.storage.read_word(self._get_reg(reg_addr)))
+
+    def _exec_dwrite(self, ins: _Ins) -> None:
+        reg_src, reg_addr = ins.operands
+        if self.storage is None:
+            raise InvalidOpcodeError("Storage device not connected")
+        self.storage.write_word(self._get_reg(reg_addr), self._get_reg(reg_src))
+
+    def _exec_tsl(self, ins: _Ins) -> None:
+        reg_idx, addr = ins.operands
+        old_value = self.memory.read(addr)
+        self._set_reg(reg_idx, old_value)
+        self.memory.write(addr, 1)
+        self.regs.set_zn_flags(old_value)
+
+    def _exec_nop(self, ins: _Ins) -> None:
+        pass
 
     # ==========================================================================
     # KESKEYTYSTEN KASITTELY
@@ -942,7 +1049,7 @@ class CPU:
         Ajastinkeskeytys (INT 7) laukeaa kun:
         - TMR > 0 (ajastin on paalla)
         - I = 1 (keskeytykset ovat sallitut)
-        - instruction_counter on TMR:n monikerta
+        - Simuloitu aika on saavuttanut seuraavan laukaisuhetken
         """
         # TMR = 0 tarkoittaa etta ajastin on pois paalta
         if self.regs.tmr == 0:
@@ -952,21 +1059,15 @@ class CPU:
         if self.regs.get_flag(SR_FLAG_I) == 0:
             return
 
-        # Laukaise kun counter % TMR == 0
-        if (
-            self.instruction_counter > 0
-            and (self.instruction_counter % self.regs.tmr) == 0
-        ):
+        # Laukaise kun simuloitu aika on ylittanyt seuraavan laukaisuhetken
+        if self._simulated_time_us >= self._next_tmr_time_us:
+            # Etene tarkasti TMR µs eteenpain (ei ajaudu hyvalla)
+            self._next_tmr_time_us += self.regs.tmr
             self._trigger_interrupt(INT_TIMER)
 
     def _update_uptime_if_needed(self) -> None:
-        """Kasvata 32-bittista sekuntilaskuria kun sekunti on kulunut."""
-        now = time.monotonic()
-        elapsed = now - self._last_uptime_update
-        if elapsed >= 1.0:
-            seconds = int(elapsed)
-            self._uptime_counter = (self._uptime_counter + seconds) % (2**32)
-            self._last_uptime_update += seconds  # siirrä tarkasti, ei ajaudu
+        """Paivita 32-bittinen sekuntilaskuri simuloidun ajan perusteella."""
+        self._uptime_counter = (self._simulated_time_us // 1_000_000) & 0xFFFFFFFF
 
     def _handle_keyboard_interrupt_if_needed(self) -> None:
         """
@@ -986,21 +1087,20 @@ class CPU:
             self._trigger_interrupt(INT_KEYBOARD)
 
     def _handle_clock_interrupt_if_needed(self) -> None:
-        """Laukaise kellokeskeytys (INT 9) jos CTMR > 0 ja aika on kulunut.
+        """Laukaise kellokeskeytys (INT 9) jos CTMR > 0 ja simuloitu aika on saavutettu.
 
         Kellokeskeytys laukeaa kun:
         - CTMR > 0 (ms-ajastin paalla)
         - I = 1 (keskeytykset sallittu)
-        - CTMR millisekuntia kulunut edellisesta laukeamisesta
+        - Simuloitu aika on saavuttanut seuraavan laukaisuhetken
         """
         if self.regs.ctmr == 0:
             return
         if self.regs.get_flag(SR_FLAG_I) == 0:
             return
-        now = time.monotonic()
-        elapsed_ms = (now - self._last_clock_int_time) * 1000.0
-        if elapsed_ms >= self.regs.ctmr:
-            self._last_clock_int_time = now
+        if self._simulated_time_us >= self._next_ctmr_time_us:
+            # Etene tarkasti CTMR ms eteenpain (ei ajaudu hyvan)
+            self._next_ctmr_time_us += self.regs.ctmr * 1000
             self._trigger_interrupt(INT_CLOCK)
 
     # ==========================================================================
@@ -1027,7 +1127,9 @@ class CPU:
         value &= WORD_MASK
         if addr == CLOCK_INT_INTERVAL:
             self.regs.ctmr = value
-            self._last_clock_int_time = time.monotonic()
+            self._next_ctmr_time_us = (
+                _TMR_DISABLED if value == 0 else self._simulated_time_us + value * 1000
+            )
             return
         # Muut kellolohkon osoitteet ovat vain luettavia — ohita hiljainen kirjoitus
         if CLOCK_MMIO_START <= addr <= CLOCK_MMIO_END:
@@ -1157,8 +1259,8 @@ class CPU:
         """
         Lue rekisterin arvo koodatun indeksin perusteella.
 
-        Rekisterikoodaus (3 alinta bittia):
-            0 = R0, 1 = R1, 2 = R2, 3 = R3, 4 = FP, 5 = SP
+        Rekisterikoodaus (5 alinta bittia):
+            0-15 = R0-R15, 16 = FP, 17 = SP
 
         Args:
             encoded: Koodattu rekisteri-indeksi
@@ -1167,45 +1269,11 @@ class CPU:
             Rekisterin 16-bittinen arvo
 
         Raises:
-            InvalidOpcodeError: Jos indeksi on 6 tai 7 (varattu)
+            InvalidOpcodeError: Jos indeksi on 18-31 (varattu)
         """
-        idx = encoded & REG_IDX_MASK  # Vain 5 alinta bittia
-        if idx == 0:
-            return self.regs.r0
-        if idx == 1:
-            return self.regs.r1
-        if idx == 2:
-            return self.regs.r2
-        if idx == 3:
-            return self.regs.r3
-        if idx == 4:
-            return self.regs.r4
-        if idx == 5:
-            return self.regs.r5
-        if idx == 6:
-            return self.regs.r6
-        if idx == 7:
-            return self.regs.r7
-        if idx == 8:
-            return self.regs.r8
-        if idx == 9:
-            return self.regs.r9
-        if idx == 10:
-            return self.regs.r10
-        if idx == 11:
-            return self.regs.r11
-        if idx == 12:
-            return self.regs.r12
-        if idx == 13:
-            return self.regs.r13
-        if idx == 14:
-            return self.regs.r14
-        if idx == 15:
-            return self.regs.r15
-        if idx == 16:
-            return self.regs.fp
-        if idx == 17:
-            return self.regs.sp
+        idx = encoded & REG_IDX_MASK
+        if idx < 18:
+            return self._reg_array[idx]
         raise InvalidOpcodeError(f"Invalid register index: {idx}")
 
     def _set_reg(self, encoded: int, value: int) -> None:
@@ -1213,49 +1281,14 @@ class CPU:
         Aseta rekisterin arvo koodatun indeksin perusteella.
 
         Args:
-            encoded: Koodattu rekisteri-indeksi (0-5)
+            encoded: Koodattu rekisteri-indeksi (0-17)
             value: Asetettava arvo (maskataan 16-bittiseksi)
 
         Raises:
-            InvalidOpcodeError: Jos indeksi on 6 tai 7 (varattu)
+            InvalidOpcodeError: Jos indeksi on 18-31 (varattu)
         """
-        value &= WORD_MASK  # Varmista 16-bittisyys
         idx = encoded & REG_IDX_MASK
-        if idx == 0:
-            self.regs.r0 = value
-        elif idx == 1:
-            self.regs.r1 = value
-        elif idx == 2:
-            self.regs.r2 = value
-        elif idx == 3:
-            self.regs.r3 = value
-        elif idx == 4:
-            self.regs.r4 = value
-        elif idx == 5:
-            self.regs.r5 = value
-        elif idx == 6:
-            self.regs.r6 = value
-        elif idx == 7:
-            self.regs.r7 = value
-        elif idx == 8:
-            self.regs.r8 = value
-        elif idx == 9:
-            self.regs.r9 = value
-        elif idx == 10:
-            self.regs.r10 = value
-        elif idx == 11:
-            self.regs.r11 = value
-        elif idx == 12:
-            self.regs.r12 = value
-        elif idx == 13:
-            self.regs.r13 = value
-        elif idx == 14:
-            self.regs.r14 = value
-        elif idx == 15:
-            self.regs.r15 = value
-        elif idx == 16:
-            self.regs.fp = value
-        elif idx == 17:
-            self.regs.sp = value
-        else:
-            raise InvalidOpcodeError(f"Invalid register index: {idx}")
+        if idx < 18:
+            self._reg_array[idx] = value & WORD_MASK
+            return
+        raise InvalidOpcodeError(f"Invalid register index: {idx}")

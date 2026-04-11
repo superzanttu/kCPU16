@@ -87,6 +87,7 @@ class Memory:
     #
     # ROM-emulointi: Lisaa ROM-alue listaan kasin latauksen jalkeen:
     #   mem.read_only_regions.append((ROM_START, ROM_END))
+    #   mem.rebuild_write_mask()  # Pakollinen kutsu muutoksen jalkeen!
     # Lataus ennen suojausta: kirjoita suoraan mem.words[addr] = value
     read_only_regions: list[tuple[int, int]] = field(
         default_factory=lambda: [
@@ -95,6 +96,32 @@ class Memory:
             (KBD_MMIO_START, KBD_MMIO_END),  # $0020-$0021, nappaimisto (lue-vain)
         ]
     )
+
+    # O(1)-kirjoitussuojataulukko: indeksoitu muistiosoitteella,
+    # epanolla = kirjoitussuojattu. Rakennetaan __post_init__:ssa ja
+    # paivitetaan rebuild_write_mask():lla aina kun read_only_regions muuttuu.
+    _write_mask: bytearray = field(
+        init=False,
+        repr=False,
+        compare=False,
+        default_factory=lambda: bytearray(MEMORY_WORDS),
+    )
+
+    def __post_init__(self) -> None:
+        self.rebuild_write_mask()
+
+    def rebuild_write_mask(self) -> None:
+        """
+        Rakentaa O(1)-kirjoitussuojataulukon read_only_regions-listan perusteella.
+
+        Kutsuttava aina, kun read_only_regions-listaa muutetaan manuaalisesti
+        (esim. ROM-alueen lisaamisen jalkeen). Dataclass kutsuu tata automaattisesti
+        olion luonnin yhteydessa __post_init__:ssa.
+        """
+        mask = self._write_mask
+        mask[:] = bytearray(MEMORY_WORDS)  # Nollaa kaikki (kirjoitettavissa)
+        for start, end in self.read_only_regions:
+            mask[start : end + 1] = b"\x01" * (end - start + 1)
 
     def reset(self) -> None:
         """
@@ -144,8 +171,9 @@ class Memory:
         """
         Tarkista onko osoite kirjoitussuojattu.
 
-        Kaydaan lapi read_only_regions-lista. Jos osoite osuu jollekin
-        alueelle, heitetaan ReadOnlyMemoryError.
+        Kayttaa O(1)-maskitaulukkoa (_write_mask) nopeaan tarkistukseen.
+        Virheviestin rakentamisessa kaydaan read_only_regions lapi vain
+        kun rikkomus on jo havaittu (harvinainen polku).
 
         Args:
             addr: Tarkistettava muistiosoite
@@ -159,12 +187,19 @@ class Memory:
             >>> mem.check_write_protected(0x0200)  # RAM -> OK
         """
         masked = addr & WORD_MASK
+        if not self._write_mask[masked]:
+            return  # Kirjoitettavissa – normaali O(1)-polku
+        # Kirjoitussuojattu – etsi alue virheviestiä varten
         for start, end in self.read_only_regions:
             if start <= masked <= end:
                 raise ReadOnlyMemoryError(
                     f"Kirjoitus kirjoitussuojattuun osoitteeseen ${masked:04X} "
                     f"(suojattu alue ${start:04X}-${end:04X})"
                 )
+        # Fallback (ei pitaisi tapahtua jos rebuild_write_mask on kutsuttu)
+        raise ReadOnlyMemoryError(
+            f"Kirjoitus kirjoitussuojattuun osoitteeseen ${masked:04X}"
+        )
 
     @staticmethod
     def check_user_access(addr: int, mpr: int) -> None:

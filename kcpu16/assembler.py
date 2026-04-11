@@ -195,18 +195,30 @@ class Assembler:
         self._disk_block: int | None = None
         self._source_map: list[tuple[str, int]] = []  # (lahderivi, abs_osoite)
         self._labels: dict[str, int] = {}
+        self._current_lineno: int = 0  # Nykyinen rivinumero virheilmoituksia varten
+        self._current_line: str = ""  # Nykyinen lähderivi virheilmoituksia varten
         # Esikäsittely: laajenna .include-direktiivit rekursiivisesti
         base_dir = source_path.parent if source_path is not None else None
         source = self._expand_includes(source, base_dir, frozenset())
-        # Pass 0: Makrojen ekspansointi, .origin ja .diskblock käsittely
-        expanded_source, start_addr, user_constants = (
-            self._pass0_expand_macros_and_origin(source, start_addr)
-        )
-        # Pass 1: Kerätään labelit (arkkitehtuurivakiot ja käyttäjän vakiot esitäytettynä)
-        labels = self._pass1_collect_labels(expanded_source, start_addr, user_constants)
-        self._labels = labels
-        # Pass 2: Tuotetaan konekieli segmentteina
-        segments = self._pass2_emit(expanded_source, labels, start_addr)
+        try:
+            # Pass 0: Makrojen ekspansointi, .origin ja .diskblock käsittely
+            expanded_source, start_addr, user_constants = (
+                self._pass0_expand_macros_and_origin(source, start_addr)
+            )
+            # Pass 1: Kerätään labelit (arkkitehtuurivakiot ja käyttäjän vakiot esitäytettynä)
+            labels = self._pass1_collect_labels(
+                expanded_source, start_addr, user_constants
+            )
+            self._labels = labels
+            # Pass 2: Tuotetaan konekieli segmentteina
+            segments = self._pass2_emit(expanded_source, labels, start_addr)
+        except ValueError as e:
+            msg = str(e)
+            if self._current_lineno > 0 and not msg.startswith("Rivi "):
+                raise ValueError(
+                    f"Rivi {self._current_lineno}: {self._current_line.strip()!r}\n  {msg}"
+                ) from e
+            raise
         # Validoi koko jos .diskblock on maaratty
         if self._disk_block is not None:
             total = sum(len(w) for _, w in segments)
@@ -399,7 +411,9 @@ class Assembler:
         lines = source.splitlines()
 
         # 1. Etsi .origin direktiivi
-        for line in lines:
+        for lineno, line in enumerate(lines, start=1):
+            self._current_lineno = lineno
+            self._current_line = line
             stripped = line.split(";", 1)[0].strip()
             sl = stripped.lower()
             # Täsmällinen tarkistus: direktiivi on joko yksin tai sen jälkeen tulee välilyönti
@@ -422,6 +436,8 @@ class Assembler:
         i = 0
         while i < len(lines):
             line = lines[i]
+            self._current_lineno = i + 1
+            self._current_line = line
             stripped = line.split(";", 1)[0].strip()
 
             # Makron alkaminen
@@ -558,7 +574,9 @@ class Assembler:
 
         addr = start_addr  # Nykyinen osoite (kasvaa kaskyjen mukana)
 
-        for raw_line in source.splitlines():
+        for lineno, raw_line in enumerate(source.splitlines(), start=1):
+            self._current_lineno = lineno
+            self._current_line = raw_line
             # Poista kommentit (puolipiste ja kaikki sen jalkeen)
             line = raw_line.split(";", 1)[0].strip()
             if not line:
@@ -682,7 +700,9 @@ class Assembler:
         current_words: list[int] = []
         self._source_map = []
 
-        for raw_line in source.splitlines():
+        for lineno, raw_line in enumerate(source.splitlines(), start=1):
+            self._current_lineno = lineno
+            self._current_line = raw_line
             # Poista kommentit
             line = raw_line.split(";", 1)[0].strip()
 

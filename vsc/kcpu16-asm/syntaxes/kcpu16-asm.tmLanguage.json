@@ -1,0 +1,147 @@
+{
+    "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+    "name": "kCPU16 Assembler",
+    "scopeName": "source.kcpu16-asm",
+    "fileTypes": [
+        "k16"
+    ],
+    "patterns": [
+        {
+            "include": "#comment"
+        },
+        {
+            "include": "#string"
+        },
+        {
+            "include": "#label-definition"
+        },
+        {
+            "include": "#directive"
+        },
+        {
+            "include": "#number"
+        },
+        {
+            "include": "#privileged-instruction"
+        },
+        {
+            "include": "#flow-instruction"
+        },
+        {
+            "include": "#instruction"
+        },
+        {
+            "include": "#register"
+        },
+        {
+            "include": "#arch-constant"
+        },
+        {
+            "include": "#memory-bracket"
+        }
+    ],
+    "repository": {
+        "comment": {
+            "name": "comment.line.semicolon.kcpu16-asm",
+            "match": ";.*$"
+        },
+        "string": {
+            "patterns": [
+                {
+                    "name": "string.quoted.double.kcpu16-asm",
+                    "begin": "\"",
+                    "end": "\"",
+                    "patterns": [
+                        {
+                            "name": "constant.character.escape.kcpu16-asm",
+                            "match": "\\\\[\\\\\"'nt0]"
+                        }
+                    ]
+                },
+                {
+                    "name": "string.quoted.single.kcpu16-asm",
+                    "begin": "'",
+                    "end": "'",
+                    "patterns": [
+                        {
+                            "name": "constant.character.escape.kcpu16-asm",
+                            "match": "\\\\[\\\\\"'nt0]"
+                        }
+                    ]
+                }
+            ]
+        },
+        "label-definition": {
+            "comment": "Labelit omalla rivillaan, paatetty kaksoispisteeseen: 'loop:'",
+            "match": "^[ \\t]*([A-Za-z_][A-Za-z0-9_]*)[ \\t]*(:)",
+            "captures": {
+                "1": {
+                    "name": "entity.name.function.label.kcpu16-asm"
+                },
+                "2": {
+                    "name": "punctuation.definition.label.kcpu16-asm"
+                }
+            }
+        },
+        "directive": {
+            "comment": "Assembler-direktiivit: .origin, .macro, .db, jne.",
+            "match": "\\.(origin|macro|endmacro|const|dstr|dw|db|at|expect_reg|expect_flag|expect_mem|expect_storage|inject_key_release|inject_key|diskblock|include)\\b",
+            "name": "keyword.other.directive.kcpu16-asm"
+        },
+        "number": {
+            "comment": "Numeroliteraalit: hex (0xFF), binary (0b1010), octal (0o52), decimal (42). Esiluke # on optionaalinen.",
+            "patterns": [
+                {
+                    "name": "constant.numeric.hex.kcpu16-asm",
+                    "match": "#?0[xX][0-9A-Fa-f]+"
+                },
+                {
+                    "name": "constant.numeric.binary.kcpu16-asm",
+                    "match": "#?0[bB][01]+"
+                },
+                {
+                    "name": "constant.numeric.octal.kcpu16-asm",
+                    "match": "#?0[oO][0-7]+"
+                },
+                {
+                    "name": "constant.numeric.decimal.kcpu16-asm",
+                    "match": "#?-?\\b[0-9]+\\b"
+                }
+            ]
+        },
+        "privileged-instruction": {
+            "comment": "Kernel-tilan etuoikeutetut kaeskyt (vaativat P-lipun)",
+            "name": "keyword.other.privileged.kcpu16-asm",
+            "match": "\\b(HALT|IRET|STI|CLI|DREAD|DWRITE|SMPR|STMR|SCTMR)\\b"
+        },
+        "flow-instruction": {
+            "comment": "Ohjausrakennekaskyt ja keskeytykset",
+            "name": "keyword.control.flow.kcpu16-asm",
+            "match": "\\b(JUMP|CALL|CALLI|JMPI|RET|JZ|JNZ|JLT|JGT|JLE|JGE|INT|EXIT)\\b"
+        },
+        "instruction": {
+            "comment": "Tavalliset kaeskyt: tiedonsiirto, aritmetiikka, logiikka, pino",
+            "name": "support.function.instruction.kcpu16-asm",
+            "match": "\\b(LOAD|CPY|READ_IND|READ_REL|READ|STORE_IND|STORE_REL|STOREI_IND|STOREI_REL|STOREI|STORE|FILL|ADD|ADC|SUB|MUL|DIV|CMP|AND|OR|XOR|NOT|SHL|SHR|PUSH|POP|SWSP|TSL|NOP)\\b"
+        },
+        "register": {
+            "comment": "Rekisterit: R0-R15, FP, SP, PC, SR",
+            "name": "variable.language.register.kcpu16-asm",
+            "match": "\\b(R1[0-5]|R[0-9]|FP|SP|PC|SR)\\b"
+        },
+        "arch-constant": {
+            "comment": "Arkkitehtuurivakiot (ARCH_SYMBOLS) — injektoidaan automaattisesti labelitaulukkoon",
+            "name": "support.constant.arch.kcpu16-asm",
+            "match": "\\b(MEMORY_WORDS|WORD_SIGN_BIT|WORD_MASK|WORD_BITS|BOOT_RAM_END|BOOT_RAM_START|VRAM_ATTR_BOLD|VRAM_CHAR_MASK|VRAM_CHAR_SHIFT|VRAM_FG_MASK|VRAM_FG_SHIFT|VRAM_BG_MASK|VRAM_BG_SHIFT|VRAM_WORDS|VRAM_START|VRAM_END|SCREEN_COLS|SCREEN_ROWS|COLOR_BLACK|COLOR_RED|COLOR_GREEN|COLOR_YELLOW|COLOR_BLUE|COLOR_MAGENTA|COLOR_CYAN|COLOR_WHITE|KERNEL_STACK_START|KERNEL_STACK_END|INT_VECTOR_BASE|INT_VECTOR_COUNT|INT_INVALID_OPCODE|INT_STACK_OVERFLOW|INT_DIV_ZERO|INT_BREAKPOINT|INT_PRIVILEGE|INT_MEM_FAULT|INT_KEYBOARD|INT_TIMER|INT_PROCESS_EXIT|INT_CLOCK|CLOCK_INT_INTERVAL|CLOCK_MMIO_START|CLOCK_MMIO_END|CLOCK_MILLIS|CLOCK_SECOND|CLOCK_MINUTE|CLOCK_HOUR|CLOCK_DAY|CLOCK_MONTH|CLOCK_YEAR|UPTIME_W3|UPTIME_W2|UPTIME_W1|UPTIME_W0|KBD_KEY_CODE_MASK|KBD_RELEASE_BIT|KBD_MMIO_START|KBD_MMIO_END|KBD_STATUS|KBD_DATA|RAND_LFSR_SEED|RAND_MMIO|STORAGE_BLOCK_COUNT|STORAGE_BLOCK_SIZE|SR_FLAG_Z|SR_FLAG_N|SR_FLAG_C|SR_FLAG_V|SR_FLAG_I|SR_FLAG_P|GFX_MODE_REG|GFX_MODE_A|GFX_MODE_B|GFX_MODE_C|GFX_FLIP_REG|MODE_KERNEL|MODE_USER|DEFAULT_MPR)\\b"
+        },
+        "memory-bracket": {
+            "comment": "Hakasulkeet muistiviittauksissa: [addr], [R0+offset]",
+            "patterns": [
+                {
+                    "name": "punctuation.section.brackets.kcpu16-asm",
+                    "match": "[\\[\\]]"
+                }
+            ]
+        }
+    }
+}

@@ -493,3 +493,36 @@ yhteenlasku:
 ---
 
 Kaikki esimerkkiohjelmat löytyvät hakemistosta `kcpu16/code/`.
+
+---
+
+# 8. Virheilmoitukset
+
+Assembler tuottaa virheilmoitukset, jotka kertovat aiheuttavan rivin numeron, itse lähderivin ja kuvauksen virheestä.
+
+## 8.1 Muoto
+
+Virheilmoituksen muoto on:
+
+```
+Rivi <N>: '<lähderivi>'
+  <virhekuvaus>
+```
+
+**Esimerkki:**
+
+```
+Rivi 3: 'ADD R0, UNKNOWN_LABEL'
+  Tuntematon operandi: 'UNKNOWN_LABEL' (ei rekisteri, label eikä luku)
+```
+
+```
+Rivi 7: '.const VRAM_START, 100'
+  .const 'VRAM_START': nimi on jo arkkitehtuurivakio — valitse toinen nimi
+```
+
+## 8.2 Huomioita rivi­numeroinnista
+
+- Rivinumerot lasketaan **laajennetusta lähdekoodista** eli makrojen ekspansoinnin jälkeen.
+- Mikäli ohjelma käyttää makroja (`.macro`/`.endmacro`), ekspandoitujen rivien numerointi voi poiketa alkuperäisen tiedoston riveistä.
+- `.include`-direktiivillä liitettyjen tiedostojen virheet näyttävät kyseisen tiedoston rivin, ei liittävän tiedoston riviä.

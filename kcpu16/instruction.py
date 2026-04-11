@@ -320,3 +320,94 @@ OPCODE_TABLE: dict[int, tuple[str, int, bool]] = {
         False,
     ),  # NOP                Ei tee mitaan            [USER]
 }
+
+# =============================================================================
+# SUORITUSSYKLIT: Käskyjen simuloidut suoritusajat
+# =============================================================================
+# Yksikkö: yksi sykli = yksi mikrosekuntia (µs) simuloidulla 1 MHz kellolla.
+# Arvo kuvaa käskyn perussuoritusaikaa; FILL-käskyllä lisätään dynaamisesti
+# täytettävien sanojen lukumäärä (cpu.py:n _get_exec_cycles).
+#
+# Periaatteet:
+#   - Yksinkertaiset rekisterioperaatiot: 1 sykli
+#   - Muistioperaatiot: 1 sykli (yksinkertaistettu malli)
+#   - Monikertaiset laskuoperaatiot (MUL, DIV): korotettu sykli
+#   - I/O-käskyt (DREAD, DWRITE): merkittävästi korotettu sykli
+#   - Keskeytys- ja kontekstioperaatiot (INT, IRET, EXIT): korotettu sykli
+#   - FILL: 1 (perussykli) + täytettävien sanojen lukumäärä (dynaaminen)
+# =============================================================================
+
+EXEC_CYCLES: dict[str, int] = {
+    # -------------------------------------------------------------------------
+    # GRP 1: TIEDONSIIRTOKASKYT
+    # -------------------------------------------------------------------------
+    "LOAD":       1,  # Vakion lataus rekisteriin
+    "CPY":        1,  # Rekisteri -> rekisteri
+    "READ":       1,  # Muistiosoiteluku
+    "STORE":      1,  # Muistiosoitekirjoitus
+    "READ_IND":   1,  # Epäsuora luku [reg]
+    "STORE_IND":  1,  # Epäsuora kirjoitus [reg]
+    "READ_REL":   1,  # Suhteellinen luku [FP+imm]
+    "STORE_REL":  1,  # Suhteellinen kirjoitus [FP+imm]
+    "STOREI":     1,  # Välitön kirjoitus muistiin
+    "STOREI_IND": 1,  # Välitön kirjoitus [reg]
+    "STOREI_REL": 1,  # Välitön kirjoitus [FP+imm]
+    "FILL":       1,  # Perussykli; cpu.py lisää täytettävät sanat dynaamisesti
+    # -------------------------------------------------------------------------
+    # GRP 2: ARITMEETTISET KASKYT
+    # -------------------------------------------------------------------------
+    "ADD":        1,  # Yhteenlasku
+    "SUB":        1,  # Vähennyslasku
+    "MUL":        4,  # Kertolasku (monimutkaisempi)
+    "DIV":        8,  # Jakolasku (monimutkaisin)
+    "CMP":        1,  # Vertailu
+    "ADC":        1,  # Yhteenlasku Carry-lipulla
+    # -------------------------------------------------------------------------
+    # GRP 3: LOGIIKKA JA BITTIKASKYT
+    # -------------------------------------------------------------------------
+    "AND":        1,
+    "OR":         1,
+    "XOR":        1,
+    "NOT":        1,
+    "SHL":        1,  # Looginen siirto vasemmalle
+    "SHR":        1,  # Looginen siirto oikealle
+    # -------------------------------------------------------------------------
+    # GRP 4: PINOKASKYT
+    # -------------------------------------------------------------------------
+    "PUSH":       1,
+    "POP":        1,
+    "SWSP":       1,  # Pino-osoittimen vaihto
+    # -------------------------------------------------------------------------
+    # GRP 5: OHJAUSRAKENNEKASKYT
+    # -------------------------------------------------------------------------
+    "JUMP":       1,
+    "CALL":       2,  # Push + hyppy
+    "RET":        2,  # Pop
+    "JZ":         1,
+    "JNZ":        1,
+    "JLT":        1,
+    "JGT":        1,
+    "JLE":        1,
+    "JGE":        1,
+    "JMPI":       2,  # Indeksoitu hyppy (perussykli; taulukon koko ignoroitu)
+    "CALLI":      2,  # Indeksoitu kutsu (perussykli)
+    # -------------------------------------------------------------------------
+    # GRP 6: KESKEYTYKSET
+    # -------------------------------------------------------------------------
+    "INT":        4,  # Ohjelmallinen keskeytys (tallentaa tilan)
+    "IRET":       4,  # Paluu keskeytyksestä (palauttaa tilan)
+    "STI":        1,
+    "CLI":        1,
+    # -------------------------------------------------------------------------
+    # GRP 7: JARJESTELMA JA IO
+    # -------------------------------------------------------------------------
+    "HALT":       1,
+    "DREAD":     10,  # I/O-operaatio (hidas)
+    "DWRITE":    10,  # I/O-operaatio (hidas)
+    "SMPR":       1,
+    "STMR":       1,
+    "SCTMR":      1,
+    "EXIT":       4,  # Prosessin lopetus (tallentaa tilan)
+    "TSL":        2,  # Lue-muokkaa-kirjoita (atomi)
+    "NOP":        1,
+}

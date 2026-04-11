@@ -1,0 +1,16 @@
+{
+    "files.associations": {
+        "*.asm": "kcpu16-asm",
+        "*.k16": "kcpu16-asm"
+    },
+    "editor.comments.insertSpace": true,
+    "[kcpu16-asm]": {
+        "editor.tabSize": 8,
+        "editor.insertSpaces": true,
+        "editor.rulers": [
+            40,
+            80
+        ],
+        "editor.wordSeparators": "`~!@#%^&*()-=+[{]}\\|;:'\",.<>/?"
+    }
+}
