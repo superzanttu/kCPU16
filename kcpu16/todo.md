@@ -191,7 +191,13 @@ Tehtävät on merkitty hakasulkeilla, ja niiden tilaa voidaan päivittää seura
 [X] Kirjoita code-hakemistoon esimerkkiohjelma (esim. disk_test.asm), joka käyttää lib-disk.asm-kirjastoa luodakseen tiedoston, kirjoittaakseen dataa siihen, lukeakseen dataa takaisin ja poistaakseen tiedoston, ja varmista että kaikki toiminnot toimivat oikein.
 ; Toteutettu: disk_test.asm testaa disk_format, disk_create, disk_write, disk_read, disk_stat, disk_list, disk_delete.
 ; Kaikki 10 .expect_mem ja .expect_storage -tarkistusta läpäisevät.
-[X] Korvaa `DecodedInstruction`-olion luonti jokaisessa askeleessa kevyemmällä rakenteella (esim. kiinteä tuple tai paikalliset muuttujat), jotta olion luomisen overhead poistuu hot loopista.
+[X] Korvaa `read_only_regions`-listan läpikäynti jokaisella kirjoituksella maskitaulukolla (`bytearray`/bool-taulukko), joka päivitetään vain silloin, kun suojattuja alueita muutetaan.
+; Toteutettu memory.py:ssä: `_write_mask: bytearray` (65536 tavua) rakennetaan `__post_init__`:ssa ja
+; päivitetään `rebuild_write_mask()`:lla. `check_write_protected()` käyttää O(1)-indeksointia;
+; virhepolku käy read_only_regions läpi vain rikkomuksen tapahtuessa. Vaatii manuaalisen
+; `rebuild_write_mask()`-kutsun, jos read_only_regions-listaa muutetaan latauksen jälkeen.
+
+[X] Lisää `run()`-metodiin optimoitu fast-path-silmukka (esim. kiinteä tuple tai paikalliset muuttujat), jotta olion luomisen overhead poistuu hot loopista.
 ; Toteutettu _Ins-luokka __slots__:lla (opcode, operands, size_words). DecodedInstruction-dataclass poistettu hot polulta.
 [X] Korvaa `if/elif ins.mnemonic == ...` -ketju opcode-pohjaisella handler-taululla (funktioviitteet: opcode → handler + metadata), jotta merkkijonovertailut poistuvat kuumasta suorituspolusta.
 ; Toteutettu _exec_table: dict[int, Callable] — 45+ handler-metodia (_exec_load, _exec_add jne.).
@@ -278,7 +284,7 @@ Tehtävät on merkitty hakasulkeilla, ja niiden tilaa voidaan päivittää seura
 
 ### Ryhmä 8: Suorituskyky – Memory.write O(1)-suojaustarkistus
 
-[ ] Korvaa `read_only_regions`-listan läpikäynti jokaisella kirjoituksella maskitaulukolla (`bytearray`/bool-taulukko), joka päivitetään vain silloin, kun suojattuja alueita muutetaan.
+; Kaikki Ryhmä 8 -tehtävät on suoritettu, katso Valmiit tehtävät -osio.
 
 <!-- ============================================================ -->
 <!-- RYHMÄ 9: Suorituskyky – Fast run -suorituspolku (cpu.py)    -->
