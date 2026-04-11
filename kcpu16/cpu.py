@@ -181,6 +181,9 @@ class CPU:
         self._mem_check_table: dict[int, object] = {}
         # Sykliarvotaulukko: opcode → perus-exec-cycles
         self._cycles_table: dict[int, int] = {}
+        # Suora viite RegisterFile:n sisäiseen rekisterilistaan (r0-r15, fp, sp)
+        # Sama lista kuin regs._regs — ei kopiota, ei synkronointia tarvita.
+        self._reg_array: list[int] = self.regs._regs
         self._build_dispatch_table()
 
     def _build_dispatch_table(self) -> None:
@@ -840,8 +843,7 @@ class CPU:
         new_tmr = self._get_reg(reg_idx)
         self.regs.tmr = new_tmr
         self._next_tmr_time_us = (
-            _TMR_DISABLED if new_tmr == 0
-            else self._simulated_time_us + new_tmr
+            _TMR_DISABLED if new_tmr == 0 else self._simulated_time_us + new_tmr
         )
 
     def _exec_sctmr(self, ins: _Ins) -> None:
@@ -849,7 +851,8 @@ class CPU:
         new_ctmr = self._get_reg(reg_idx)
         self.regs.ctmr = new_ctmr
         self._next_ctmr_time_us = (
-            _TMR_DISABLED if new_ctmr == 0
+            _TMR_DISABLED
+            if new_ctmr == 0
             else self._simulated_time_us + new_ctmr * 1000
         )
 
@@ -995,8 +998,7 @@ class CPU:
         if addr == CLOCK_INT_INTERVAL:
             self.regs.ctmr = value
             self._next_ctmr_time_us = (
-                _TMR_DISABLED if value == 0
-                else self._simulated_time_us + value * 1000
+                _TMR_DISABLED if value == 0 else self._simulated_time_us + value * 1000
             )
             return
         # Muut kellolohkon osoitteet ovat vain luettavia — ohita hiljainen kirjoitus
@@ -1127,8 +1129,8 @@ class CPU:
         """
         Lue rekisterin arvo koodatun indeksin perusteella.
 
-        Rekisterikoodaus (3 alinta bittia):
-            0 = R0, 1 = R1, 2 = R2, 3 = R3, 4 = FP, 5 = SP
+        Rekisterikoodaus (5 alinta bittia):
+            0-15 = R0-R15, 16 = FP, 17 = SP
 
         Args:
             encoded: Koodattu rekisteri-indeksi
@@ -1137,45 +1139,11 @@ class CPU:
             Rekisterin 16-bittinen arvo
 
         Raises:
-            InvalidOpcodeError: Jos indeksi on 6 tai 7 (varattu)
+            InvalidOpcodeError: Jos indeksi on 18-31 (varattu)
         """
-        idx = encoded & REG_IDX_MASK  # Vain 5 alinta bittia
-        if idx == 0:
-            return self.regs.r0
-        if idx == 1:
-            return self.regs.r1
-        if idx == 2:
-            return self.regs.r2
-        if idx == 3:
-            return self.regs.r3
-        if idx == 4:
-            return self.regs.r4
-        if idx == 5:
-            return self.regs.r5
-        if idx == 6:
-            return self.regs.r6
-        if idx == 7:
-            return self.regs.r7
-        if idx == 8:
-            return self.regs.r8
-        if idx == 9:
-            return self.regs.r9
-        if idx == 10:
-            return self.regs.r10
-        if idx == 11:
-            return self.regs.r11
-        if idx == 12:
-            return self.regs.r12
-        if idx == 13:
-            return self.regs.r13
-        if idx == 14:
-            return self.regs.r14
-        if idx == 15:
-            return self.regs.r15
-        if idx == 16:
-            return self.regs.fp
-        if idx == 17:
-            return self.regs.sp
+        idx = encoded & REG_IDX_MASK
+        if idx < 18:
+            return self._reg_array[idx]
         raise InvalidOpcodeError(f"Invalid register index: {idx}")
 
     def _set_reg(self, encoded: int, value: int) -> None:
@@ -1183,49 +1151,14 @@ class CPU:
         Aseta rekisterin arvo koodatun indeksin perusteella.
 
         Args:
-            encoded: Koodattu rekisteri-indeksi (0-5)
+            encoded: Koodattu rekisteri-indeksi (0-17)
             value: Asetettava arvo (maskataan 16-bittiseksi)
 
         Raises:
-            InvalidOpcodeError: Jos indeksi on 6 tai 7 (varattu)
+            InvalidOpcodeError: Jos indeksi on 18-31 (varattu)
         """
-        value &= WORD_MASK  # Varmista 16-bittisyys
         idx = encoded & REG_IDX_MASK
-        if idx == 0:
-            self.regs.r0 = value
-        elif idx == 1:
-            self.regs.r1 = value
-        elif idx == 2:
-            self.regs.r2 = value
-        elif idx == 3:
-            self.regs.r3 = value
-        elif idx == 4:
-            self.regs.r4 = value
-        elif idx == 5:
-            self.regs.r5 = value
-        elif idx == 6:
-            self.regs.r6 = value
-        elif idx == 7:
-            self.regs.r7 = value
-        elif idx == 8:
-            self.regs.r8 = value
-        elif idx == 9:
-            self.regs.r9 = value
-        elif idx == 10:
-            self.regs.r10 = value
-        elif idx == 11:
-            self.regs.r11 = value
-        elif idx == 12:
-            self.regs.r12 = value
-        elif idx == 13:
-            self.regs.r13 = value
-        elif idx == 14:
-            self.regs.r14 = value
-        elif idx == 15:
-            self.regs.r15 = value
-        elif idx == 16:
-            self.regs.fp = value
-        elif idx == 17:
-            self.regs.sp = value
-        else:
-            raise InvalidOpcodeError(f"Invalid register index: {idx}")
+        if idx < 18:
+            self._reg_array[idx] = value & WORD_MASK
+            return
+        raise InvalidOpcodeError(f"Invalid register index: {idx}")

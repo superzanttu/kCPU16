@@ -212,6 +212,15 @@ Tehtävät on merkitty hakasulkeilla, ja niiden tilaa voidaan päivittää seura
 ; `_exec_sctmr`/`_write_word` (CLOCK_INT_INTERVAL): vastaava sentinel.
 ; reset(): käyttää myös sentineliä alkuarvoina. Modulo-operaatiota ei koskaan ollutkaan (Ryhmä 5 toteutti deadline-vertailun).
 
+[X] Korvaa `_get_reg`/`_set_reg`-metodien pitkät `if/elif`-ketjut taulukkoindeksoinnilla CPU:n suorituspolussa (lista tai array), jotta haarautumisoverhead poistuu jokaisesta rekisteriviittauksesta.
+; RegisterFile:iin lisätty `_regs: list[int]` (18 alkiota: r0=0... r15=15, fp=16, sp=17).
+; Kaikki `r0`...`r15`, `fp`, `sp` muutettu propertyksi jotka lukevat/kirjoittavat `_regs`-listaan.
+; reset() käyttää `_regs[:] = [0]*16 + [0, KERNEL_STACK_END]` (in-place, säilyttää listan identiteetin).
+[X] Säilyttä julkinen rajapinta (r0…r15, fp, sp) ennallaan esim. propertyjen kautta; anna `execute`-polun käyttää suoraa taulukkorakennetta.
+; CPU.__post_init__: `self._reg_array = self.regs._regs` (sama listaviite, ei kopiota).
+; `_get_reg`: yksi bounds-check (`idx < 18`) + `self._reg_array[idx]` – ei if/elif-ketjua.
+; `_set_reg`: vastaava `self._reg_array[idx] = value & WORD_MASK`.
+
 
 <!-- ============================================================ -->
 <!-- RYHMÄ 10: 3D-demot – analyysi ja korjaukset                 -->
@@ -260,8 +269,7 @@ Tehtävät on merkitty hakasulkeilla, ja niiden tilaa voidaan päivittää seura
 
 ### Ryhmä 7: Suorituskyky – Taulukkopohjaiset rekisterit
 
-[ ] Korvaa `_get_reg`/`_set_reg`-metodien pitkät `if/elif`-ketjut taulukkoindeksoinnilla CPU:n suorituspolussa (lista tai array), jotta haarautumisoverhead poistuu jokaisesta rekisteriviittauksesta.
-[ ] Säilytä julkinen rajapinta (r0…r15, fp, sp) ennallaan esim. propertyjen kautta; anna `execute`-polun käyttää suoraa taulukkorakennetta.
+; Kaikki Ryhmä 7 -tehtävät on suoritettu, katso Valmiit tehtävät -osio.
 
 <!-- ============================================================ -->
 <!-- RYHMÄ 8: Suorituskyky – Memory.write O(1)-suojaustarkistus  -->
@@ -292,3 +300,4 @@ Tehtävät on merkitty hakasulkeilla, ja niiden tilaa voidaan päivittää seura
 [ ] Lisää disk_test.asm:iin lib-disk.asm-kirjaston kaikkien ominaisuuksien esittely
 [ ] Paranna FILL-kopioin toteutuksen suorituskykyä.
 [ ] Suoritustilan ollessa MAX, tietojen joita ei päivitetä tulee olla väriltään harmaita, jotta käyttäjä ymmärtää että ne eivät päivity reaaliajassa. Poistuttaessa MAX-tilasta, tiedot palautuvat normaalivärisiksi ja päivittyvät uudestaan.
+[ ] Muuta projektin tiedostorakennetta, niin että devices-hakemistossa sijaitsevat erilaisten laitteiden ohjelmatiedostot, luo muille ohjelmatiedostoille samaalla tavalla logiikalla omat hakemistot, ja siirrä tiedostot niihin. Varmista että kaikki tiedostopolut ja importit päivitetään, eikä mitään hajoa.
