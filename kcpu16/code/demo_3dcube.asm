@@ -8,9 +8,9 @@
 ;     X: nopeampi (64 askelta/kierros, joka 3. kehys)
 ;     Z: hitaampi (64 askelta/kierros, joka 5. kehys)
 ;
-;   Vaihe 0 (20 s): Tila B — kuutio (säde 12 pikseliä)
-;   Vaihe 1 (20 s): Tila C — L-kirjain (skaalattu ×2)
-;   Vaihe 2 (20 s): Tila B — J-kirjain
+;   Vaihe 0 (10 s): Tila B — kuutio (säde 12 pikseliä)
+;   Vaihe 1 (10 s): Tila C — L-kirjain (skaalattu ×2)
+;   Vaihe 2 (10 s): Tila B — J-kirjain
 ;   Tämän jälkeen: käynnistyy alusta vaiheesta 0.
 ;
 ; PYÖRITYSALGORITMI (järjestys X→Z, ortografinen projektio):
@@ -119,8 +119,8 @@ cos_cache_z:
 ; clock_handler — Kellokeskeytyksen käsittelijä (INT 9)
 ;
 ; Kasvattaa demo-vaihetta yhdellä.
-; Jos uusi phase < 4, käynnistää 20 sekunnin ajastimen uudelleen.
-; Jos uusi phase >= 4, pysäyttää ajastimen (pääsilmukka käynnistää sen).
+; Jos uusi phase < 3, käynnistää 10 sekunnin ajastimen uudelleen.
+; Jos uusi phase >= 3, pysäyttää ajastimen (pääsilmukka käynnistää sen).
 ;
 ; Clobbers: R0, R1 (tallennetaan pinoon ja palautetaan ennen IRET:ä).
 ; =============================================================================
@@ -135,13 +135,13 @@ clock_handler:
         ADD   R0, R1
         STORE [phase], R0
 
-        ; Jos phase >= 4, pysäytä ajastin
-        READ  R1, 4
+        ; Jos phase >= 3, pysäytä ajastin
+        READ  R1, 3
         CMP   R0, R1
         JGE   _ch_stop
 
-        ; phase < 4: käynnistä 20 sekunnin ajastin uudelleen
-        READ  R0, 20000
+        ; phase < 3: käynnistä 10 sekunnin ajastin uudelleen
+        READ  R0, 10000
         SCTMR R0
         JUMP  _ch_done
 
@@ -155,72 +155,8 @@ _ch_done:
         IRET
 
 ; =============================================================================
-; smul_div100 — Etumerkillinen kertolasku jaettuna 100:lla
-;
-; Sisään:  R0 = kerroin A (etumerkillinen 16-bittinen, 2-komplementti)
-;          R1 = kerroin B (etumerkillinen 16-bittinen, 2-komplementti)
-; Ulos:    R0 = (A × B) / 100  (etumerkillinen, kokonaislukujakolasku)
-; Clobbers: R0–R5
-;
-; Toiminta:
-;   1. Normalisoi: negoi negatiiviset tulot, seuraa etumerkkiä R3:ssa
-;   2. Kertoo absoluuttiarvot (etumerkitön MUL)
-;   3. Jakaa 100:lla (etumerkitön DIV)
-;   4. Palauttaa tuloksen oikealla etumerkillä
-;
-; Rekisterit R6–R15 jätetään koskemattomiksi — kutsuva koodi voi
-; nojata tähän pitäessään arvoja niissä.
+; smul_div100 — siirretty lib_3dobjects.asm:iin (.include yllä tuo sen mukaan)
 ; =============================================================================
-
-smul_div100:
-        READ  R2, 0x8000      ; etumerkkilipun maski (bitti 15)
-        READ  R3, 0           ; tulosmerkki: 0 = positiivinen, 1 = negatiivinen
-        READ  R5, 0           ; nollakonstantti vertailuja varten
-
-        ; --- Tarkista R0:n etumerkki ---
-        CPY   R4, R0
-        AND   R4, R2          ; R4 = R0:n etumerkkilippu
-        CMP   R4, R5
-        JZ    _smul_r0_ok
-
-        ; R0 on negatiivinen: negate (2-komplementti: ~R0 + 1)
-        NOT   R0
-        READ  R4, 1
-        ADD   R0, R4
-        READ  R4, 1
-        XOR   R3, R4          ; käännä tulosmerkki
-
-_smul_r0_ok:
-        ; --- Tarkista R1:n etumerkki ---
-        CPY   R4, R1
-        AND   R4, R2          ; R4 = R1:n etumerkkilippu
-        CMP   R4, R5          ; R5 on edelleen 0
-        JZ    _smul_r1_ok
-
-        ; R1 on negatiivinen: negate
-        NOT   R1
-        READ  R4, 1
-        ADD   R1, R4
-        READ  R4, 1
-        XOR   R3, R4          ; käännä tulosmerkki
-
-_smul_r1_ok:
-        ; --- Etumerkitön kertolasku ja jako ---
-        MUL   R0, R1          ; R0 = |A| × |B|
-        READ  R4, 100
-        DIV   R0, R4          ; R0 = (|A| × |B|) / 100
-
-        ; --- Palauta etumerkki ---
-        CMP   R3, R5          ; R5 on edelleen 0
-        JZ    _smul_done
-
-        ; Tulos on negatiivinen: negate
-        NOT   R0
-        READ  R4, 1
-        ADD   R0, R4
-
-_smul_done:
-        RET
 
 ; =============================================================================
 ; draw_object_frame — Piirrä yksi animaatiokehys aktiivisesta objektista
@@ -505,7 +441,7 @@ _so_pyramid:
 
 ; =============================================================================
 ; main — Pääohjelma
-; Sykli: vaihe 0 = kuutio (tila B), vaihe 1 = L (tila C), vaihe 2 = J (tila B), vaihe 3 = pyramidi (tila C)
+; Sykli: vaihe 0 = kuutio (tila B), vaihe 1 = L (tila C), vaihe 2 = J (tila B), sitten alusta
 ; =============================================================================
 
 main:
@@ -527,8 +463,8 @@ restart_loop:
         READ  R0, GFX_DRAW_FG
         CALL  gfx_set_draw_mode
 
-        ; Käynnistä 20 sekunnin kellokeskeytys
-        READ  R0, 20000
+        ; Käynnistä 10 sekunnin kellokeskeytys
+        READ  R0, 10000
         SCTMR R0
 
         ; Vaihe 0: kuutio, tila B
@@ -723,69 +659,5 @@ _d_cnt_z_done:
         CMP   R0, R1
         JZ    d_loop
 
-        ; Vaihe muuttui: siirry vaiheeseen 3 (pyramidi, tila C)
-        READ  R0, GFX_MODE_C
-        READ  R1, GFX_MODE_REG
-        STORE [R1], R0
-
-        READ  R14, 2          ; R14 = 2 (tila C)
-
-        READ  R0, 3
-        CALL  set_object
-
-; --- Tila C / pyramidi -piirtosilmukka ---
-e_loop:
-        CALL  gfx_clear
-        CALL  draw_object_frame
-
-        ; Kehys valmis — flipaa kaksoisbufferointi
-        CALL  gfx_flip
-
-        ; Kasvata angle_x (joka 3. kehys)
-        READ  R0, [cnt_x]
-        READ  R1, 1
-        ADD   R0, R1
-        READ  R1, 3
-        CMP   R0, R1
-        JNZ   _e_cnt_x_done
-        READ  R0, 0
-        READ  R1, [angle_x]
-        READ  R2, 1
-        ADD   R1, R2
-        READ  R2, 64
-        CMP   R1, R2
-        JNZ   _e_ax_no_wrap
-        READ  R1, 0
-_e_ax_no_wrap:
-        STORE [angle_x], R1
-_e_cnt_x_done:
-        STORE [cnt_x], R0
-
-        ; Kasvata angle_z (joka 5. kehys)
-        READ  R0, [cnt_z]
-        READ  R1, 1
-        ADD   R0, R1
-        READ  R1, 5
-        CMP   R0, R1
-        JNZ   _e_cnt_z_done
-        READ  R0, 0
-        READ  R1, [angle_z]
-        READ  R2, 1
-        ADD   R1, R2
-        READ  R2, 64
-        CMP   R1, R2
-        JNZ   _e_az_no_wrap
-        READ  R1, 0
-_e_az_no_wrap:
-        STORE [angle_z], R1
-_e_cnt_z_done:
-        STORE [cnt_z], R0
-
-        ; Tarkista vaihe — jos edelleen 3, jatka tila C:tä
-        READ  R0, [phase]
-        READ  R1, 3
-        CMP   R0, R1
-        JZ    e_loop
-
-        ; Vaihe on 4: aloita koko animaatio alusta
+        ; Vaihe on 3: aloita koko animaatio alusta
         JUMP  restart_loop

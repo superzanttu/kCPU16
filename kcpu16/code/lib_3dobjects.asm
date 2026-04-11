@@ -4,10 +4,11 @@
 ;
 ; SISÄLTÖ:
 ;   1. sin_table          — yhteinen sinustaulu (64 alkiota)
-;   2. cube               — kuutio (8 kärkipistettä, 12 kaarta, 6 tahkoa)
-;   3. letter_L           — L-kirjain, 3D-extruded (12 kärkipistettä, 18 kaarta, 8 tahkoa)
-;   4. letter_J           — J-kirjain, 3D-extruded (12 kärkipistettä, 18 kaarta, 8 tahkoa)
-;   5. pyramid            — nelipohjainen pyramidi (5 kärkipistettä, 8 kaarta, 5 tahkoa)
+;   2. smul_div100        — etumerkillinen kertolasku jaettuna 100:lla
+;   3. cube               — kuutio (8 kärkipistettä, 12 kaarta, 6 tahkoa)
+;   4. letter_L           — L-kirjain, 3D-extruded (12 kärkipistettä, 18 kaarta, 8 tahkoa)
+;   5. letter_J           — J-kirjain, 3D-extruded (12 kärkipistettä, 18 kaarta, 8 tahkoa)
+;   6. pyramid            — nelipohjainen pyramidi (5 kärkipistettä, 8 kaarta, 5 tahkoa)
 ;
 ; KÄYTTÖ:
 ;   Osoita haluamaasi objektiin asettamalla obj_ptr_* -muuttujat ennen
@@ -28,10 +29,10 @@
 ;     4:(10, 12)   5:(-10,12)   <- pohja
 ;
 ;   J-profiili (6 pistettä):
-;     0:(-10,-12)  1:(10,-12)   <- yläreunat
-;     2:(10,  4)   3:( 2,  4)   <- pystyosan oikeapuoli
-;     4:( 2, 12)   5:(-10,12)   <- koukku vasemmalle
-;     (J kääntyy alhaalla vasemmalle)
+;     0:(-8,-12)  1:(8,-12)    <- ylevän palkin yläreunat
+;     2:(8, 12)   3:(2, 12)    <- pystyosan oikea reuna alas + koukun sisäkulma
+;     4:(2, -4)   5:(-8, -4)   <- palkin pohja (kapea pystyosa oikealla)
+;     (J-muoto: leveä ylevä palkki, kapea pystyosa oikealla, koukku vasemmalle)
 ;
 ; TAHKOTAULUKOT (num_faces=8 per kirjain):
 ;   Tahkot 0–1: etu- ja takapinta (6-kulmainen)
@@ -67,6 +68,74 @@ sin_table:
         .dw  -71, -77, -83, -88, -92, -96, -98, -100
         .dw -100, -100, -98, -96, -92, -88, -83, -77
         .dw  -71, -63, -56, -47, -38, -29, -20, -10
+
+; =============================================================================
+; smul_div100 — Etumerkillinen kertolasku jaettuna 100:lla
+;
+; Sisään:  R0 = kerroin A (etumerkillinen 16-bittinen, 2-komplementti)
+;          R1 = kerroin B (etumerkillinen 16-bittinen, 2-komplementti)
+; Ulos:    R0 = (A × B) / 100  (etumerkillinen, kokonaislukujakolasku)
+; Clobbers: R0–R5
+;
+; Toiminta:
+;   1. Normalisoi: negoi negatiiviset tulot, seuraa etumerkkiä R3:ssa
+;   2. Kertoo absoluuttiarvot (etumerkitön MUL)
+;   3. Jakaa 100:lla (etumerkitön DIV)
+;   4. Palauttaa tuloksen oikealla etumerkillä
+;
+; Rekisterit R6–R15 jätetään koskemattomiksi — kutsuva koodi voi
+; nojata tähän pitäessään arvoja niissä.
+; =============================================================================
+
+smul_div100:
+        READ  R2, 0x8000      ; etumerkkilipun maski (bitti 15)
+        READ  R3, 0           ; tulosmerkki: 0 = positiivinen, 1 = negatiivinen
+        READ  R5, 0           ; nollakonstantti vertailuja varten
+
+        ; --- Tarkista R0:n etumerkki ---
+        CPY   R4, R0
+        AND   R4, R2          ; R4 = R0:n etumerkkilippu
+        CMP   R4, R5
+        JZ    _smul_r0_ok
+
+        ; R0 on negatiivinen: negate (2-komplementti: ~R0 + 1)
+        NOT   R0
+        READ  R4, 1
+        ADD   R0, R4
+        READ  R4, 1
+        XOR   R3, R4          ; käännä tulosmerkki
+
+_smul_r0_ok:
+        ; --- Tarkista R1:n etumerkki ---
+        CPY   R4, R1
+        AND   R4, R2          ; R4 = R1:n etumerkkilippu
+        CMP   R4, R5          ; R5 on edelleen 0
+        JZ    _smul_r1_ok
+
+        ; R1 on negatiivinen: negate
+        NOT   R1
+        READ  R4, 1
+        ADD   R1, R4
+        READ  R4, 1
+        XOR   R3, R4          ; käännä tulosmerkki
+
+_smul_r1_ok:
+        ; --- Etumerkitön kertolasku ja jako ---
+        MUL   R0, R1          ; R0 = |A| × |B|
+        READ  R4, 100
+        DIV   R0, R4          ; R0 = (|A| × |B|) / 100
+
+        ; --- Palauta etumerkki ---
+        CMP   R3, R5          ; R5 on edelleen 0
+        JZ    _smul_done
+
+        ; Tulos on negatiivinen: negate
+        NOT   R0
+        READ  R4, 1
+        ADD   R0, R4
+
+_smul_done:
+        RET
 
 ; =============================================================================
 ; OBJEKTI 1: KUUTIO
@@ -240,11 +309,11 @@ letter_L_edge_faces:
         .dw  6, 7    ; kaari 5→11: sivu45(6) + sivu50(7)
 
 ; Tahkot (3 kärkipistettä normaalin laskentaan):
-; Etupinta: profiili myötäpäivään katsottuna edestä → normaali osoittaa -Z
-; Takapinta: profiili vastapäivään katsottuna edestä → normaali osoittaa +Z
+; Etupinta: CCW ruutukoordinaateissa (Y alas) → normal_z < 0 → näkyvä kun kamera -Z:ssa
+; Takapinta: CW ruutukoordinaateissa → normal_z > 0 → näkyvä kun kamera +Z:ssa
 letter_L_faces:
-        .dw  0,  1,  2    ; 0: etupinta (normaali -Z, kärkipist. myötäpäivään)
-        .dw  6,  8,  7    ; 1: takapinta (normaali +Z, kärkipist. vastapäivään)
+        .dw  0,  2,  1    ; 0: etupinta (normal_z < 0: CCW ruutukoord.)
+        .dw  6,  7,  8    ; 1: takapinta (normal_z > 0: CW ruutukoord.)
         .dw  0,  1,  7    ; 2: sivu 0→1 (yläreuna pystyosalla)
         .dw  1,  2,  8    ; 3: sivu 1→2 (pystyosan oikeareuna alas)
         .dw  2,  3,  9    ; 4: sivu 2→3 (sisäkulma → oikea, ylhäältä)
@@ -259,12 +328,14 @@ letter_L_faces:
 ; Indeksit 0–5: etupinta (z=−5), indeksit 6–11: takapinta (z=+5).
 ;
 ; Profiili (myötäpäivään etupinnalta katsottuna):
-;   0:(−10,−12)  <- vasenyläkulma (ristikko ylhäältä)
-;   1:( 10,−12)  <- oikeayläkulma
-;   2:( 10,  4)  <- pystyosan oikeaalakulma
-;   3:(  2,  4)  <- koukun sisäoikeakulma
-;   4:(  2, 12)  <- koukun alaoikeakulma
-;   5:(−10, 12)  <- vasenaalakulma (koukku kääntyy vasemmalle)
+;   0:(−8,−12)  <- ylevän palkin vasenyläkulma
+;   1:( 8,−12)  <- ylevän palkin oikeayläkulma
+;   2:( 8, 12)  <- pystyosan oikeaalakulma (koukku oikealla alhaalla)
+;   3:( 2, 12)  <- koukun sisäoikeakulma (koukku kääntyy vasemmalle)
+;   4:( 2, −4)  <- pystyosan sisäkulma (palkin pohja)
+;   5:(−8, −4)  <- ylevän palkin vasenaalakulma
+;
+; J-muoto: leveä ylevä palkki + kapea pystyosa oikealla + koukku vasemmalle alhaalla.
 ;
 ; Sama rakenne kuin L:
 ;   18 kaarta, 8 tahkoa.
@@ -281,15 +352,15 @@ letter_J_num_faces:
 
 letter_J_vx:
         ; Etupinta (z=-5): i=0..5
-        .dw  -10,  10,  10,   2,   2, -10
+        .dw   -8,   8,   8,   2,   2,  -8
         ; Takapinta (z=+5): i=6..11
-        .dw  -10,  10,  10,   2,   2, -10
+        .dw   -8,   8,   8,   2,   2,  -8
 
 letter_J_vy:
         ; Etupinta
-        .dw  -12, -12,   4,   4,  12,  12
+        .dw  -12, -12,  12,  12,  -4,  -4
         ; Takapinta
-        .dw  -12, -12,   4,   4,  12,  12
+        .dw  -12, -12,  12,  12,  -4,  -4
 
 letter_J_vz:
         ; Etupinta (z=-5)
@@ -345,14 +416,14 @@ letter_J_edge_faces:
         .dw  6, 7    ; kaari 5→11: sivu45(6) + sivu50(7)
 
 letter_J_faces:
-        .dw  0,  1,  2    ; 0: etupinta
-        .dw  6,  8,  7    ; 1: takapinta
+        .dw  0,  2,  1    ; 0: etupinta (normal_z < 0: CCW ruutukoord.)
+        .dw  6,  7,  8    ; 1: takapinta (normal_z > 0: CW ruutukoord.)
         .dw  0,  1,  7    ; 2: sivu 0→1 (yläreuna)
         .dw  1,  2,  8    ; 3: sivu 1→2 (oikea reuna alas)
         .dw  2,  3,  9    ; 4: sivu 2→3 (koukun yläreuna)
-        .dw  3,  4, 10    ; 5: sivu 3→4 (koukun oikeareuna)
-        .dw  4,  5, 11    ; 6: sivu 4→5 (pohja)
-        .dw  5,  0,  6    ; 7: sivu 5→0 (vasen reuna)
+        .dw  3,  4, 10    ; 5: sivu 3→4 (koukun oikea sisäreuna alas)
+        .dw  4,  5, 11    ; 6: sivu 4→5 (palkin pohja = sisäreuna vaakaan)
+        .dw  5,  0,  6    ; 7: sivu 5→0 (vasen reuna ylhäälle)
 
 ; =============================================================================
 ; OBJEKTI 4: PYRAMIDI (nelipohjainen)

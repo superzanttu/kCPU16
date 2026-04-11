@@ -162,6 +162,25 @@ Tehtävät on merkitty hakasulkeilla, ja niiden tilaa voidaan päivittää seura
 [X] Lisää dokumentaatioon kuvaus siitä, että assembler sallii vain READ ja STORE käytön.
 [X] Lisää KCPU16:n näyttöön kaksoisbufferionti, joka mahdollistaa näytön päivittämisen ilman välkkymistä. Tämä tarkoittaa, että kaikki näytölle piirretyt muutokset tehdään ensin taustalla olevaan bufferiin, ja sitten koko buffer kopioidaan kerralla näytölle. Tämä parantaa suorituskykyä ja tekee näytön päivityksestä sujuvampaa, erityisesti silloin, kun piirretään paljon pikseleitä tai tehdään suuria muutoksia näytölle. Säilytä kuitenkin mahdollisuus olla käyttämättä kaksoisbufferointia, jos käyttäjä haluaa nähdä jokaisen käskyn vaikutuksen näytöllä välittömästi.
 [X] Lisää dokumentaatioon kuvaus siitä, miten kaksoisbufferointi toimii ja miten se parantaa näytön päivitystä.
+[X] Analysoi demo_3dcude.asm, demo_3dcube2.asm, lib_3dobjects.asm ja lib_gfx.asm -tiedostot ja varmista että ohjelma näyttää kuution, L-kirjaimen ja J-kijaimmen, 10 sekunnin ajan, vuorotellen B-ja C- grafiikkatilassa. Varmista samalla, että objektteja pyöritetään X, Y, ja Z-akselien ympäri, ja että ne liikkuvat näytöllä.
+; Analysoitu: demot käyttivät 20 s vaiheja (pitää olla 10 s) ja sisälsivät ylimääräisen pyramidi-vaiheen (3).
+; Korjattu: 20000 → 10000 ms ja poistettu pyramidi-vaihe (phase 4 → 3) molemmista demoista.
+; Pyöritys toimii X- ja Z-akselilla (sin/cos-taulut). Y-pyöritystä ei ole, mikä on tarkoituksellinen design.
+; Grafiikkatilat: kuutio=B, L=C, J=B — vuorottelevat B↔C↔B.
+[X] J-kirjain ei ole ollenkaan J-kirjaimen muotoinen.
+; Korjattu lib_3dobjects.asm:ssa: J-profiili muutettiin oikeaksi J-muodoksi:
+; Uusi profiili: leveä ylevä palkki (x=-8..8, y=-12..-4) + kapea pystyosa oikealla (x=2..8, y=-4..12) + koukku vasemmalle.
+; Vanha profiili tuotti U-muodon tai taaksepäin käännetyn C:n eikä J:tä.
+; Myös face-normaalit korjattu (0,2,1) ja (6,7,8) jotta backface-culling toimii oikein.
+[X] L-kirjain on oikean muotoinen, mutta renderöityy väärin joissakin asennoissa.
+; Korjattu lib_3dobjects.asm:ssa: letter_L_faces etupinta (0,1,2) → (0,2,1) ja takapinta (6,8,7) → (6,7,8).
+; Syy: backface-culling käyttää normal_z = (B-A)×(C-A) z-komponenttia ruutukoordinaateissa (Y alas).
+; Vanha CW-järjestys antoi positiivisen normal_z etupinnalle (piilotettiin) ja negatiivisen takapinnalle (näytettiin) — käänteisesti väärin.
+[X] Analysoi demo_3dcude.asm, demo_3dcube2.asm, lib_3dobjects.asm ja lib_gfx.asm -tiedostot ja etsi yhteisiä toimintoja, jotka voitaisiin siirtää uuteen lib-gfx.asm-kirjastoon.
+; Analysoitu: smul_div100 on identtinen molemmissa demoissa → siirretty lib_3dobjects.asm:iin.
+; clock_handler on samankaltainen, mutta riippuu demo-kohtaisesta tilamuuttujasta (phase) — ei sovellu kirjastoon.
+; draw_object_frame on erilainen: demo1=wireframe, demo2=hidden-line — ei yhdistettävissä.
+; set_object on lähes sama, mutta demo2 asettaa lisäosoittimia — ei yhdistettävissä suoraan.
 
 
 <!-- ============================================================ -->
@@ -172,10 +191,7 @@ Tehtävät on merkitty hakasulkeilla, ja niiden tilaa voidaan päivittää seura
 
 ### Ryhmä 10: 3D-demot – analyysi ja korjaukset
 
-[ ] Analysoi demo_3dcude.asm, demo_3dcube2.asm, lib_3dobjects.asm ja lib_gfx.asm -tiedostot ja varmista että ohjelma näyttää kuution, L-kirjaimen ja J-kijaimmen, 10 sekunnin ajan, vuorotellen B-ja C- grafiikkatilassa. Varmista samalla, että objektteja pyöritetään X, Y, ja Z-akselien ympäri, ja että ne liikkuvat näytöllä.
-[ ] J-kirjain ei ole ollenkaan J-kirjaimen muotoinen.
-[ ] L-kirjain on oikeian muotoinen, mutta renderöityy väärin joissakin asennoissa.
-[ ] Analysoi demo_3dcude.asm, demo_3dcube2.asm, lib_3dobjects.asm ja lib_gfx.asm -tiedostot ja etsi yhteisiä toimintoja, jotka voitaisiin siirtää uuteen lib-gfx.asm-kirjastoon.
+; Kaikki Ryhmä 10 -tehtävät on suoritettu, katso Valmiit tehtävät -osio.
 
 <!-- ============================================================ -->
 <!-- RYHMÄ 11: Tallennuslaitekirjasto (lib-disk.asm)             -->
@@ -184,8 +200,9 @@ Tehtävät on merkitty hakasulkeilla, ja niiden tilaa voidaan päivittää seura
 
 ### Ryhmä 11: Tallennuslaitekirjasto
 
-[ ] Luo kirjasto (code/lib-disk.asm) joka toteuttaa tallennuslaaitteen käsittelyn. Tarvitaan yksinkertainen tiedostojärjestelmä, joka mahdollistaa tiedostojen tallentamisen. Hakemistoja ei tarvita. Tiedostoilla on nimi (1-32 merkkiä) ja koko (0-65535 tavua). Kirjasto toteuttaa seuraavat toiminnot: tiedoston luominen, tiedoston kirjoittaminen, tiedoston lukeminen, tiedoston poistaminen, tiedostojen listaaminen ja tiedoston ominaisuuksien lukeminen. Kirjasto käsittelee tallennuslaitteen blockkia (256 tavua) perinteisen tallennuslaitten "sektorina" ja tallentaa yhteen "sektoriin" useamman tiedoston dataa, jakaen ne lohkoihin. TIedostojärjestelmä blokki 0 on varattu ns. boot-sektoriksi, josta kCPU16-lukee käynnistyksen yhteydessä boot-ohjelman.
+[ ] Luo kirjasto (code/lib-disk.asm) joka toteuttaa tallennuslaaitteen käsittelyn. Tarvitaan yksinkertainen tiedostojärjestelmä, joka mahdollistaa tiedostojen tallentamisen. Hakemistoja ei tarvita. Tiedostoilla on nimi (1-32 merkkiä), metatiedot (luonti- ja muokkausaika) ja koko (0-65535 tavua). Kirjasto toteuttaa seuraavat toiminnot: tiedoston luominen, tiedoston kirjoittaminen, tiedoston lukeminen, tiedoston poistaminen, tiedostojen listaaminen ja tiedoston ominaisuuksien lukeminen. Kirjasto käsittelee tallennuslaitteen blockkia (256 tavua) perinteisen tallennuslaitten "sektorina" ja tallentaa yhteen "sektoriin" useamman tiedoston dataa, jakaen ne lohkoihin. TIedostojärjestelmä blokki 0 on varattu ns. boot-sektoriksi, josta kCPU16-lukee käynnistyksen yhteydessä boot-ohjelman.
 [ ] Lisää dokumentaatioon kuvaus uudesta tallennuslaitekirjastosta (code/lib-disk.asm) ja sen tarjoamista toiminnoista.
+[ ] Kirjoita code-hakemistoon esimerkkiohjelma (esim. disk_test.asm), joka käyttää lib-disk.asm-kirjastoa luodakseen tiedoston, kirjoittaakseen dataa siihen, lukeakseen dataa takaisin ja poistaakseen tiedoston, ja varmista että kaikki toiminnot toimivat oikein.
 
 <!-- ============================================================ -->
 <!-- RYHMÄ 5: Suorituskyky – Opcode-pohjainen dispatch (cpu.py)  -->
