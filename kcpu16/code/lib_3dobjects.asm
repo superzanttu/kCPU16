@@ -7,6 +7,7 @@
 ;   2. cube               — kuutio (8 kärkipistettä, 12 kaarta, 6 tahkoa)
 ;   3. letter_L           — L-kirjain, 3D-extruded (12 kärkipistettä, 18 kaarta, 8 tahkoa)
 ;   4. letter_J           — J-kirjain, 3D-extruded (12 kärkipistettä, 18 kaarta, 8 tahkoa)
+;   5. pyramid            — nelipohjainen pyramidi (5 kärkipistettä, 8 kaarta, 5 tahkoa)
 ;
 ; KÄYTTÖ:
 ;   Osoita haluamaasi objektiin asettamalla obj_ptr_* -muuttujat ennen
@@ -217,12 +218,12 @@ letter_L_edges:
 ; Tahkot: 0=etu, 1=taka, 2=sivu01, 3=sivu12, 4=sivu23, 5=sivu34, 6=sivu45, 7=sivu50
 letter_L_edge_faces:
         ; Etupinta-kaaret (tahko 0 ja viereinen sivutahko)
-        .dw  0, 7    ; kaari 0→1: etu + sivu50 (0,1,7,6) wait: 5→0 on tahko7, 0→1 on tahko2
         .dw  0, 2    ; kaari 0→1: etu(0) + sivu 0→1(2)
         .dw  0, 3    ; kaari 1→2: etu(0) + sivu 1→2(3)
         .dw  0, 4    ; kaari 2→3: etu(0) + sivu 2→3(4)
         .dw  0, 5    ; kaari 3→4: etu(0) + sivu 3→4(5)
         .dw  0, 6    ; kaari 4→5: etu(0) + sivu 4→5(6)
+        .dw  0, 7    ; kaari 5→0: etu(0) + sivu 5→0(7)
         ; Takapinta-kaaret
         .dw  1, 2    ; kaari 6→7:  taka(1) + sivu 0→1(2)
         .dw  1, 3    ; kaari 7→8:  taka(1) + sivu 1→2(3)
@@ -352,3 +353,68 @@ letter_J_faces:
         .dw  3,  4, 10    ; 5: sivu 3→4 (koukun oikeareuna)
         .dw  4,  5, 11    ; 6: sivu 4→5 (pohja)
         .dw  5,  0,  6    ; 7: sivu 5→0 (vasen reuna)
+
+; =============================================================================
+; OBJEKTI 4: PYRAMIDI (nelipohjainen)
+;
+; 5 kärkipistettä:
+;   0:(−10, 10,−10)  1:(10, 10,−10)  2:(10, 10, 10)  3:(−10, 10, 10)
+;   4:(  0,−12,  0)  ← huippu
+;
+; Kärkipisteindeksit: pohja = 0–3, huippu = 4.
+; Tahkot: 0=pohja, 1=etu(−10<z<0 sivu), 2=oikea, 3=taka, 4=vasen
+;
+; Tahkon normaali osoittaa ulospain:
+;   pohja: +Y, etu: −Z, oikea: +X, taka: +Z, vasen: −X
+; =============================================================================
+
+pyramid_num_vertices:
+        .dw  5
+
+pyramid_num_edges:
+        .dw  8
+
+pyramid_num_faces:
+        .dw  5
+
+pyramid_vx:
+        .dw  -10,  10,  10, -10,   0
+
+pyramid_vy:
+        .dw   10,  10,  10,  10, -12
+
+pyramid_vz:
+        .dw  -10, -10,  10,  10,   0
+
+pyramid_edges:
+        ; Pohja (4 kaarta)
+        .dw  0, 1
+        .dw  1, 2
+        .dw  2, 3
+        .dw  3, 0
+        ; Sivut → huippu (4 kaarta)
+        .dw  0, 4
+        .dw  1, 4
+        .dw  2, 4
+        .dw  3, 4
+
+; face_id:t: 0=pohja, 1=etu, 2=oikea, 3=taka, 4=vasen
+pyramid_edge_faces:
+        ; Pohjakaaret (pohja + sivutahko)
+        .dw  0, 1    ; kaari 0→1: pohja(0) + etu(1)
+        .dw  0, 2    ; kaari 1→2: pohja(0) + oikea(2)
+        .dw  0, 3    ; kaari 2→3: pohja(0) + taka(3)
+        .dw  0, 4    ; kaari 3→0: pohja(0) + vasen(4)
+        ; Sivukaaret → huippu (kaksi sivutahkoa kohtaavat)
+        .dw  4, 1    ; kaari 0→4: vasen(4) + etu(1)
+        .dw  1, 2    ; kaari 1→4: etu(1) + oikea(2)
+        .dw  2, 3    ; kaari 2→4: oikea(2) + taka(3)
+        .dw  3, 4    ; kaari 3→4: taka(3) + vasen(4)
+
+; Tahkot (3 kärkipistettä normaalin laskentaan):
+pyramid_faces:
+        .dw  0, 3, 2    ; 0: pohja   (normaali +Y, CW pohjalta ylöspäin)
+        .dw  0, 1, 4    ; 1: etu     (normaali −Z)
+        .dw  1, 2, 4    ; 2: oikea   (normaali +X)
+        .dw  2, 3, 4    ; 3: taka    (normaali +Z)
+        .dw  3, 0, 4    ; 4: vasen   (normaali −X)

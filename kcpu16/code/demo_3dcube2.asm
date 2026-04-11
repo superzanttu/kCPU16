@@ -140,8 +140,8 @@ face_visible:
 ; clock_handler — Kellokeskeytyksen käsittelijä (INT 9)
 ;
 ; Kasvattaa demo-vaihetta yhdellä.
-; Jos uusi phase < 3, käynnistää 20 sekunnin ajastimen uudelleen.
-; Jos uusi phase >= 3, pysäyttää ajastimen (pääsilmukka käynnistää sen).
+; Jos uusi phase < 4, käynnistää 20 sekunnin ajastimen uudelleen.
+; Jos uusi phase >= 4, pysäyttää ajastimen (pääsilmukka käynnistää sen).
 ;
 ; Clobbers: R0, R1 (tallennetaan pinoon ja palautetaan ennen IRET:ä).
 ; =============================================================================
@@ -156,12 +156,12 @@ clock_handler:
         ADD   R0, R1
         STORE [phase], R0
 
-        ; Jos phase >= 3, pysäytä ajastin
-        READ  R1, 3
+        ; Jos phase >= 4, pysäytä ajastin
+        READ  R1, 4
         CMP   R0, R1
         JGE   _ch_stop
 
-        ; phase < 3: käynnistä 20 sekunnin ajastin uudelleen
+        ; phase < 4: käynnistä 20 sekunnin ajastin uudelleen
         READ  R0, 20000
         SCTMR R0
         JUMP  _ch_done
@@ -560,7 +560,7 @@ _dof_edge_done:
 ; =============================================================================
 ; set_object — Aseta aktiivinen objekti osoitinmuuttujiin
 ;
-; Sisään:  R0 = objektin valinta (0=kuutio, 1=L-kirjain, 2=J-kirjain)
+; Sisään:  R0 = objektin valinta (0=kuutio, 1=L-kirjain, 2=J-kirjain, 3=pyramidi)
 ; Ulos:    obj_*_ptr ja obj_num_* päivitetty
 ; Clobbers: R0, R1
 ; =============================================================================
@@ -572,6 +572,9 @@ set_object:
         READ  R1, 2
         CMP   R0, R1
         JZ    _so_letter_J
+        READ  R1, 3
+        CMP   R0, R1
+        JZ    _so_pyramid
 
         ; Kuutio (oletus)
         READ  R1, cube_vx
@@ -636,9 +639,30 @@ _so_letter_J:
         STORE [obj_num_faces], R1
         RET
 
+_so_pyramid:
+        READ  R1, pyramid_vx
+        STORE [obj_vx_ptr], R1
+        READ  R1, pyramid_vy
+        STORE [obj_vy_ptr], R1
+        READ  R1, pyramid_vz
+        STORE [obj_vz_ptr], R1
+        READ  R1, pyramid_edges
+        STORE [obj_edges_ptr], R1
+        READ  R1, pyramid_edge_faces
+        STORE [obj_edge_faces_ptr], R1
+        READ  R1, pyramid_faces
+        STORE [obj_faces_ptr], R1
+        READ  R1, [pyramid_num_vertices]
+        STORE [obj_num_vertices], R1
+        READ  R1, [pyramid_num_edges]
+        STORE [obj_num_edges], R1
+        READ  R1, [pyramid_num_faces]
+        STORE [obj_num_faces], R1
+        RET
+
 ; =============================================================================
 ; main — Pääohjelma
-; Sykli: vaihe 0 = kuutio (tila B), vaihe 1 = L (tila C), vaihe 2 = J (tila B)
+; Sykli: vaihe 0 = kuutio (tila B), vaihe 1 = L (tila C), vaihe 2 = J (tila B), vaihe 3 = pyramidi (tila C)
 ; =============================================================================
 
 main:
@@ -846,5 +870,66 @@ _d_cnt_z_done:
         CMP   R0, R1
         JZ    d_loop
 
-        ; Vaihe on 3: aloita alusta
+        ; Vaihe muuttui: siirry vaiheeseen 3 (pyramidi, tila C)
+        READ  R0, GFX_MODE_C
+        READ  R1, GFX_MODE_REG
+        STORE [R1], R0
+
+        READ  R14, 2
+
+        READ  R0, 3
+        CALL  set_object
+
+; --- Tila C / pyramidi -piirtosilmukka ---
+e_loop:
+        CALL  gfx_clear
+        CALL  draw_object_frame
+        CALL  gfx_flip
+
+        ; Kasvata angle_x
+        READ  R0, [cnt_x]
+        READ  R1, 1
+        ADD   R0, R1
+        READ  R1, 3
+        CMP   R0, R1
+        JNZ   _e_cnt_x_done
+        READ  R0, 0
+        READ  R1, [angle_x]
+        READ  R2, 1
+        ADD   R1, R2
+        READ  R2, 64
+        CMP   R1, R2
+        JNZ   _e_ax_no_wrap
+        READ  R1, 0
+_e_ax_no_wrap:
+        STORE [angle_x], R1
+_e_cnt_x_done:
+        STORE [cnt_x], R0
+
+        ; Kasvata angle_z
+        READ  R0, [cnt_z]
+        READ  R1, 1
+        ADD   R0, R1
+        READ  R1, 5
+        CMP   R0, R1
+        JNZ   _e_cnt_z_done
+        READ  R0, 0
+        READ  R1, [angle_z]
+        READ  R2, 1
+        ADD   R1, R2
+        READ  R2, 64
+        CMP   R1, R2
+        JNZ   _e_az_no_wrap
+        READ  R1, 0
+_e_az_no_wrap:
+        STORE [angle_z], R1
+_e_cnt_z_done:
+        STORE [cnt_z], R0
+
+        READ  R0, [phase]
+        READ  R1, 3
+        CMP   R0, R1
+        JZ    e_loop
+
+        ; Vaihe on 4: aloita alusta
         JUMP  restart_loop
