@@ -34,6 +34,12 @@ def format_db_rows(data: bytes, bytes_per_line: int) -> list[str]:
     return rows
 
 
+def format_word(value: int) -> str:
+    if value < 0 or value > 0xFFFF:
+        raise ValueError(f"value out of 16-bit range: {value}")
+    return f"0x{value:04X}"
+
+
 def build_output(
     *,
     source_path: Path,
@@ -43,7 +49,8 @@ def build_output(
     bytes_per_line: int,
 ) -> str:
     prefix = f"chip8_mod_{sanitize_module_name(module_name)}"
-    end_addr = load_addr + len(data) - 1 if data else load_addr
+    end_addr = load_addr + len(data) - 1 if data else (load_addr - 1)
+    end_addr_word = 0xFFFF if end_addr < 0 else end_addr
     source_name = source_path.name.replace("\\", "\\\\").replace('"', '\\"')
 
     lines: list[str] = [
@@ -65,13 +72,13 @@ def build_output(
         f"{prefix}_source_name:",
         f'        .dstr "{source_name}"',
         f"{prefix}_load_addr:",
-        f"        .dw 0x{load_addr & 0xFFFF:04X}",
+        f"        .dw {format_word(load_addr)}",
         f"{prefix}_entry_addr:",
-        f"        .dw 0x{load_addr & 0xFFFF:04X}",
+        f"        .dw {format_word(load_addr)}",
         f"{prefix}_size:",
         f"        .dw {len(data)}",
         f"{prefix}_end_addr:",
-        f"        .dw 0x{end_addr & 0xFFFF:04X}",
+        f"        .dw {format_word(end_addr_word)}",
         f"{prefix}_data:",
     ]
 
@@ -98,6 +105,10 @@ def convert_file(
         raise ValueError("bytes-per-line must be >= 1")
 
     data = input_path.read_bytes()
+    if data and (load_addr + len(data) - 1) > 0xFFFF:
+        raise ValueError(
+            "module does not fit in 16-bit address space with given load address"
+        )
     output_text = build_output(
         source_path=input_path,
         module_name=module_name,
