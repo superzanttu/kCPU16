@@ -181,6 +181,16 @@ Tehtävät on merkitty hakasulkeilla, ja niiden tilaa voidaan päivittää seura
 ; clock_handler on samankaltainen, mutta riippuu demo-kohtaisesta tilamuuttujasta (phase) — ei sovellu kirjastoon.
 ; draw_object_frame on erilainen: demo1=wireframe, demo2=hidden-line — ei yhdistettävissä.
 ; set_object on lähes sama, mutta demo2 asettaa lisäosoittimia — ei yhdistettävissä suoraan.
+[X] Luo kirjasto (code/lib-disk.asm) joka toteuttaa tallennuslaaitteen käsittelyn. Tarvitaan yksinkertainen tiedostojärjestelmä, joka mahdollistaa tiedostojen tallentamisen.
+; Toteutettu: disk_format, disk_create, disk_write, disk_read, disk_delete, disk_stat, disk_find, disk_list.
+; Tiedostojärjestelmä: blokki 0=boot, 1=FAT, 2=hakemisto, 3+=datablokkit.
+; Korjattu useita bugeja kehityksen aikana: _fat_alloc ei suojannut R3:a _disk_write_block:n yli,
+;   disk_read käytti READ R0, R8 (lataa R8-indeksin, ei arvoa) eikä CPY R0, R8.
+[X] Lisää dokumentaatioon kuvaus uudesta tallennuslaitekirjastosta (code/lib-disk.asm) ja sen tarjoamista toiminnoista.
+; Dokumentoitu architecture.md luvussa 13: rakenne, FAT, hakemistomerkintä, kaikki 7 julkista funktiota, käyttöesimerkki.
+[X] Kirjoita code-hakemistoon esimerkkiohjelma (esim. disk_test.asm), joka käyttää lib-disk.asm-kirjastoa luodakseen tiedoston, kirjoittaakseen dataa siihen, lukeakseen dataa takaisin ja poistaakseen tiedoston, ja varmista että kaikki toiminnot toimivat oikein.
+; Toteutettu: disk_test.asm testaa disk_format, disk_create, disk_write, disk_read, disk_stat, disk_list, disk_delete.
+; Kaikki 10 .expect_mem ja .expect_storage -tarkistusta läpäisevät.
 
 
 <!-- ============================================================ -->
@@ -200,9 +210,7 @@ Tehtävät on merkitty hakasulkeilla, ja niiden tilaa voidaan päivittää seura
 
 ### Ryhmä 11: Tallennuslaitekirjasto
 
-[W] Luo kirjasto (code/lib-disk.asm) joka toteuttaa tallennuslaaitteen käsittelyn. Tarvitaan yksinkertainen tiedostojärjestelmä, joka mahdollistaa tiedostojen tallentamisen. Hakemistoja ei tarvita. Tiedostoilla on nimi (1-32 merkkiä), metatiedot (luonti- ja muokkausaika) ja koko (0-65535 tavua). Kirjasto toteuttaa seuraavat toiminnot: tiedoston luominen, tiedoston kirjoittaminen, tiedoston lukeminen, tiedoston poistaminen, tiedostojen listaaminen ja tiedoston ominaisuuksien lukeminen. Kirjasto käsittelee tallennuslaitteen blockkia (256 tavua) perinteisen tallennuslaitten "sektorina" ja tallentaa yhteen "sektoriin" useamman tiedoston dataa, jakaen ne lohkoihin. TIedostojärjestelmä blokki 0 on varattu ns. boot-sektoriksi, josta kCPU16-lukee käynnistyksen yhteydessä boot-ohjelman.
-[ ] Lisää dokumentaatioon kuvaus uudesta tallennuslaitekirjastosta (code/lib-disk.asm) ja sen tarjoamista toiminnoista.
-[ ] Kirjoita code-hakemistoon esimerkkiohjelma (esim. disk_test.asm), joka käyttää lib-disk.asm-kirjastoa luodakseen tiedoston, kirjoittaakseen dataa siihen, lukeakseen dataa takaisin ja poistaakseen tiedoston, ja varmista että kaikki toiminnot toimivat oikein.
+; Kaikki Ryhmä 11 -tehtävät on suoritettu, katso Valmiit tehtävät -osio.
 
 <!-- ============================================================ -->
 <!-- RYHMÄ 5: Suorituskyky – Opcode-pohjainen dispatch (cpu.py)  -->
@@ -260,6 +268,7 @@ Tehtävät on merkitty hakasulkeilla, ja niiden tilaa voidaan päivittää seura
 
 ### Priorisoimattomat tehtävät
 [ ] Kirjoita lib-screen.asm-kirjastoon funktio, joka mahdollistaa tekstin piirtämisen näytölle käyttäen kCPU16:n A-grafiikkatilaa, jotta näyttöä voi käyttää kuten yksinkertaista terminaalia, joka osaa skrollata tekstiä ylös.
+[ ] Lisää lib-screen.asm-kirjastoon funktio, jolla käyttäjältä voi pyytää inputia.
 [ ] Lisää kirjastoon lib-disk.asm tuki hakemistoille. Tämä mahdollistaisi tiedostojen järjestämisen hierarkkisesti, ja vaatisi hakemistokohteiden ja polkujen käsittelyn.
 [ ] Lisää kirjastoon lib-disk.asm tuki levyn formatointiin, joka alustaa tallennuslaitteen tyhjäksi ja luo tarvittavat rakenteet tiedostojärjestelmälle.
 [ ] Lisää kirjastoon lib-disk.asm tuki levyn tarkistukseen, joka skannaa tallennuslaitteen ja raportoi mahdollisista vioista tai epäjohdonmukaisuuksista tiedostojärjestelmässä.

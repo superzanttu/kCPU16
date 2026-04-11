@@ -50,8 +50,11 @@ test_data:
         .dw  0x2345, 0x6789, 0xBCDE, 0xF012
 
 ; Lukupuskuri (8 sanaa)
+; FILL-käskyä varten: read_buf_last osoittaa viimeiseen sanaan (inklusiivinen)
 read_buf:
-        .dw  0, 0, 0, 0,   0, 0, 0, 0
+        .dw  0, 0, 0, 0,   0, 0, 0
+read_buf_last:
+        .dw  0
 
 ; Metatietopuskuri (6 sanaa: koko, luontivuosi, luontimd, muokvuosi, muokmd, 1.blokki)
 stat_buf:
@@ -88,18 +91,18 @@ test_results:
 ; Ulos: R10 = osoitin merkin jälkeiseen kohtaan
 ; Clobbers: R10, R11, R12, R13
 write_str:
-        READ  R12, 1
-        READ  R13, 0
+        READ  R12, 1              ; R12 = 1 (askeleen leveys ADD-käskyille)
+        READ  R13, 0              ; (käyttämätön — R13 ylikirjoitetaan heti silmukassa)
 _ws_loop:
-        READ  R13, [R11]
-        CMP   R13, R13
-        READ  R14, 0
-        CMP   R13, R14
+        READ  R13, [R11]          ; R13 = seuraava merkki merkkijonosta
+        CMP   R13, R13            ; (tyhjä vertailu — asettaa aina Z; vastaus ei käytössä)
+        READ  R14, 0              ; R14 = 0 (null-vertailuarvo)
+        CMP   R13, R14            ; onko merkki null (merkkijonon loppu)?
         JZ    _ws_done
-        OR    R13, R15           ; lisää värimäärittely
-        STORE [R10], R13
-        ADD   R10, R12
-        ADD   R11, R12
+        OR    R13, R15            ; lisätään värimäärittely (R15 = väriattribuutti)
+        STORE [R10], R13          ; kirjoita merkki+väri VRAMiin
+        ADD   R10, R12            ; VRAM-osoitin eteenpäin
+        ADD   R11, R12            ; merkkijono-osoitin eteenpäin
         JUMP  _ws_loop
 _ws_done:
         RET
@@ -218,8 +221,12 @@ main:
         READ  R1, str_test4
         CALL  write_str_at
 
-        ; Nollaa lukupuskuri ensin
-        FILL  read_buf, read_buf_end, 0
+        ; Nollaa lukupuskuri ensin (FILL edellyttää rekisterioperandeja)
+        ; read_buf on 8 sanaa, read_buf_last osoittaa viimeiseen sanaan (inklusiivinen)
+        READ  R0, read_buf
+        READ  R1, read_buf_last
+        READ  R2, 0
+        FILL  R0, R1, R2          ; nollaa kaikki 8 sanaa
 
         READ  R0, test_filename
         READ  R1, read_buf
@@ -232,31 +239,31 @@ main:
         CMP   R0, R1
         JNZ   _t4_fail
 
-        ; Verifoi luettu data
-        READ  R3, test_data
-        READ  R4, read_buf
-        READ  R5, 8              ; 8 sanaa vertailtavaksi
-        READ  R6, 1
-        READ  R7, 0
+        ; Verifoi luettu data sana sanalta
+        READ  R3, test_data       ; R3 = osoitin alkuperäiseen dataan
+        READ  R4, read_buf        ; R4 = osoitin luettuun puskuriin
+        READ  R5, 8               ; R5 = jäljellä olevien sanojen laskuri
+        READ  R6, 1               ; R6 = askeleen leveys
+        READ  R7, 0               ; R7 = nollavakio (silmukan lopetusehto)
 _t4_verify:
-        CMP   R5, R7
+        CMP   R5, R7              ; onko kaikki sanat tarkistettu?
         JZ    _t4_ok
-        READ  R8, [R3]
-        READ  R9, [R4]
-        CMP   R8, R9
+        READ  R8, [R3]            ; R8 = alkuperäinen sana
+        READ  R9, [R4]            ; R9 = luettu sana
+        CMP   R8, R9              ; vastaako luettu alkuperäistä?
         JNZ   _t4_fail
-        ADD   R3, R6
-        ADD   R4, R6
-        SUB   R5, R6
+        ADD   R3, R6              ; siirry seuraavaan alkuperäiseen
+        ADD   R4, R6              ; siirry seuraavaan luettuun
+        SUB   R5, R6              ; vähennetään laskuria
         JUMP  _t4_verify
 _t4_ok:
         POP   R0
         READ  R1, 0
-        CPY   R0, R1             ; R0 = 0 = OK
+        CPY   R0, R1              ; R0 = 0 (DISK_OK)
         JUMP  _t4_done
 _t4_fail:
-        POP   R0
-        READ  R0, 1              ; R0 = 1 = FAIL
+        POP   R0                  ; tasapainota pino (PUSH R0 alussa)
+        READ  R0, 1               ; R0 = 1 (FAIL)
 _t4_done:
         CALL  check_result
 
@@ -338,21 +345,20 @@ _t7_done:
 str_done:
         .dstr "Kaikki testit suoritettu."
 
-; Merkki puskurin lopulle (FILL-käskyä varten)
-read_buf_end:
-
 ; =============================================================================
 ; Tarkistukset (testrunner)
 ; =============================================================================
 ; read_buf:ssa pitää olla sama data kuin test_data:ssa disk_read:n jälkeen.
 ; Osoitteet: read_buf=0x0983 (assemblointihetkellä tarkistettu --asm:llä)
-.expect_mem  0x0983, 0x1234
-.expect_mem  0x0984, 0x5678
-.expect_mem  0x0985, 0xABCD
-.expect_mem  0x0986, 0xEF01
-.expect_mem  0x0987, 0x2345
-.expect_mem  0x0988, 0x6789
-.expect_mem  0x0989, 0xBCDE
-.expect_mem  0x098A, 0xF012
+.expect_mem  0x098A, 0x1234
+.expect_mem  0x098B, 0x5678
+.expect_mem  0x098C, 0xABCD
+.expect_mem  0x098D, 0xEF01
+.expect_mem  0x098E, 0x2345
+.expect_mem  0x098F, 0x6789
+.expect_mem  0x0990, 0xBCDE
+.expect_mem  0x0991, 0xF012
 ; FAT: blokki 1, sana 3 = 0xFFFF (blokki 3 varattu DISK_EOF:lla)
 .expect_storage  0x0103, 0xFFFF
+; Data blokki 3 (osoite 0x0300): ensimmäinen sana = 0x1234
+.expect_storage  0x0300, 0x1234

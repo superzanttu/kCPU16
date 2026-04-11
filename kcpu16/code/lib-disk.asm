@@ -304,7 +304,8 @@ disk_format:
         ; FILL [R0..R2-1] = R1 → FILL R0, R2, R1 ei ole suoraan käytettävissä
         ; Sen sijaan nollaamme käsin silmukalla
 _fmt_clear_buf:
-        ; Nollaa koko blokki silmukalla
+        ; (ei hyppykohde — suoritus laskeutuu tähän suoraan ylhäältä)
+        ; Nollaa koko blokki (256 sanaa) silmukalla ennen tallennusta
         READ  R7, disk_io_buf
         READ  R9, 256
         READ  R6, 0
@@ -322,7 +323,8 @@ _fmt_zero_done:
         ; FAT[0] = 0xFFFF (boot-sektori, varattu)
         ; FAT[1] = 0xFFFF (FAT itse, varattu)
         ; FAT[2] = 0xFFFF (hakemisto, varattu)
-        ; FAT[3..255] = 0x0000 (vapaa) — jo nollattu yläpuolella
+        ; FAT[3..255] = 0x0000 (vapaa) — jo nollattu ylläolevassa silmukassa
+        ; Nollattu puskuri kirjoitetaan levylle jälkempänä.
         READ  R7, disk_io_buf
         READ  R8, 0xFFFF
         STORE [R7], R8            ; fat[0] = 0xFFFF
@@ -403,8 +405,10 @@ _fa_found:
         READ  R1, DISK_EOF
         STORE [R0], R1
         ; Kirjoita päivitetty FAT takaisin
+        PUSH  R3                  ; suojaa blokki-indeksi (_disk_write_block clobberoi R3)
         READ  R0, DISK_FAT_BLOCK
         CALL  _disk_write_block
+        POP   R3                  ; palauta blokki-indeksi
         ; Palauta blokki-indeksi
         CPY   R0, R3
         POP   R7
@@ -459,6 +463,9 @@ _ffc_done:
         RET
 
 ; Korjattu kutsu — käytetään apumuuttujaa:
+; Syy: _disk_str_cmp clobberoi R6:n, joten merkintäindeksiä ei voi
+; pitää pelkästään rekisterissä. Tallennetaan väliaikaiseen muuttujaan
+; ennen kutsua ja luetaan takaisin kutsun jälkeen.
 _dfbn_cur_idx:
         .dw  0
 
@@ -600,6 +607,8 @@ _dc_free_found:
         ADD   R0, R2
 
         ; Luontiaika: vuosi, kuukausi<<8|päivä
+        ; CLOCK_YEAR (0x0010), CLOCK_MONTH (0x0011), CLOCK_DAY (0x0012)
+        ; ovat vain luettavia MMIO-rekisterejä — suora muistinosoitus riittää.
         READ  R1, [CLOCK_YEAR]
         STORE [R0], R1
         ADD   R0, R2
@@ -611,11 +620,11 @@ _dc_free_found:
         STORE [R0], R3
         ADD   R0, R2
 
-        ; Muokkausaika = sama kuin luontiaika
-        READ  R1, [CLOCK_YEAR]
+        ; Muokkausaika = sama kuin luontiaika (tiedosto juuri luotu)
+        READ  R1, [CLOCK_YEAR]    ; MMIO 0x0010
         STORE [R0], R1
         ADD   R0, R2
-        STORE [R0], R3
+        STORE [R0], R3            ; R3 = kuukausi<<8|päivä (laskettu yllä)
         ADD   R0, R2
 
         ; Ensimmäinen blokki = 0 (ei dataa vielä)
@@ -718,12 +727,12 @@ _dw_write_loop:
         ; Nollaa io-puskuri
         READ  R7, disk_io_buf
         READ  R8, 256
-        READ  R9, 0
         READ  R6, 1
+        READ  R2, 0              ; R2 = nollavakio (R9 on varattu nimelle)
 _dw_clr_buf:
-        CMP   R8, R9
+        CMP   R8, R2
         JZ    _dw_clr_done
-        STORE [R7], R9
+        STORE [R7], R2
         ADD   R7, R6
         SUB   R8, R6
         JUMP  _dw_clr_buf
@@ -735,12 +744,13 @@ _dw_clr_done:
         READ  R7, disk_io_buf
         READ  R8, 256
         READ  R6, 1
+        READ  R2, 0              ; R2 = nollavakio
 
         ; min(R4, 256) sanaa kopioidaan
 _dw_copy_loop:
-        CMP   R4, R9
+        CMP   R4, R2
         JZ    _dw_copy_done
-        CMP   R8, R9
+        CMP   R8, R2
         JZ    _dw_copy_done
         READ  R3, [R5]
         STORE [R7], R3
@@ -771,17 +781,21 @@ _dw_copy_done:
         CMP   R0, R1
         JZ    _dw_disk_full
 
-        ; Ketjuta: fat[cur_block] = uusi blokki
+        ; Ketjuta ketju: fat[cur_block] = uusi_blokki
+        ; _fat_alloc on jo merkinnyt fat[uusi_blokki] = DISK_EOF.
+        ; Nyt yhdistetään vanhan blokin linkki uuteen:
+        ;   fat[cur_block] = uusi_blokki  (edell. blokki osoittaa seuraavaan)
+        ;   fat[uusi_blokki] = DISK_EOF   (uusi blokki on ketjun pää)
+        ; FAT luetaan levyltä uudelleen, koska _fat_alloc saattoi muuttaa sitä.
         READ  R1, DISK_FAT_BLOCK
-        PUSH  R0                  ; tallenna uusi blokki
+        PUSH  R0                  ; tallenna uusi blokki-indeksi
 
-        ; Lue FAT
+        ; Lue ajantasainen FAT (kirjoitettu _fat_alloc:ssa)
         READ  R0, DISK_FAT_BLOCK
         CALL  _disk_read_block
 
         POP   R0                  ; R0 = uusi blokki (varattu _fat_alloc:lla)
-        ; _fat_alloc on jo kirjoittanut uuden blokin DISK_EOF:ksi FAT:iin
-        ; Tarvitsee ketjuttaa: fat[vanha] = uusi
+        ; Kirjoita linkki: fat[cur_block] → uusi_blokki
         READ  R2, disk_io_buf
         READ  R3, [_dw_cur_block]
         ADD   R2, R3
@@ -826,14 +840,15 @@ _dw_update_dir:
         STORE [R0], R1
         ADD   R0, R2
 
-        ; Luontiaika säilyy — muokkausaika päivitetään (offset 20-21)
-        ADD   R0, R2              ; offset 18 → hypätään luontivuosi
-        ADD   R0, R2              ; offset 19 → hypätään luontipäivä
-        ; offset 20: muokkausvuosi
+        ; Luontiaika (offsetit 18–19) säilyy ennallaan — ohitetaan.
+        ; Muokkausaika (offsetit 20–21) päivitetään kellosta.
+        ADD   R0, R2              ; offset 18: luontivuosi — ohitetaan
+        ADD   R0, R2              ; offset 19: luontipäivä — ohitetaan
+        ; offset 20: muokkausvuosi (MMIO 0x0010)
         READ  R1, [CLOCK_YEAR]
         STORE [R0], R1
         ADD   R0, R2
-        ; offset 21: muokkaus md
+        ; offset 21: muokkaus md — pakattu: (kuukausi << 8) | päivä
         READ  R1, [CLOCK_MONTH]
         READ  R3, 8
         SHL   R1, R3
@@ -916,23 +931,25 @@ disk_read:
         ADD   R8, R1              ; R8 = &entry
 
         ; offset 17 = koko
-        READ  R0, R8
+        CPY   R0, R8
         READ  R1, 17
         ADD   R0, R1
         READ  R6, [R0]            ; R6 = tiedoston koko sanoina
         STORE [_dr_file_words], R6
 
         ; offset 22 = ensimmäinen blokki
-        READ  R0, R8
+        CPY   R0, R8
         READ  R1, 22
         ADD   R0, R1
         READ  R5, [R0]            ; R5 = ensimmäinen blokki
 
         ; Luettavien sanojen määrä = min(max_words, file_words)
+        ; Jos kutsuja pyytää enemmän kuin tiedostossa on, rajoitetaan file_words:iin.
+        ; Huom: JLE vertaa etumerkillisesti — file_words oletetaan < 0x8000.
         READ  R3, [_dr_max_words]
         CMP   R3, R6
-        JLE   _dr_use_max
-        CPY   R3, R6              ; R3 = min(max, file_size)
+        JLE   _dr_use_max         ; max_words <= file_words → käytetään max_words
+        CPY   R3, R6              ; max_words > file_words → käytetään file_words
 _dr_use_max:
         STORE [_dr_rem_words], R3
 
@@ -1177,9 +1194,10 @@ _dst_not_found:
 ; Käy läpi hakemiston kaikki käytetyt merkinnät ja kirjoittaa niiden
 ; nimet (osoittimet disk_io_buf:ssa oleviin nimiin) annettuun puskuriin.
 ;
-; Huom: disk_io_buf sisältää hakemiston kutsun paluuhetkellä.
-; Kutsuja voi käydä läpi puskurin osoittimet ja lukea nimet _ennen_ seuraavaa
-; disk_*-kutsua (kutsut ylikirjoittavat disk_io_buf:n).
+; TÄRKEÄÄ: Palautetut osoittimet osoittavat disk_io_buf:n sisälle.
+; disk_io_buf on kirjaston globaali puskuri — se ylikirjoitetaan jokaisen
+; disk_*-kutsun yhteydessä. Kutsuja voi lukea nimet vain _ennen_ seuraavaa
+; disk_*-kutsua. Kopioi nimet omaan puskuriisi jos tarvitset niitä myöhemmin.
 ;
 ; Sisään: R0 = osoitin puskuriin RAM:ssa (kohta johon kirjoitetaan osoittimia)
 ;         R1 = puskurin max koko (max alkioita, kukin 1 sana = osoitin)

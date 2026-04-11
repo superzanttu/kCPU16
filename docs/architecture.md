@@ -60,10 +60,10 @@ kCPU16 on 16-bittinen von Neumann -arkkitehtuuriin perustuva prosessori.
 
 Vain Kernel-tilassa kirjoitettavissa (SMPR, STMR -käskyillä).
 
-| Rekisteri | Kuvaus                                                                    |
-| --------- | ------------------------------------------------------------------------- |
-| MPR       | Memory Protection Register — User-muistin alaraja                         |
-| TMR       | Timer Register — ajastinkeskeytyksen väli **mikrosekunneissa** (0 = pois)  |
+| Rekisteri | Kuvaus                                                                       |
+| --------- | ---------------------------------------------------------------------------- |
+| MPR       | Memory Protection Register — User-muistin alaraja                            |
+| TMR       | Timer Register — ajastinkeskeytyksen väli **mikrosekunneissa** (0 = pois)    |
 | CTMR      | Clock Timer Register — kellokeskeytyksen väli **millisekunteina** (0 = pois) |
 
 ## 2.4 Tilarekisteri (SR)
@@ -767,8 +767,8 @@ Simuloitua aikaa käytetään kaikkeen aikapohjaiseen toimintaan:
 
 ## 12.2 Käskyjen suoritussyklit
 
-| Käsky          | Syklit | Huomio                                         |
-| -------------- | ------ | ---------------------------------------------- |
+| Käsky          | Syklit | Huomio                                          |
+| -------------- | ------ | ----------------------------------------------- |
 | LOAD           | 1      | Välittömän arvon lataus                         |
 | CPY            | 1      | Rekisterikopiointi                              |
 | READ           | 1      | Muistiluku (absoluuttinen)                      |
@@ -780,7 +780,7 @@ Simuloitua aikaa käytetään kaikkeen aikapohjaiseen toimintaan:
 | STOREI         | 1      | Välitön arvo muistiin                           |
 | STOREI_IND     | 1      | Välitön arvo epäsuoraan osoitteeseen            |
 | STOREI_REL     | 1      | Välitön arvo FP-suhteelliseen osoitteeseen      |
-| FILL           | 1 + N  | 1 perussykli + täytettävien sanojen lukumäärä N  |
+| FILL           | 1 + N  | 1 perussykli + täytettävien sanojen lukumäärä N |
 | ADD / SUB      | 1      |                                                 |
 | MUL            | 4      | Kertolasku                                      |
 | DIV            | 8      | Jakolasku                                       |
@@ -792,12 +792,12 @@ Simuloitua aikaa käytetään kaikkeen aikapohjaiseen toimintaan:
 | JUMP           | 1      |                                                 |
 | CALL / RET     | 2      | Sisältää pinoon tallennuksen tai luvun          |
 | JZ/JNZ/JLT ... | 1      | Kaikki ehdolliset hypyt                         |
-| JMPI / CALLI  | 2      | Indeksoitu hyppy / kutsu (perussykli)            |
+| JMPI / CALLI   | 2      | Indeksoitu hyppy / kutsu (perussykli)           |
 | INT / IRET     | 4      | Kontekstin tallennus ja palautus                |
 | EXIT           | 4      | Prosessin lopetus                               |
 | STI / CLI      | 1      |                                                 |
 | HALT / NOP     | 1      |                                                 |
-| STMR / SCTMR  | 1      |                                                 |
+| STMR / SCTMR   | 1      |                                                 |
 | SMPR           | 1      |                                                 |
 | DREAD / DWRITE | 10     | I/O-operaatiot (tallennuslaite)                 |
 | TSL            | 2      | Atominen lue-muokkaa-kirjoita                   |
@@ -822,7 +822,197 @@ Simuloitua aikaa käytetään kaikkeen aikapohjaiseen toimintaan:
 Uptime lasketaan `simulated_time_us ÷ 1 000 000`. Arvo kasvaa yhdellä sekunnilla jokaista
 1 000 000 simuloitua mikrosekuntia kohti riippumatta ohjelman suoritusnopeudesta (FAST, MAX, SLOW jne.)
 
-| Rekisteri | Osoite | Kuvaus                            |
-| --------- | ------ | --------------------------------- |
-| UPTIME_W1 | $0019  | Sekuntilaskurin bitit 16–31       |
-| UPTIME_W0 | $001A  | Sekuntilaskurin bitit 0–15        |
+| Rekisteri | Osoite | Kuvaus                      |
+| --------- | ------ | --------------------------- |
+| UPTIME_W1 | $0019  | Sekuntilaskurin bitit 16–31 |
+| UPTIME_W0 | $001A  | Sekuntilaskurin bitit 0–15  |
+
+---
+
+# 13. Tallennuslaitekirjasto (lib-disk.asm)
+
+`code/lib-disk.asm` toteuttaa yksinkertaisen tiedostojärjestelmän kCPU16:n blokkipohjaiselle
+tallennuslaitteelle. Kirjasto tarjoaa julkisen rajapinnan tiedostojen luomiseen, kirjoittamiseen,
+lukemiseen, poistamiseen, listaamiseen ja tietojen hakemiseen.
+
+## 13.1 Tiedostojärjestelmän rakenne
+
+Tallennuslaite jaetaan 256-sanaisten blokkien sarjaan (256 blokkia × 256 sanaa = 65 536 sanaa):
+
+| Blokki | Osoite        | Kuvaus                                        |
+| ------ | ------------- | --------------------------------------------- |
+| 0      | 0x0000–0x00FF | Boot-sektori (kCPU16 lukee käynnistyksessä)   |
+| 1      | 0x0100–0x01FF | FAT-taulukko (256 merkintää, yksi per blokki) |
+| 2      | 0x0200–0x02FF | Hakemisto (8 tiedostomerkintää × 32 sanaa)    |
+| 3–255  | 0x0300–0xFFFF | Datablokkit (tiedostojen sisältö)             |
+
+### FAT-taulukko (blokki 1)
+
+Kukin sana FAT:ssa kuvaa yhden blokin tilan:
+
+| Arvo   | Merkitys                              |
+| ------ | ------------------------------------- |
+| 0x0000 | Blokki vapaa                          |
+| 0xFFFF | Blokki on ketjun viimeinen (DISK_EOF) |
+| muut   | Seuraavan blokin indeksi ketjussa     |
+
+### Hakemistomerkintä (blokki 2, 32 sanaa/merkintä)
+
+| Offset | Kuvaus                                             |
+| ------ | -------------------------------------------------- |
+| 0      | Status: 0 = vapaa, 1 = aktiivinen                  |
+| 1–16   | Tiedostonimi (null-terminoitu, max 16 sanaa)       |
+| 17     | Tiedoston koko sanoina                             |
+| 18     | Luontivuosi                                        |
+| 19     | Luontikuukausi (8 MSB) + luontipäivä (8 LSB)       |
+| 20     | Muokkausvuosi                                      |
+| 21     | Muokkauskuukausi (8 MSB) + muokkauspäivä (8 LSB)   |
+| 22     | Ensimmäisen databloki indeksi (0 = tyhjä tiedosto) |
+| 23–31  | Varaus                                             |
+
+## 13.2 Julkinen rajapinta
+
+### Vakiot
+
+```asm
+DISK_OK              = 0      ; Onnistuminen
+DISK_ERR_NOT_FOUND   = 1      ; Tiedostoa ei löydy
+DISK_ERR_NO_SPACE    = 2      ; Ei tilaa hakemistossa
+DISK_ERR_DISK_FULL   = 3      ; Levy täynnä
+DISK_ERR_RANGE       = 4      ; Luku-/kirjoitusvirhe (väärä koko)
+DISK_EOF             = 0xFFFF ; FAT-ketjun loppu
+```
+
+### disk_format — Alusta tiedostojärjestelmä
+
+```
+Sisään: (ei parametreja)
+Ulos:   R0 = DISK_OK
+```
+
+Nollaa FAT:n ja hakemiston, merkitsee blokit 0–2 varatuiksi.
+
+### disk_create — Luo uusi tiedosto
+
+```
+Sisään: R0 = osoitin tiedostonimeen (null-terminoitu merkkijono)
+Ulos:   R0 = DISK_OK              onnistuminen
+        R0 = DISK_ERR_NO_SPACE    hakemisto täynnä
+        R0 = merkintäindeksi      nimi jo olemassa
+```
+
+### disk_write — Kirjoita data tiedostoon
+
+```
+Sisään: R0 = osoitin tiedostonimeen
+        R1 = osoitin dataan RAM:ssa
+        R2 = sanojen lukumäärä
+Ulos:   R0 = DISK_OK              onnistuminen
+        R0 = DISK_ERR_NOT_FOUND   tiedostoa ei löydy
+        R0 = DISK_ERR_DISK_FULL   levy täynnä
+```
+
+Korvaa mahdollisen vanhan datan. Kirjoittaa blokki kerrallaan.
+
+### disk_read — Lue data tiedostosta
+
+```
+Sisään: R0 = osoitin tiedostonimeen
+        R1 = osoitin kohde-puskuriin RAM:ssa
+        R2 = luettavien sanojen enimmäismäärä
+Ulos:   R0 = DISK_OK              onnistuminen
+        R0 = DISK_ERR_NOT_FOUND   tiedostoa ei löydy
+        R0 = DISK_ERR_RANGE       annettu enimmäismäärä ylitetty
+```
+
+Lukee `min(max_words, tiedoston_koko)` sanaa puskuriin.
+
+### disk_delete — Poista tiedosto
+
+```
+Sisään: R0 = osoitin tiedostonimeen
+Ulos:   R0 = DISK_OK              onnistuminen
+        R0 = DISK_ERR_NOT_FOUND   tiedostoa ei löydy
+```
+
+Vapauttaa datablokkit FAT:sta ja nollaa hakemistomerkinnän.
+
+### disk_stat — Hae tiedoston metatiedot
+
+```
+Sisään: R0 = osoitin tiedostonimeen
+        R1 = osoitin 8-sanaiseen puskuriin metatietojen tallennusta varten
+Ulos:   R0 = DISK_OK              onnistuminen
+        R0 = DISK_ERR_NOT_FOUND   tiedostoa ei löydy
+```
+
+Täyttää puskurin metatiedoilla:
+
+| Offset | Sisältö                    |
+| ------ | -------------------------- |
+| 0      | Tiedoston koko sanoina     |
+| 1      | Luontivuosi                |
+| 2      | Luontikuukausi + -päivä    |
+| 3      | Muokkausvuosi              |
+| 4      | Muokkauskuukausi + -päivä  |
+| 5      | Ensimmäinen blokki-indeksi |
+| 6–7    | Varaus (0)                 |
+
+### disk_list — Listaa tiedostot
+
+```
+Sisään: R0 = osoitin puskuriin (17 sanaa per tiedosto: 16 nimi + 1 koko)
+        R1 = puskurin maksimikoko sanoina
+Ulos:   R0 = löydettyjen tiedostojen lukumäärä
+```
+
+### disk_find — Etsi tiedosto nimellä
+
+```
+Sisään: R0 = osoitin tiedostonimeen
+Ulos:   R0 = merkintäindeksi (0–7) jos löytyi
+        R0 = DISK_ERR_NOT_FOUND (1) jos ei löydy
+        disk_io_buf sisältää hakemistodatan
+```
+
+## 13.3 Käyttöesimerkki
+
+```asm
+.include "lib-disk.asm"
+
+main:
+    ; Alusta levy
+    CALL  disk_format
+
+    ; Luo tiedosto
+    READ  R0, tiedostonimi
+    CALL  disk_create
+
+    ; Kirjoita dataa
+    READ  R0, tiedostonimi
+    READ  R1, data_puskuri
+    READ  R2, 2              ; 2 sanaa
+    CALL  disk_write
+
+    ; Lue data takaisin
+    READ  R0, tiedostonimi
+    READ  R1, luku_puskuri
+    READ  R2, 2
+    CALL  disk_read
+
+    ; Poista tiedosto
+    READ  R0, tiedostonimi
+    CALL  disk_delete
+    HALT
+
+tiedostonimi: .dstr "TESTIFILE"
+data_puskuri: .dw 0x1234, 0x5678
+luku_puskuri: .dw 0, 0
+```
+
+## 13.4 Sisäiset apurakenteet
+
+- `disk_io_buf` (256 sanaa): Väliaikaispuskuri blokki-operaatioille
+- `_disk_read_block` / `_disk_write_block`: Siirtää 256 sanaa blokin ja `disk_io_buf`:n välillä
+- `_fat_alloc` / `_fat_free_chain`: FAT-taulukon hallinta
+- `_disk_str_cmp`: Null-terminoitujen merkkijonojen vertailu
