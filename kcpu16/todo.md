@@ -121,6 +121,7 @@ Tehtävät on merkitty hakasulkeilla, ja niiden tilaa voidaan päivittää seura
 [ ] Luo kirjasto (code/lib-disk.asm) joka toteuttaa tallennuslaaitteen käsittelyn. Tarvitaan yksinkertainen tiedostojärjestelmä, joka mahdollistaa tiedostojen tallentamisen. Hakemistoja ei tarvita. Tiedostoilla on nimi (1-32 merkkiä) ja koko (0-65535 tavua). Kirjasto toteuttaa seuraavat toiminnot: tiedoston luominen, tiedoston kirjoittaminen, tiedoston lukeminen, tiedoston poistaminen, tiedostojen listaaminen ja tiedoston ominaisuuksien lukeminen. Kirjasto käsittelee tallennuslaitteen blockkia (256 tavua) perinteisen tallennuslaitten "sektorina" ja tallentaa yhteen "sektoriin" useamman tiedoston dataa, jakaen ne lohkoihin. TIedostojärjestelmä blokki 0 on varattu ns. boot-sektoriksi, josta kCPU16-lukee käynnistyksen yhteydessä boot-ohjelman.
 [ ] Lisää dokumentaatioon kuvaus uudesta tallennuslaitekirjastosta (code/lib-disk.asm) ja sen tarjoamista toiminnoista.
 [ ] Analysoi demo_3dcude.asm, demo_3dcube2.asm, lib_3dobjects.asm ja lib_gfx.asm -tiedostot ja varmista että ohjelma näyttää kuution, L-kirjaimen ja J-kijaimmen, 10 sekunnin ajan, vuorotellen B-ja C- grafiikkatilassa. Varmista samalla, että objektteja pyöritetään X, Y, ja Z-akselien ympäri, ja että ne liikkuvat näytöllä.
-
+[ ] J-kirjain ei ole ollenkaan J-kirjaimen muotoinen.
+[ ] L-kirjain on oikeian muotoinen, mutta renderöityy väärin joissakin asennoissa.
 [ ] Analysoi demo_3dcude.asm, demo_3dcube2.asm, lib_3dobjects.asm ja lib_gfx.asm -tiedostot ja etsi yhteisiä toimintoja, jotka voitaisiin siirtää uuteen lib-gfx.asm-kirjastoon. 
 
