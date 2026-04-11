@@ -200,7 +200,7 @@ Tehtävät on merkitty hakasulkeilla, ja niiden tilaa voidaan päivittää seura
 
 ### Ryhmä 11: Tallennuslaitekirjasto
 
-[ ] Luo kirjasto (code/lib-disk.asm) joka toteuttaa tallennuslaaitteen käsittelyn. Tarvitaan yksinkertainen tiedostojärjestelmä, joka mahdollistaa tiedostojen tallentamisen. Hakemistoja ei tarvita. Tiedostoilla on nimi (1-32 merkkiä), metatiedot (luonti- ja muokkausaika) ja koko (0-65535 tavua). Kirjasto toteuttaa seuraavat toiminnot: tiedoston luominen, tiedoston kirjoittaminen, tiedoston lukeminen, tiedoston poistaminen, tiedostojen listaaminen ja tiedoston ominaisuuksien lukeminen. Kirjasto käsittelee tallennuslaitteen blockkia (256 tavua) perinteisen tallennuslaitten "sektorina" ja tallentaa yhteen "sektoriin" useamman tiedoston dataa, jakaen ne lohkoihin. TIedostojärjestelmä blokki 0 on varattu ns. boot-sektoriksi, josta kCPU16-lukee käynnistyksen yhteydessä boot-ohjelman.
+[W] Luo kirjasto (code/lib-disk.asm) joka toteuttaa tallennuslaaitteen käsittelyn. Tarvitaan yksinkertainen tiedostojärjestelmä, joka mahdollistaa tiedostojen tallentamisen. Hakemistoja ei tarvita. Tiedostoilla on nimi (1-32 merkkiä), metatiedot (luonti- ja muokkausaika) ja koko (0-65535 tavua). Kirjasto toteuttaa seuraavat toiminnot: tiedoston luominen, tiedoston kirjoittaminen, tiedoston lukeminen, tiedoston poistaminen, tiedostojen listaaminen ja tiedoston ominaisuuksien lukeminen. Kirjasto käsittelee tallennuslaitteen blockkia (256 tavua) perinteisen tallennuslaitten "sektorina" ja tallentaa yhteen "sektoriin" useamman tiedoston dataa, jakaen ne lohkoihin. TIedostojärjestelmä blokki 0 on varattu ns. boot-sektoriksi, josta kCPU16-lukee käynnistyksen yhteydessä boot-ohjelman.
 [ ] Lisää dokumentaatioon kuvaus uudesta tallennuslaitekirjastosta (code/lib-disk.asm) ja sen tarjoamista toiminnoista.
 [ ] Kirjoita code-hakemistoon esimerkkiohjelma (esim. disk_test.asm), joka käyttää lib-disk.asm-kirjastoa luodakseen tiedoston, kirjoittaakseen dataa siihen, lukeakseen dataa takaisin ja poistaakseen tiedoston, ja varmista että kaikki toiminnot toimivat oikein.
 
@@ -255,3 +255,12 @@ Tehtävät on merkitty hakasulkeilla, ja niiden tilaa voidaan päivittää seura
 ### Ryhmä 9: Suorituskyky – Fast run -suorituspolku
 
 [ ] Lisää `run()`-metodiin optimoitu fast-path-silmukka: paikalliset viittaukset usein käytettyihin metodeihin/muuttujiin, vähemmän funktiokutsuja per käsky ja poikkeuspolku erotettuna normaalista nopeasta polusta. Nykyinen `step()` säilytetään debuggausta varten.
+
+
+
+### Priorisoimattomat tehtävät
+[ ] Kirjoita lib-screen.asm-kirjastoon funktio, joka mahdollistaa tekstin piirtämisen näytölle käyttäen kCPU16:n A-grafiikkatilaa, jotta näyttöä voi käyttää kuten yksinkertaista terminaalia, joka osaa skrollata tekstiä ylös.
+[ ] Lisää kirjastoon lib-disk.asm tuki hakemistoille. Tämä mahdollistaisi tiedostojen järjestämisen hierarkkisesti, ja vaatisi hakemistokohteiden ja polkujen käsittelyn.
+[ ] Lisää kirjastoon lib-disk.asm tuki levyn formatointiin, joka alustaa tallennuslaitteen tyhjäksi ja luo tarvittavat rakenteet tiedostojärjestelmälle.
+[ ] Lisää kirjastoon lib-disk.asm tuki levyn tarkistukseen, joka skannaa tallennuslaitteen ja raportoi mahdollisista vioista tai epäjohdonmukaisuuksista tiedostojärjestelmässä.
+[ ] Lisää disk_test.asm:iin lib-disk.asm-kirjaston kaikkien ominaisuuksien esittely.
