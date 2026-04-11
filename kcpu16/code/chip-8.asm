@@ -35,6 +35,7 @@
 .const TICK_MS,      17
 .const SCR_OFS_X,    8
 .const SCR_OFS_Y,    8
+.const CH8_RPL_LAST, 7
 
 ; -----------------------------------------------------------------------------
 ; Emulaattorin tila
@@ -851,7 +852,7 @@ main:
         STORE [chip8_last_key], 0
         READ  R0, chip8_rpl
         CPY   R1, R0
-        ADD   R1, 7
+        ADD   R1, CH8_RPL_LAST
         READ  R2, 0
         FILL  R0, R1, R2
 
