@@ -851,7 +851,7 @@ main:
         STORE [chip8_wait_vx], 0xFFFF
         STORE [chip8_last_key], 0
         READ  R0, chip8_rpl
-        CPY   R1, R0
+        READ  R1, chip8_rpl
         ADD   R1, CH8_RPL_LAST
         READ  R2, 0
         FILL  R0, R1, R2
