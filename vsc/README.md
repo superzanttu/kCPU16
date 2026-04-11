@@ -79,19 +79,19 @@ Assembler itse hyväksyy jo minkä tahansa tiedostopolun — ei muutoksia tarvit
 
 ## Värikoodauksen rakenne
 
-| Elementti | Esimerkki | TextMate-scope |
-|-----------|-----------|----------------|
-| Kommentti | `; teksti` | `comment.line.semicolon` |
-| Label | `START:` | `entity.name.function.label` |
-| Direktiivi | `.origin`, `.macro` | `keyword.other.directive` |
-| Kernelkäsky | `HALT`, `IRET`, `SMPR` | `keyword.other.privileged` |
-| Ohjausrakenne | `JUMP`, `CALL`, `JZ` | `keyword.control.flow` |
-| Käsky | `LOAD`, `ADD`, `PUSH` | `support.function.instruction` |
-| Rekisteri | `R0`, `FP`, `SP` | `variable.language.register` |
-| Arkkitehtuurivakio | `VRAM_START`, `KBD_DATA` | `support.constant.arch` |
-| Hex-numero | `0xFF`, `#0xF800` | `constant.numeric.hex` |
-| Binääri | `0b1010` | `constant.numeric.binary` |
-| Desimaali | `42`, `-50` | `constant.numeric.decimal` |
-| Merkkijono | `"Hello!"` | `string.quoted.double` |
-| Escape | `\n`, `\0` | `constant.character.escape` |
-| Hakasulke | `[addr]` | `punctuation.section.brackets` |
+| Elementti          | Esimerkki                | TextMate-scope                 |
+| ------------------ | ------------------------ | ------------------------------ |
+| Kommentti          | `; teksti`               | `comment.line.semicolon`       |
+| Label              | `START:`                 | `entity.name.function.label`   |
+| Direktiivi         | `.origin`, `.macro`      | `keyword.other.directive`      |
+| Kernelkäsky        | `HALT`, `IRET`, `SMPR`   | `keyword.other.privileged`     |
+| Ohjausrakenne      | `JUMP`, `CALL`, `JZ`     | `keyword.control.flow`         |
+| Käsky              | `LOAD`, `ADD`, `PUSH`    | `support.function.instruction` |
+| Rekisteri          | `R0`, `FP`, `SP`         | `variable.language.register`   |
+| Arkkitehtuurivakio | `VRAM_START`, `KBD_DATA` | `support.constant.arch`        |
+| Hex-numero         | `0xFF`, `#0xF800`        | `constant.numeric.hex`         |
+| Binääri            | `0b1010`                 | `constant.numeric.binary`      |
+| Desimaali          | `42`, `-50`              | `constant.numeric.decimal`     |
+| Merkkijono         | `"Hello!"`               | `string.quoted.double`         |
+| Escape             | `\n`, `\0`               | `constant.character.escape`    |
+| Hakasulke          | `[addr]`                 | `punctuation.section.brackets` |
