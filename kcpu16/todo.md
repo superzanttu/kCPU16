@@ -137,4 +137,4 @@ Tehtävät on merkitty hakasulkeilla, ja niiden tilaa voidaan päivittää seura
 [ ] J-kirjain ei ole ollenkaan J-kirjaimen muotoinen.
 [ ] L-kirjain on oikeian muotoinen, mutta renderöityy väärin joissakin asennoissa.
 [ ] Analysoi demo_3dcude.asm, demo_3dcube2.asm, lib_3dobjects.asm ja lib_gfx.asm -tiedostot ja etsi yhteisiä toimintoja, jotka voitaisiin siirtää uuteen lib-gfx.asm-kirjastoon. 
-
+[ ] Toolbarissa oli aiemmin ohjelman tilaa kuvaava teksti. Selvitä korvaako Flags-ikkunassa oleva State-tieto toolbarissa olleen tilatiedon. Jos toolbarissa oleva tilatieto on tarpeeton, poista sen.

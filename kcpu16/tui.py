@@ -1601,13 +1601,13 @@ class KCPU16TUI(App[None]):
         """
         try:
             label_text = {
-                "stopped": "\u25a0 STOPPED",
-                "step": "\u25a0 STEP",
-                "fast": "\u25b6 FAST",
-                "max": "\u25b6 MAX",
-                "slow": "\u25b6 SLOW",
-                "reset": "\u25a0 RESET",
-            }.get(self._exec_mode, "\u25a0 STOPPED")
+                "stopped": "◼ STOPPED",
+                "step": "◼ STEP",
+                "fast": "▶ FAST",
+                "max": "▶ MAX",
+                "slow": "▶ SLOW",
+                "reset": "◼ RESET",
+            }.get(self._exec_mode, "◼ STOPPED")
             self.query_one("#run-mode-label", Static).update(label_text)
             btn_full = self.query_one("#btn-run-full", Button)
             btn_max = self.query_one("#btn-run-max", Button)
@@ -1633,6 +1633,8 @@ class KCPU16TUI(App[None]):
                 btn_max.variant = "success"
                 btn_slow.variant = "success"
                 btn_stop.variant = "default"
+            # Päivitä State-kenttä välittömästi kun suoritustila muuttuu
+            self._refresh_cpu_status()
         except Exception:
             pass
 
@@ -1741,7 +1743,9 @@ class KCPU16TUI(App[None]):
     # Näkymien päivitys
     # ------------------------------------------------------------------
 
-    def _refresh_all(self, include_screen: bool = False, force_screen: bool = False) -> None:
+    def _refresh_all(
+        self, include_screen: bool = False, force_screen: bool = False
+    ) -> None:
         """Päivitä kaikki näkymäpaneelit kerralla.
 
         Kutsutaan jokaisen tilan muutoksen jälkeen (step, run, reset,
@@ -2420,7 +2424,8 @@ class KCPU16TUI(App[None]):
                     except Exception as exc:
                         self._show_cpu_crash(exc)
                         return CommandResult(
-                            False, "[bold red]CPU kaatui — ks. Output-paneeli.[/bold red]"
+                            False,
+                            "[bold red]CPU kaatui — ks. Output-paneeli.[/bold red]",
                         )
                 ic = self.machine.cpu.instruction_counter
                 return CommandResult(True, f"Stepped {max(1, count)}. IC={ic}")
