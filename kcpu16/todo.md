@@ -34,6 +34,18 @@ Tehtävät on merkitty hakasulkeilla, ja niiden tilaa voidaan päivittää seura
 
 ### Valmiit tehtävät
 
+[X] Kirjoita lib-screen.asm-kirjastoon funktio, joka mahdollistaa tekstin tulostamisen näytölle käyttäen kCPU16:n A-grafiikkatilaa, jotta näyttöä voi käyttää kuten yksinkertaista terminaalia, joka osaa skrollata tekstiä ylös. Tämä voisi olla esimerkiksi "print" -funktio, joka ottaa merkkijonon ja tulostaa sen näytölle, ja skrollaa vanhaa tekstiä ylös tarvittaessa. Tämä funktio voisi myös tukea perusmuotoilua, kuten rivinvaihtoja ja tabulaattoreita, jotta teksti olisi helpommin luettavaa.
+; Toteutettu code/lib-screen.asm:ssä: scr_print(R0=str_ptr), scr_cls(), scr_set_color(R0).
+; Sisäiset apufunktiot: _scr_putchar, _scr_newline, _scr_scroll.
+; Skrollaus: kopioi rivit 1–23 riveille 0–22 (1840 sanaa), tyhjentää rivin 23.
+; Erikoismerkit: \n (rivinvaihto), \t (tab: seuraava 8:n monikerta), \r (ohitetaan).
+; Väri: scr_color-muuttuja (bits 8–14), oletus 0x0700 (valkoinen/musta).
+[X] Lisää lib-screen.asm-kirjastoon funktio, jolla käyttäjältä voi pyytää inputia. Tämä voisi olla esimerkiksi "input" -funktio, joka näyttää kehotteen näytöllä ja odottaa käyttäjältä syötettä, joka sitten palautetaan funktiosta. Tämä funktio voisi tukea perusominaisuuksia, kuten syötteen rajoittamista tiettyyn pituuteen ja mahdollisesti jopa yksinkertaista muokkausta (esim. backspace).
+; Toteutettu code/lib-screen.asm:ssä: scr_input(R0=kehote, R1=buf_ptr, R2=max_len) → R0=count.
+; Pollaa KBD_STATUS/KBD_DATA ilman keskeytystä. Tuki: Enter (lopetus), Backspace (poisto), max_len-raja.
+; Backspace pyyhkii merkin näytöltä (_scr_cursor_left + _scr_write_noadvance).
+; Persistenttirekisterit R9–R13 säilyvät kaikkien sisäisten funktiokutsujen yli.
+
 [X] Lisää `run()`-metodiin optimoitu fast-path-silmukka: paikalliset viittaukset usein käytettyihin metodeihin/muuttujiin, vähemmän funktiokutsuja per käsky ja poikkeuspolku erotettuna normaalista nopeasta polusta. Nykyinen `step()` säilytetään debuggausta varten.
 ; Toteutettu cpu.py:ssä: `run()` käyttää paikallisia viittauksia (`regs`, `mem_words`, `exec_table`,
 ; `mem_check_table`, `cycles_table`, `reg_array`) Python LOAD_FAST -optimointia varten.
@@ -200,8 +212,7 @@ Tehtävät on merkitty hakasulkeilla, ja niiden tilaa voidaan päivittää seura
 
 ### Ryhmä A: Screen-kirjasto
 
-[ ] Kirjoita lib-screen.asm-kirjastoon funktio, joka mahdollistaa tekstin tulostamisen näytölle käyttäen kCPU16:n A-grafiikkatilaa, jotta näyttöä voi käyttää kuten yksinkertaista terminaalia, joka osaa skrollata tekstiä ylös. Tämä voisi olla esimerkiksi "print" -funktio, joka ottaa merkkijonon ja tulostaa sen näytölle, ja skrollaa vanhaa tekstiä ylös tarvittaessa. Tämä funktio voisi myös tukea perusmuotoilua, kuten rivinvaihtoja ja tabulaattoreita, jotta teksti olisi helpommin luettavaa.
-[ ] Lisää lib-screen.asm-kirjastoon funktio, jolla käyttäjältä voi pyytää inputia. Tämä voisi olla esimerkiksi "input" -funktio, joka näyttää kehotteen näytöllä ja odottaa käyttäjältä syötettä, joka sitten palautetaan funktiosta. Tämä funktio voisi tukea perusominaisuuksia, kuten syötteen rajoittamista tiettyyn pituuteen ja mahdollisesti jopa yksinkertaista muokkausta (esim. backspace).
+; Kaikki Ryhmä A -tehtävät on suoritettu, katso Valmiit tehtävät -osio.
 
 <!-- ============================================================ -->
 <!-- RYHMÄ B: Disk-laajennukset (lib-disk.asm + disk_test.asm)   -->
@@ -212,7 +223,7 @@ Tehtävät on merkitty hakasulkeilla, ja niiden tilaa voidaan päivittää seura
 ### Ryhmä B: Disk-laajennukset
 
 [ ] Lisää kirjastoon lib-disk.asm tuki hakemistoille. Tämä mahdollistaisi tiedostojen järjestämisen hierarkkisesti, ja vaatisi hakemistokohteiden ja polkujen käsittelyn.
-[?] Varmista että kirjastossa lib-disk.asm on tuki levyn formatointiin, joka alustaa tallennuslaitteen tyhjäksi ja luo tarvittavat rakenteet tiedostojärjestelmälle.
+[ ] Varmista että kirjastossa lib-disk.asm on tuki levyn formatointiin, joka alustaa tallennuslaitteen tyhjäksi ja luo tarvittavat rakenteet tiedostojärjestelmälle.
 [ ] Lisää kirjastoon lib-disk.asm tuki levyn tarkistukseen, joka skannaa tallennuslaitteen ja raportoi mahdollisista vioista tai epäjohdonmukaisuuksista tiedostojärjestelmässä.
 [ ] Lisää disk_test.asm:iin lib-disk.asm-kirjaston kaikkien ominaisuuksien esittely
 
@@ -239,3 +250,4 @@ Tehtävät on merkitty hakasulkeilla, ja niiden tilaa voidaan päivittää seura
 
 ### Priorisoimattomat tehtävät
 [ ] Klikattaessa hiirellä Reset-nappia, Flags-ikkunassa on tieto "Pprog: NOT LOADED", mutta silti Screen-ikkunan alareunassa lukee "demo_3dcube.asm". Tarkista myös levynkuvan nimen näkyminen Reset-napista klikkaamisen jälkeen. 
+[ ] Luo code-hakemistoon demo_screen.asm, joka käyttää lib-screen.asm-kirjastoa demonstroidakseen tekstin tulostamista ja käyttäjältä inputin pyytämistä. Varmista että demo toimii oikein ja että se esittelee kirjaston ominaisuuksia tehokkaasti.
