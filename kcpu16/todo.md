@@ -44,10 +44,7 @@ Tehtävät on merkitty hakasulkeilla, ja niiden tilaa voidaan päivittää seura
 
 ### Ryhmä 2: Assembler-parannukset
 
-[W] Assemblerin antaessa virheilmoitus, on näytettävä virheen aiheuttavan rivin numero, itse rivi ja kuvaus virheestä. Tämä auttaa ohjelmoijaa ymmärtämään, mikä osa koodista aiheuttaa ongelman, ja antaa selkeän viestin siitä, mitä virhe on, jotta se voidaan korjata tehokkaasti.
-[W] Varmista ettö FILL-komennon kohteena oleva muisti alue on kokonaisuudessa kirjoitettavissa, ennen kuin varsinainen kirjoitus aloitetaan. Mikäli kohdealue ei ole kokonaisuutenaa, annetaan virheilmoitus.
-[W] Lisää dokumentaatioon kuvaus siitä, että assemblerin virheilmoitukset sisältävät rivin numeron, itse rivin ja kuvauksen virheestä, ja että tämä auttaa ohjelmoijaa ymmärtämään ja korjaamaan virheet tehokkaasti.
-[W] Lisää dokumentaatioon kuvaus siitä, että FILL-komennon kohteena olevan muistialueen on oltava kokonaisuudessaan kirjoitettavissa ennen kuin kirjoitus aloitetaan, ja että virheilmoitus annetaan, jos alue ei ole kokonaisuudessaan kirjoitettavissa.
+; Kaikki Ryhmä 2 -tehtävät on suoritettu, katso Valmiit tehtävät -osio.
 
 <!-- ============================================================ -->
 <!-- RYHMÄ 3: UI – Tiedostohallinta & suoritustila (tui.py)       -->
@@ -98,6 +95,15 @@ Tehtävät on merkitty hakasulkeilla, ja niiden tilaa voidaan päivittää seura
 ; READY (vihreä)   = CPU pyörii normaalisti (ei halted, ei exit_requested)
 ; HALTED (punainen) = HLT-käsky tai virhe pysäytti suorituksen
 ; EXITED (keltainen)= ohjelma päättyi hallitusti EXIT-käskyllä
+
+[X] Assemblerin antaessa virheilmoitus, on näytettävä virheen aiheuttavan rivin numero, itse rivi ja kuvaus virheestä. Tämä auttaa ohjelmoijaa ymmärtämään, mikä osa koodista aiheuttaa ongelman, ja antaa selkeän viestin siitä, mitä virhe on, jotta se voidaan korjata tehokkaasti.
+; Toteutettu assembler.py:ssä (_current_lineno + _current_line) ja dokumentoitu assembler.md luvussa 8.
+[X] Varmista ettö FILL-komennon kohteena oleva muisti alue on kokonaisuudessa kirjoitettavissa, ennen kuin varsinainen kirjoitus aloitetaan. Mikäli kohdealue ei ole kokonaisuutenaa, annetaan virheilmoitus.
+; Toteutettu cpu.py:ssä (_check_memory_access: FILL tarkistaa koko alueen ennen kirjoitusta) ja dokumentoitu architecture.md:ssä.
+[X] Lisää dokumentaatioon kuvaus siitä, että assemblerin virheilmoitukset sisältävät rivin numeron, itse rivin ja kuvauksen virheestä, ja että tämä auttaa ohjelmoijaa ymmärtämään ja korjaamaan virheet tehokkaasti.
+; Dokumentoitu assembler.md luvussa 8 (muoto, esimerkki, huomiot rivinumeroinnista).
+[X] Lisää dokumentaatioon kuvaus siitä, että FILL-komennon kohteena olevan muistialueen on oltava kokonaisuudessaan kirjoitettavissa ennen kuin kirjoitus aloitetaan, ja että virheilmoitus annetaan, jos alue ei ole kokonaisuudessaan kirjoitettavissa.
+; Dokumentoitu architecture.md:ssä FILL-käskyn kuvauksessa (Kirjoitussuojaus-huomio).
 
 [X] Analysoi kaikki muistialueet-, -rekisterit ja -varaukset päällekkäisyyksien varalta, ja varmista että niissä ei ole päällekkäisyyksiä, jotka voisivat aiheuttaa ongelmia ohjelman suorituksessa. Tämä tarkoittaa, että jokaisella muistialueella, rekisterillä ja varauksella on oma selkeä osoitealueensa, eikä mikään niistä ylitä toisen alueen rajoja. Tämä auttaa varmistamaan, että ohjelma toimii oikein ja että muistiviittaukset tapahtuvat turvallisesti ja oikein.
 ; Muistikartta analysoitu: ei kriittisiä päällekkäisyyksiä.
