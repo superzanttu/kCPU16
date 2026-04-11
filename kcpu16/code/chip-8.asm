@@ -793,9 +793,9 @@ fx_75:
         READ  R3, chip8_v
         READ  R4, 0
         READ  R5, R10
-        CMP   R5, 7
+        CMP   R5, CH8_RPL_LAST
         JLE   fx75_loop
-        READ  R5, 7
+        READ  R5, CH8_RPL_LAST
 fx75_loop:
         CMP   R4, R5
         JGT   fx75_done
@@ -813,9 +813,9 @@ fx_85:
         READ  R3, chip8_v
         READ  R4, 0
         READ  R5, R10
-        CMP   R5, 7
+        CMP   R5, CH8_RPL_LAST
         JLE   fx85_loop
-        READ  R5, 7
+        READ  R5, CH8_RPL_LAST
 fx85_loop:
         CMP   R4, R5
         JGT   fx85_done
