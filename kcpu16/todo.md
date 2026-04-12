@@ -2,7 +2,6 @@
 
 Tässä tiedostossa on kokoelma tehtäviä, jotka liittyvät KCPU16-projektiin. Näitä tehtäviä voidaan käyttää projektin kehittämiseen ja parantamiseen, ihmisen tai tekoälyn toimesta. Tehtävät tulee pitää lyhyinä ja selkeästi kuvattuina. Isommat tehtäväkokonaisuudet tulee jakaa pienempiin osiin, jotta ne voidaan toteuttaa vaiheittain.
 
-### Ryhmä C8: Muutosten tarkkailu
 ## Ohjeet
 
 Tehtävät ovat tärkeysjärjestyksessä ylhäältä alas.
@@ -135,7 +134,7 @@ Tehtävät on merkitty hakasulkeilla, ja niiden tilaa voidaan päivittää seura
 
 ### Ryhmä C7: Käyttöliittymä ja visuaaliset elementit
 
-- [ ] VArmista että MAX-tilassa kaikki tiedot jotka eivät päivity reaaliajassa, näkyvät harmaana, ja että tilasta poistuttaessa ne palautuvat normaalivärisiksi ja päivittyvät uudestaan.
+- [X] VArmista että MAX-tilassa kaikki tiedot jotka eivät päivity reaaliajassa, näkyvät harmaana, ja että tilasta poistuttaessa ne palautuvat normaalivärisiksi ja päivittyvät uudestaan.
 - [ ] Varmista että käyttöliittymän Assemble-nappi toimii oikein. Vaikka ohjelman pitäisi huomata automaattisesti kun ladattu .asm-tiedosto muuttuu, varmista että Assemble-nappi on toimiva ja päivittää ohjelman tilan ja käyttöliittymän oikein, kun sitä klikataan.
 
 ### Ryhmä C8: Muutosten tarkkailu
