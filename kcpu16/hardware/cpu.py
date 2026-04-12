@@ -465,8 +465,7 @@ class CPU:
         opcode_calli = _OPCODE_CALLI
         opcode_fill = _OPCODE_FILL
         opcode_table = OPCODE_TABLE
-        bp_set = breakpoints if breakpoints is not None else ()
-        bp_contains = bp_set.__contains__ if bp_set else None
+        bp_contains = breakpoints.__contains__ if breakpoints is not None else None
 
         cycles = 0
         while not self.halted and not self.process_exit_requested:
