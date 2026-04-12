@@ -4,18 +4,20 @@
 ;
 ; KUVAUS:
 ;   Piirtää pyörivän wireframe-3D-objektin grafiikkanäytölle.
-;   Pyörittää objektia samanaikaisesti kahden akselin ympäri:
-;     X: nopeampi (64 askelta/kierros, joka 3. kehys)
-;     Z: hitaampi (64 askelta/kierros, joka 5. kehys)
+;   Pyörittää objektia samanaikaisesti kolmen akselin ympäri:
+;   X: nopein   (64 askelta/kierros, joka 3. kehys)
+;   Y: hitain   (64 askelta/kierros, joka 7. kehys)
+;   Z: keskinop. (64 askelta/kierros, joka 5. kehys)
 ;
 ;   Vaihe 0 (10 s): Tila B — kuutio (säde 12 pikseliä)
 ;   Vaihe 1 (10 s): Tila C — L-kirjain (skaalattu ×2)
 ;   Vaihe 2 (10 s): Tila B — J-kirjain
 ;   Tämän jälkeen: käynnistyy alusta vaiheesta 0.
 ;
-; PYÖRITYSALGORITMI (järjestys X→Z, ortografinen projektio):
+; PYÖRITYSALGORITMI (järjestys X→Y→Z, ortografinen projektio):
 ;   X: ay=(vy·cox−vz·six)/100, az=(vy·six+vz·cox)/100, ax=vx
-;   Z: cx=(ax·coz−ay·siz)/100, cy=(ax·siz+ay·coz)/100
+;   Y: bx=(ax·coy−az·siy)/100, bz=(ax·siy+az·coy)/100, by=ay
+;   Z: cx=(bx·coz−by·siz)/100, cy=(bx·siz+by·coz)/100
 ;   Projektio: screen_x = center_x + cx  (tila B: center=40,24)
 ;              screen_y = center_y + cy  (tila C: center=80,48, skaala ×2)
 ;
@@ -96,11 +98,17 @@ phase:
 angle_x:
         .db  0         ; X-akselin rotaatiokulma (0–63)
 
+angle_y:
+        .db  0         ; Y-akselin rotaatiokulma (0–63)
+
 angle_z:
         .db  0         ; Z-akselin rotaatiokulma (0–63)
 
 cnt_x:
         .db  0         ; kehyslaskuri angle_x:n päivitykseen
+
+cnt_y:
+        .db  0         ; kehyslaskuri angle_y:n päivitykseen
 
 cnt_z:
         .db  0         ; kehyslaskuri angle_z:n päivitykseen
@@ -109,6 +117,10 @@ cnt_z:
 sin_cache_x:
         .dw  0
 cos_cache_x:
+        .dw  0
+sin_cache_y:
+        .dw  0
+cos_cache_y:
         .dw  0
 sin_cache_z:
         .dw  0
@@ -249,10 +261,43 @@ _dof_vertex_loop:
         CALL  smul_div100     ; R0 = vz·sin_x/100
         SUB   R11, R0         ; R11 = ay
 
-        ; Nyt: R8=ax, R11=ay
+        ; az = (vy·sin_x + vz·cos_x) / 100
+        CPY   R0, R9
+        READ  R1, [sin_cache_x]
+        CALL  smul_div100
+        CPY   R7, R0
+        CPY   R0, R10
+        READ  R1, [cos_cache_x]
+        CALL  smul_div100
+        ADD   R7, R0          ; R7 = az
+
+        ; --- Y-akselin rotaatio (rotoi X:n ja Z:n, Y pysyy muuttumattomana) ---
+        ; bx = (ax·cos_y − az·sin_y) / 100
+        CPY   R0, R8
+        READ  R1, [cos_cache_y]
+        CALL  smul_div100
+        CPY   R9, R0          ; R9 = ax·cos_y/100
+        CPY   R0, R7
+        READ  R1, [sin_cache_y]
+        CALL  smul_div100
+        SUB   R9, R0          ; R9 = bx
+
+        ; bz = (ax·sin_y + az·cos_y) / 100
+        CPY   R0, R8
+        READ  R1, [sin_cache_y]
+        CALL  smul_div100
+        CPY   R10, R0
+        CPY   R0, R7
+        READ  R1, [cos_cache_y]
+        CALL  smul_div100
+        ADD   R10, R0         ; R10 = bz
+
+        CPY   R8, R9          ; R8 = bx (→ Z-rotaation ax)
+        CPY   R7, R10         ; R7 = bz  (ei käytössä Z-rotaatiossa)
+        ; R11 = by = ay (ei muutu)
 
         ; --- Z-akselin rotaatio ---
-        ; cx = (ax·cos_z − ay·sin_z) / 100
+        ; cx = (bx·cos_z − by·sin_z) / 100
         CPY   R0, R8
         READ  R1, [cos_cache_z]
         CALL  smul_div100     ; R0 = ax·cos_z/100
@@ -525,6 +570,26 @@ _b_az_no_wrap:
 _b_cnt_z_done:
         STORE [cnt_z], R0
 
+        ; Kasvata angle_y (joka 7. kehys)
+        READ  R0, [cnt_y]
+        READ  R1, 1
+        ADD   R0, R1
+        READ  R1, 7
+        CMP   R0, R1
+        JNZ   _b_cnt_y_done
+        READ  R0, 0
+        READ  R1, [angle_y]
+        READ  R2, 1
+        ADD   R1, R2
+        READ  R2, 64
+        CMP   R1, R2
+        JNZ   _b_ay_no_wrap
+        READ  R1, 0
+_b_ay_no_wrap:
+        STORE [angle_y], R1
+_b_cnt_y_done:
+        STORE [cnt_y], R0
+
         ; Tarkista vaihe — jos edelleen 0, jatka tila B:tä
         READ  R0, [phase]
         READ  R1, 0
@@ -589,6 +654,26 @@ _c_az_no_wrap:
 _c_cnt_z_done:
         STORE [cnt_z], R0
 
+        ; Kasvata angle_y (joka 7. kehys)
+        READ  R0, [cnt_y]
+        READ  R1, 1
+        ADD   R0, R1
+        READ  R1, 7
+        CMP   R0, R1
+        JNZ   _c_cnt_y_done
+        READ  R0, 0
+        READ  R1, [angle_y]
+        READ  R2, 1
+        ADD   R1, R2
+        READ  R2, 64
+        CMP   R1, R2
+        JNZ   _c_ay_no_wrap
+        READ  R1, 0
+_c_ay_no_wrap:
+        STORE [angle_y], R1
+_c_cnt_y_done:
+        STORE [cnt_y], R0
+
         ; Tarkista vaihe — jos edelleen 1, jatka tila C:tä
         READ  R0, [phase]
         READ  R1, 1
@@ -652,6 +737,26 @@ _d_az_no_wrap:
         STORE [angle_z], R1
 _d_cnt_z_done:
         STORE [cnt_z], R0
+
+        ; Kasvata angle_y (joka 7. kehys)
+        READ  R0, [cnt_y]
+        READ  R1, 1
+        ADD   R0, R1
+        READ  R1, 7
+        CMP   R0, R1
+        JNZ   _d_cnt_y_done
+        READ  R0, 0
+        READ  R1, [angle_y]
+        READ  R2, 1
+        ADD   R1, R2
+        READ  R2, 64
+        CMP   R1, R2
+        JNZ   _d_ay_no_wrap
+        READ  R1, 0
+_d_ay_no_wrap:
+        STORE [angle_y], R1
+_d_cnt_y_done:
+        STORE [cnt_y], R0
 
         ; Tarkista vaihe — jos edelleen 2, jatka tila B:tä
         READ  R0, [phase]

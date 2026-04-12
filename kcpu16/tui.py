@@ -52,6 +52,7 @@ import re
 import time
 from dataclasses import dataclass
 from pathlib import Path
+from rich.text import Text
 
 # Poistaa Rich-markup-tagit (esim. [bold], [/red], [dim]) pelkään tekstiksi
 _RICH_MARKUP_RE = re.compile(r"\[/?[^\[\]]+?\]")
@@ -93,6 +94,7 @@ from .constants import (
     SR_FLAG_Z,
     WORD_MASK,
 )
+from .devices.storage import BlockStorageDevice
 from .debugger import DebugState
 from .disassembler import Disassembler, REVERSE_TABLE
 
@@ -133,6 +135,32 @@ REG_NAMES = {
     16: "FP",
     17: "SP",
 }
+
+
+def _find_bootblock_jump_target(words: list[int]) -> tuple[str, int, int] | None:
+    """Etsi bootblockin ensimmäinen eksplisiittinen hyppykohde konekielestä.
+
+    Palauttaa ensimmäisen tavallisen ohjausrakennekäskyn, jolla on välitön
+    kohdeosoite. Tämä auttaa näyttämään TUI-lokissa mihin bootloader yrittää
+    siirtyä boot=1-polussa.
+    """
+    branch_mnemonics: frozenset[str] = frozenset(
+        {"JUMP", "CALL", "JZ", "JNZ", "JLT", "JGT", "JLE", "JGE"}
+    )
+    i = 0
+    pc = BOOT_RAM_START
+    while i < len(words):
+        opcode = words[i] & WORD_MASK
+        meta = REVERSE_TABLE.get(opcode)
+        op_count = meta[1] if meta is not None else 0
+        mnemonic = meta[0] if meta is not None else None
+        if mnemonic in branch_mnemonics and op_count >= 1 and i + op_count < len(words):
+            target = words[i + op_count] & WORD_MASK
+            return mnemonic, pc, target
+        i += 1 + op_count
+        pc += 1 + op_count
+    return None
+
 
 # Käskyt joissa 1. operandi on rekisteri-indeksi (esim. LOAD R0, ...)
 _REG_FIRST = {
@@ -559,12 +587,12 @@ class SpeedSlider(Widget):
 
 
 class FilePickerDialog(ModalScreen):
-    """Modal dialog for selecting an .asm file from the code directory.
+    """Modal dialog for selecting a file from a provided list.
 
-    Shows a scrollable list of all .asm files. The user can:
+    Shows a scrollable list of files. The user can:
     - Click once to highlight a file
-    - Press Load (or Enter) to load the highlighted file
-    - Double-click a file to load it immediately
+    - Press the primary action button (or Enter) to confirm the highlighted file
+    - Double-click a file to confirm it immediately
     - Press Cancel (or Escape) to dismiss without loading
 
     Dismisses with the selected filename (str) or None on cancel.
@@ -579,7 +607,7 @@ class FilePickerDialog(ModalScreen):
         border: thick $primary;
         padding: 1 2;
         width: 64;
-        height: 24;
+        height: 26;
     }
     #file-picker-title {
         text-align: center;
@@ -588,7 +616,7 @@ class FilePickerDialog(ModalScreen):
         margin-bottom: 1;
     }
     #file-picker-list {
-        height: 16;
+        height: 1fr;
         border: solid $primary-darken-2;
     }
     #file-picker-buttons {
@@ -599,24 +627,46 @@ class FilePickerDialog(ModalScreen):
     }
     #file-picker-buttons Button {
         margin: 0 1;
+        min-width: 14;
+        height: 3;
+        content-align: center middle;
+        text-style: bold;
+    }
+    #btn-picker-load {
+        background: $accent;
+        border: solid $accent-darken-1;
+        color: $surface;
+    }
+    #btn-picker-cancel {
+        background: $panel-lighten-1;
+        border: solid $primary-darken-2;
+        color: $text;
     }
     """
 
-    def __init__(self, files: list[str]) -> None:
+    def __init__(
+        self,
+        files: list[str],
+        *,
+        title: str = "Load Program",
+        confirm_label: str = "Load",
+    ) -> None:
         super().__init__()
         self._files = files
+        self._title = title
+        self._confirm_label = confirm_label
         self._selected: str | None = files[0] if files else None
 
     def compose(self) -> ComposeResult:
         with Vertical(id="file-picker-dialog"):
-            yield Static("Load Program", id="file-picker-title")
+            yield Static(self._title, id="file-picker-title")
             with VerticalScroll(id="file-picker-list"):
                 with ListView(id="file-picker-listview"):
                     for f in self._files:
                         yield ListItem(Static(f))
             with Horizontal(id="file-picker-buttons"):
-                yield Button("Load", id="btn-picker-load", variant="primary")
-                yield Button("Cancel", id="btn-picker-cancel", variant="default")
+                yield Button(self._confirm_label, id="btn-picker-load")
+                yield Button("Cancel", id="btn-picker-cancel")
 
     def on_mount(self) -> None:
         try:
@@ -783,6 +833,13 @@ class KCPU16TUI(App[None]):
         border: solid $primary-darken-2;
         border-title-color: $accent;
     }
+    #disasm-tabs.max-stale {
+        border: solid #666666;
+        border-title-color: #888888;
+    }
+    #disasm-tabs.max-stale Tab {
+        color: #888888;
+    }
     TabPane {
         padding: 0;
     }
@@ -825,6 +882,10 @@ class KCPU16TUI(App[None]):
         border-title-color: $accent;
         padding: 0 1;
     }
+    #flags-pane.max-stale {
+        border: solid #666666;
+        border-title-color: #888888;
+    }
     #regs-pane {
         width: 40;
         height: 1fr;
@@ -832,6 +893,10 @@ class KCPU16TUI(App[None]):
         border-title-color: $accent;
         padding: 0 1;
         overflow-y: auto;
+    }
+    #regs-pane.max-stale {
+        border: solid #666666;
+        border-title-color: #888888;
     }
     """
 
@@ -887,9 +952,23 @@ class KCPU16TUI(App[None]):
         self.addr_to_line: dict[int, int] = {}
         self.is_assembled: bool = False
         self._last_screen_render: str = ""
+        self._last_vram_version: int = -1  # Käytetään VRAM dirty-check-optimointiin
+        self._last_gfx_mode: int = -1  # Käytetään GFX_MODE muutoksen detektointiin
+        self._disasm_cache: dict[tuple[int, tuple[int, ...]], str] = (
+            {}
+        )  # (addr, words) → disasm_tail
+        # Widget caches (initialized in on_mount)
+        self._w_disasm_content: Static | None = None
+        self._w_regs_content: Static | None = None
+        self._w_flags_content: Static | None = None
+        self._w_screen_view: Static | None = None
+        self._w_memory_view: Static | None = None
+        self._w_stack_view: Static | None = None
         self._output_buffer: list[str] = []
+        self._boot_status_text: str | None = None
         self._disk_dirty: bool = False
         self._watched_mtime: int | None = None  # st_mtime_ns (kokonaisluku)
+        self._watched_sources: dict[Path, int | None] = {}
         self._exec_mode: str = (
             "stopped"  # "stopped" | "step" | "fast" | "max" | "slow" | "reset"
         )
@@ -923,6 +1002,7 @@ class KCPU16TUI(App[None]):
         # Toolbar
         with Horizontal(id="toolbar"):
             yield Button("Load", id="btn-open", variant="default")
+            yield Button("Boot", id="btn-boot", variant="default")
             yield Static(" ", classes="sep")
             yield Button("Assemble ^B", id="btn-asm", variant="primary")
             yield Static(" ", classes="sep")
@@ -989,16 +1069,25 @@ class KCPU16TUI(App[None]):
         Suoritetaan kerran kun kaikki widgetit ovat luotu ja kiinnitetty
         DOM-puuhun. Tässä:
         1. Asetetaan paneelien otsikot (border_title)
-        2. Resetoidaan kone (cold_reset) ja otetaan rekisterisnapshot
-        3. Kirjoitetaan tervetuloa-viestit lokiin
-        4. Lataa käynnistysparametreilla annetut tiedostot
-        5. Päivitetään kaikki näkymät (_refresh_all)
-        6. Käynnistetään timereita: Screen-päivitys (1.0s) + tiedoston tarkkailu (1.0s)
+        2. Cacheetaan usein käytetyt widget-viittaukset hot-path optimointia varten
+        3. Resetoidaan kone (cold_reset) ja otetaan rekisterisnapshot
+        4. Kirjoitetaan tervetuloa-viestit lokiin
+        5. Lataa käynnistysparametreilla annetut tiedostot
+        6. Päivitetään kaikki näkymät (_refresh_all)
+        7. Käynnistetään timereita: Screen-päivitys (1.0s) + tiedoston tarkkailu (1.0s)
         """
         self.query_one("#regs-pane").border_title = "Registers"
         self.query_one("#flags-pane").border_title = "Flags"
         self.query_one("#screen-section").border_title = "Screen"
         self.query_one("#output-pane").border_title = "Output"
+
+        # Cache widget references for _refresh_* methods (hot-path optimization)
+        self._w_disasm_content = self.query_one("#disasm-content", Static)
+        self._w_regs_content = self.query_one("#regs-content", Static)
+        self._w_flags_content = self.query_one("#flags-content", Static)
+        self._w_screen_view = self.query_one("#screen-view-solo", Static)
+        self._w_memory_view = self.query_one("#memory-view", Static)
+        self._w_stack_view = self.query_one("#stack-view", Static)
 
         self.machine.cold_reset()
         self.dbg.snapshot_registers(self.machine.dump_registers())
@@ -1044,6 +1133,7 @@ class KCPU16TUI(App[None]):
         """
         actions = {
             "btn-open": self.action_open_file,
+            "btn-boot": self.action_boot_disk,
             "btn-asm": self.action_assemble_code,
             "btn-step": self.action_step_once,
             "btn-run-full": self.action_run_full_speed,
@@ -1283,11 +1373,17 @@ class KCPU16TUI(App[None]):
         self._exec_mode = "reset"
         self.machine.cold_reset()
         self.is_assembled = False
+        self.current_disk_file = None
+        self._boot_status_text = None
+        self._disk_dirty = False
         self.addr_to_line = {}
         self._asm_addr_to_src = {}
         self._asm_addr_to_label = {}
         self._asm_jump_targets = {}
+        self._disasm_cache = {}
         self.dbg.snapshot_registers(self.machine.dump_registers())
+        self._update_program_title()
+        self._update_disk_title()
         self._update_run_mode_ui()
         self._log("[green]Machine reset.[/green]")
         self._refresh_all(include_screen=True, force_screen=True)
@@ -1323,7 +1419,38 @@ class KCPU16TUI(App[None]):
                 self._do_open(self.code_dir / filename)
                 self._refresh_all()
 
-        self.push_screen(FilePickerDialog(files), callback=_on_picked)
+        self.push_screen(
+            FilePickerDialog(files, title="Load Program", confirm_label="Load"),
+            callback=_on_picked,
+        )
+
+    def action_boot_disk(self) -> None:
+        """Open a file picker dialog to boot from a .dsk image.
+
+        Mirrors action_open_file behavior:
+        - button opens a picker
+        - picked file is resolved from storage_dir
+        - boot is executed after successful load
+        """
+        files = sorted(p.name for p in self.storage_dir.iterdir() if p.suffix == ".dsk")
+        if not files:
+            self._log("[yellow]No .dsk files found in storage directory.[/yellow]")
+            return
+
+        def _on_picked(filename: str | None) -> None:
+            if filename is None:
+                return
+            result = self._boot_from_disk_image(self.storage_dir / filename)
+            if result.ok:
+                if result.message:
+                    self._log(result.message)
+            else:
+                self._log(f"[red]{result.message}[/red]")
+
+        self.push_screen(
+            FilePickerDialog(files, title="Boot Disk", confirm_label="Boot"),
+            callback=_on_picked,
+        )
 
     def action_assemble_code(self) -> None:
         """Assembloi ladattu koodi ja lataa se muistiin (Ctrl+B).
@@ -1403,6 +1530,7 @@ class KCPU16TUI(App[None]):
         self._log(
             "  load <filename>              Load .asm (watches for changes, auto-reassembles)"
         )
+        self._log("  boot <filename>              Load .dsk and boot from block 0")
         self._log("  asm                          Manually reassemble loaded file")
         self._log("  check                        Syntax check loaded file (no load)")
         self._log("[bold]CPU Control:[/bold]")
@@ -1518,7 +1646,9 @@ class KCPU16TUI(App[None]):
         try:
             screen_section = self.query_one("#screen-section")
             screen_section.border_subtitle = (
-                self.current_file.name if self.current_file else ""
+                self.current_file.name
+                if (self.current_file and self.is_assembled)
+                else ""
             )
         except Exception:
             pass
@@ -1578,10 +1708,40 @@ class KCPU16TUI(App[None]):
             if not source.strip():
                 self._log("[yellow]File is empty.[/yellow]")
                 return
+            self._boot_status_text = None
             segments = self.assembler.assemble(source, source_path=self.current_file)
+            bootblock_words: list[int] | None = None
+            bootblock_used_words = 0
+            bootblock_config = self.assembler.bootblock_directive
+            if bootblock_config is not None:
+                bootblock_words, bootblock_used_words = (
+                    self.assembler.build_boot_block_words(source_path=self.current_file)
+                )
             self.machine.cold_reset()
             self.machine.load_segments(segments)
             self.is_assembled = True
+            try:
+                # Keep manual Assemble in sync with auto-reload watcher.
+                self._watched_mtime = self.current_file.stat().st_mtime_ns
+            except Exception:
+                pass
+            watched_sources: dict[Path, int | None] = {}
+            if self.current_file is not None:
+                watched_sources[self.current_file] = self._watched_mtime
+            for inc in self.assembler.included_files:
+                try:
+                    watched_sources[inc] = inc.stat().st_mtime_ns
+                except Exception:
+                    watched_sources[inc] = None
+            self._watched_sources = watched_sources
+
+            includes = list(self.assembler.included_files)
+            if includes:
+                self._log(
+                    "[dim]Includes: " + ", ".join(p.name for p in includes) + "[/dim]"
+                )
+            else:
+                self._log("[dim]Includes: (none)[/dim]")
             self._build_asm_caches(segments)
             self.addr_to_line = _build_addr_to_line(source, self.assembler)
             self.dbg.snapshot_registers(self.machine.dump_registers())
@@ -1590,6 +1750,49 @@ class KCPU16TUI(App[None]):
                 f"[green]Assembled: {total_words} words in {len(segments)} "
                 f"segment(s) at 0x{self.machine.regs.pc:04X}. F7=Step, F5=Run.[/green]"
             )
+            if bootblock_config is not None and bootblock_words is not None:
+                temp_storage = BlockStorageDevice(
+                    block_size_words=self.machine.storage.block_size_words,
+                    block_count=self.machine.storage.block_count,
+                )
+                if bootblock_config.disk_path.exists():
+                    temp_storage.load_from_file(bootblock_config.disk_path)
+                if not bootblock_config.allow_overwrite and any(
+                    temp_storage.read_block(0)
+                ):
+                    raise ValueError(
+                        ".bootblock: target disk image already has a non-empty boot block; "
+                        "use overwrite=1 to replace it"
+                    )
+                temp_storage.write_block(0, bootblock_words)
+                temp_storage.save_to_file(bootblock_config.disk_path)
+                self.machine.storage.load_from_file(bootblock_config.disk_path)
+                self.current_disk_file = bootblock_config.disk_path
+                self._disk_dirty = False
+                self._update_disk_title()
+                self._log(
+                    f"[cyan].bootblock: wrote {bootblock_used_words} words to "
+                    f"{bootblock_config.disk_path.name} block 0.[/cyan]"
+                )
+                if bootblock_config.boot_after_write:
+                    self.machine.cold_reset()
+                    self.machine.load_segments(segments)
+                    self.machine.boot_from_storage()
+                    jump_info = _find_bootblock_jump_target(bootblock_words)
+                    if jump_info is None:
+                        self._boot_status_text = f"boot {bootblock_config.disk_path.name}: entry 0x{BOOT_RAM_START:04X}, no jump"
+                        self._log(
+                            f"[cyan].bootblock: booted from {bootblock_config.disk_path.name} "
+                            f"(entry PC=0x{BOOT_RAM_START:04X}, no explicit jump target found).[/cyan]"
+                        )
+                    else:
+                        mnemonic, jump_pc, jump_target = jump_info
+                        self._boot_status_text = f"boot {bootblock_config.disk_path.name}: {mnemonic}@0x{jump_pc:04X} -> 0x{jump_target:04X}"
+                        self._log(
+                            f"[cyan].bootblock: booted from {bootblock_config.disk_path.name} "
+                            f"(entry PC=0x{BOOT_RAM_START:04X}, first {mnemonic} @ 0x{jump_pc:04X} "
+                            f"-> 0x{jump_target:04X}).[/cyan]"
+                        )
             # .diskblock-direktiivi: kirjoita konekieli levyblokkiin
             blk = self.assembler.disk_block
             if blk is not None:
@@ -1609,10 +1812,14 @@ class KCPU16TUI(App[None]):
             self._exec_mode = "stopped"
             self._update_run_mode_ui()
             self._update_program_title()
-            self._refresh_all()
+            self._refresh_all(include_screen=True, force_screen=True)
         except Exception as e:
             self._log(f"[red]Assembly error: {e}[/red]")
             self.is_assembled = False
+            self._exec_mode = "stopped"
+            self._update_run_mode_ui()
+            self._update_program_title()
+            self._refresh_all(include_screen=True, force_screen=True)
 
     def _build_asm_caches(self, segments: list[tuple[int, list[int]]]) -> None:
         """Rakenna --asm-listauksen tukitiedot assembloinnin jälkeen.
@@ -1667,12 +1874,26 @@ class KCPU16TUI(App[None]):
         if not self.current_file or not self.current_file.exists():
             return
         try:
-            mtime = self.current_file.stat().st_mtime_ns
-            if self._watched_mtime is not None and mtime != self._watched_mtime:
-                self._watched_mtime = mtime
-                self._log(
-                    f"[dim]File changed: {self.current_file.name}. Reloading...[/dim]"
-                )
+            if not self._watched_sources:
+                try:
+                    self._watched_sources = {
+                        self.current_file: self.current_file.stat().st_mtime_ns
+                    }
+                except Exception:
+                    self._watched_sources = {self.current_file: None}
+
+            changed: list[Path] = []
+            for path, old_mtime in list(self._watched_sources.items()):
+                try:
+                    mtime = path.stat().st_mtime_ns
+                except Exception:
+                    mtime = None
+                if mtime != old_mtime:
+                    changed.append(path)
+
+            if changed:
+                names = ", ".join(p.name for p in changed)
+                self._log(f"[dim]File changed: {names}. Reloading...[/dim]")
                 self._do_assemble()
         except Exception:
             pass
@@ -1755,8 +1976,57 @@ class KCPU16TUI(App[None]):
                 btn_max.variant = "success"
                 btn_slow.variant = "success"
                 btn_stop.variant = "default"
+            self._set_max_stale_visual_state(self._exec_mode == "max")
             # Päivitä State-kenttä välittömästi kun suoritustila muuttuu
             self._refresh_cpu_status()
+        except Exception:
+            pass
+
+    def _set_max_stale_visual_state(self, max_mode_active: bool) -> None:
+        """Himmennä paneelit, joita ei päivitetä MAX-ajon aikana.
+
+        MAX-tilassa vain Screen-paneelia päivitetään reaaliaikaisesti,
+        joten disassembly-, flags- ja register-paneelit merkitään
+        visuaalisesti "ei reaaliaikaisiksi" himmentämällä niitä.
+        """
+        target_ids = ("#disasm-tabs", "#flags-pane", "#regs-pane")
+        for target_id in target_ids:
+            try:
+                widget = self.query_one(target_id)
+                if max_mode_active:
+                    widget.add_class("max-stale")
+                else:
+                    widget.remove_class("max-stale")
+            except Exception:
+                continue
+
+        # Tee MAX-tilassa ei-päivittyvistä paneeleista lähes taustaväriset,
+        # jotta käyttäjä näkee heti että sisältö on stale.
+        if max_mode_active:
+            for content_id in (
+                "#disasm-content",
+                "#flags-content",
+                "#cpu-content",
+                "#regs-content",
+                "#memory-view",
+                "#stack-view",
+            ):
+                self._apply_stale_snapshot(content_id)
+
+    def _apply_stale_snapshot(self, widget_id: str) -> None:
+        """Korvaa Static-widgetin sisältö himmeällä tekstisnapshotilla.
+
+        Muuntaa nykyisen renderöinnin plain-tekstiksi ja piirtää sen
+        lähes taustavärillä. Tämä tekee stale-paneelista selkeästi
+        erottuvan myös terminaaliteemoissa, joissa opacity ei toimi.
+        """
+        try:
+            widget = self.query_one(widget_id, Static)
+            renderable = widget.renderable
+            plain = (
+                renderable.plain if hasattr(renderable, "plain") else str(renderable)
+            )
+            widget.update(Text(plain, style="#2f2f2f"))
         except Exception:
             pass
 
@@ -1779,6 +2049,10 @@ class KCPU16TUI(App[None]):
 
         def _done(msg: str) -> None:
             """Kutsutaan pääsäikeessä suorituksen päättyessä."""
+            # Ignore stale callbacks from an older worker if run mode has
+            # already changed (e.g. fast -> max -> stop in quick succession).
+            if self._exec_mode != mode:
+                return
             self._exec_mode = "stopped"
             self._update_run_mode_ui()
             if msg:
@@ -1905,6 +2179,9 @@ class KCPU16TUI(App[None]):
 
         Jump target -merkit (label-nimi) näytetään ennen hyppykohdetä olevaa
         käskyriviä.
+
+        Optimointi: Disassembler-kutsut cachetan. Cache invalidoidaan ohjelman
+        latauksen yhteydessä (_do_assemble).
         """
         pc = self.machine.regs.pc
 
@@ -1937,10 +2214,16 @@ class KCPU16TUI(App[None]):
                 instr_words = [
                     self.machine.memory.read(addr + i) for i in range(1 + op_count)
                 ]
-                raw = self.disassembler.disassemble(
-                    instr_words, start_addr=addr
-                ).strip()
-                disasm_tail = raw.split(": ", 1)[1] if ": " in raw else raw
+                # Etsi cachesta ennen kutsua disassembler.disassemble()
+                cache_key = (addr, tuple(instr_words))
+                if cache_key in self._disasm_cache:
+                    disasm_tail = self._disasm_cache[cache_key]
+                else:
+                    raw = self.disassembler.disassemble(
+                        instr_words, start_addr=addr
+                    ).strip()
+                    disasm_tail = raw.split(": ", 1)[1] if ": " in raw else raw
+                    self._disasm_cache[cache_key] = disasm_tail
 
             # Skip .word 0x0000 unless near PC or on a breakpoint
             if (
@@ -2006,7 +2289,8 @@ class KCPU16TUI(App[None]):
 
             addr += 1 + op_count
 
-        self.query_one("#disasm-content", Static).update("\n".join(lines))
+        if self._w_disasm_content:
+            self._w_disasm_content.update("\n".join(lines))
 
     def _fmt_disasm_tail(self, disasm_tail: str) -> str:
         """Muotoile mnemoniikka + operandit Rich-väreillä (ilman osoite-etuliitettä)."""
@@ -2145,7 +2429,8 @@ class KCPU16TUI(App[None]):
             else:
                 lines.append(left)
 
-        self.query_one("#regs-content", Static).update("\n".join(lines))
+        if self._w_regs_content:
+            self._w_regs_content.update("\n".join(lines))
 
     def _refresh_flags(self) -> None:
         """Päivitä lippupaneeli (SR-rekisterin yksittäiset bitit).
@@ -2214,9 +2499,11 @@ class KCPU16TUI(App[None]):
             f"Uptime: {uptime_str}\n"
             f"TMR:  {tmr_str}\n"
             f"CTMR: {ctmr_str}\n"
-            f"GFX:  {gfx_str}"
+            f"GFX:  {gfx_str}\n"
+            f"Boot: {self._boot_status_text or '[dim]n/a[/]'}"
         )
-        self.query_one("#flags-content", Static).update(content)
+        if self._w_flags_content:
+            self._w_flags_content.update(content)
 
     def _refresh_cpu_status(self) -> None:
         """Päivitä CPU-tilapaneeli.
@@ -2270,6 +2557,10 @@ class KCPU16TUI(App[None]):
         Kaksoisbufferointi on käytössä vain grafiikkatiloissa B ja C.
         Tekstitilassa (A) renderöidään aina suoraan VRAMista.
 
+        Dirty-flag optimointi: Tarkista VRAM-versio (inkrementoidaan VRAM-
+        kirjoituksissa) ja GFX_MODE, jotta vältetään turhaa renderöintiä kun
+        VRAM ei ole muuttunut.
+
         Parametrit:
             force: Jos True, ohitetaan etupuskuri ja renderöidään suoraan
                    VRAMista (käytetään step- ja done-tiloissa).
@@ -2278,8 +2569,19 @@ class KCPU16TUI(App[None]):
             screen = self.machine.screen
             memory = self.machine.memory
             mode = memory.read(GFX_MODE_REG)
+            vram_version = screen.get_vram_version()
 
-            if mode in (GFX_MODE_B, GFX_MODE_C):
+            # Dirty-check: Jos VRAM ei ole muuttunut ja GFX_MODE ei muuttunut (paitsi force)
+            # ja etupuskuri on olemassa, voi hyppää renderöinnin yli.
+            if (
+                not force
+                and vram_version == self._last_vram_version
+                and mode == self._last_gfx_mode
+                and screen.has_front_buffer
+            ):
+                # VRAM ei muuttunut, käytä etupuskuria
+                rendered = screen.get_front_buffer()
+            elif mode in (GFX_MODE_B, GFX_MODE_C):
                 # Grafiikkatilat B/C: kaksoisbufferointi käytössä.
                 # Etupuskuri renderöidään atomisesti CPU._write_word():ssä kun
                 # GFX_FLIP_REG kirjoitetaan — ei täältä, jotta vältytään race
@@ -2294,9 +2596,14 @@ class KCPU16TUI(App[None]):
                 # Tekstitila A: ei kaksoisbufferointia, renderöi aina suoraan VRAMista
                 rendered = screen.render_auto(memory)
 
+            # Päivitä tracked versiot (dirty-checkia varten seuraavaa kutsua)
+            self._last_vram_version = vram_version
+            self._last_gfx_mode = mode
+
             if rendered != self._last_screen_render:
                 self._last_screen_render = rendered
-                self.query_one("#screen-view-solo", Static).update(rendered)
+                if self._w_screen_view:
+                    self._w_screen_view.update(rendered)
         except Exception:
             pass
 
@@ -2334,7 +2641,8 @@ class KCPU16TUI(App[None]):
                 f"[cyan]{row_addr:04X}[/]: "
                 f"{' '.join(hex_parts)}  [dim]{''.join(ascii_parts)}[/]"
             )
-        self.query_one("#memory-view", Static).update("\n".join(lines))
+        if self._w_memory_view:
+            self._w_memory_view.update("\n".join(lines))
 
     def _refresh_stack(self) -> None:
         """Päivitä Stack-välilehden pinonäkymä.
@@ -2351,7 +2659,8 @@ class KCPU16TUI(App[None]):
             word = self.machine.memory.read(addr)
             marker = "[yellow]\u2192[/] " if i == 0 else "  "
             lines.append(f"{marker}[cyan]{addr:04X}[/]: 0x{word:04X}  ({word})")
-        self.query_one("#stack-view", Static).update("\n".join(lines))
+        if self._w_stack_view:
+            self._w_stack_view.update("\n".join(lines))
 
     # ------------------------------------------------------------------
     def _log_step_info(self) -> None:
@@ -2487,6 +2796,7 @@ class KCPU16TUI(App[None]):
         Komennot:
             --- Tiedostot & assembly ---
             load <path>                  -- Avaa .asm tiedosto ja assembloi
+            boot <path>                  -- Lataa .dsk ja boottaa blokista 0
             asm                          -- Käännä uudelleen ladattu tiedosto
             check                        -- Tarkista syntaksi ilman latausta
             --- CPU-ohjaus ---
@@ -2533,6 +2843,16 @@ class KCPU16TUI(App[None]):
                     path = self.code_dir / path
                 self._do_open(path)
                 return CommandResult(True, "")
+
+            if op == "boot":
+                if not args:
+                    return CommandResult(False, "Usage: boot <filename>")
+                path = Path(" ".join(args))
+                if not path.suffix:
+                    path = path.with_suffix(".dsk")
+                if not path.is_absolute():
+                    path = self.storage_dir / path
+                return self._boot_from_disk_image(path)
 
             if op == "asm":
                 self._do_assemble()
@@ -2708,6 +3028,44 @@ class KCPU16TUI(App[None]):
         except Exception as e:
             return CommandResult(False, f"[red]Syntax error: {e}[/red]")
 
+    def _boot_from_disk_image(self, path: Path) -> CommandResult:
+        """Load a .dsk image and boot from storage block 0."""
+        if not path.exists():
+            return CommandResult(False, f"File not found: {path}")
+
+        self.workers.cancel_all()
+        self._exec_mode = "stopped"
+        self._update_run_mode_ui()
+
+        self.machine.storage.load_from_file(path)
+        self.current_disk_file = path
+        self._disk_dirty = False
+
+        # Disk-booted program is no longer tied to currently opened .asm source.
+        self.current_file = None
+        self.is_assembled = False
+        self.addr_to_line = {}
+        self._asm_addr_to_src = {}
+        self._asm_addr_to_label = {}
+        self._asm_jump_targets = {}
+        self._disasm_cache = {}
+
+        self.machine.cold_reset()
+        self.machine.boot_from_storage()
+        self.dbg.snapshot_registers(self.machine.dump_registers())
+
+        self._boot_status_text = f"boot {path.name}: entry 0x{BOOT_RAM_START:04X}"
+        self._update_program_title()
+        self._update_disk_title()
+        self._exec_mode = "fast"
+        self._update_run_mode_ui()
+        self._refresh_all(include_screen=True, force_screen=True)
+        self._cpu_run_worker("fast")
+        return CommandResult(
+            True,
+            f"[green]Booted from {path.name}. Running fast... (F5/F8 to stop)[/green]",
+        )
+
     def _format_hex_dump(self, words: list[int], base_addr: int) -> str:
         """Muotoile sanalista hex-dumpiksi (8 sanaa/rivi)."""
         lines: list[str] = []
@@ -2880,11 +3238,16 @@ class KCPU16TUI(App[None]):
             # Normaali reset: VRAM + muisti + CPU. Storage säilyy.
             self.machine.cold_reset()
             self.is_assembled = False
+            self.current_disk_file = None
+            self._disk_dirty = False
             self.addr_to_line = {}
             self._asm_addr_to_src = {}
             self._asm_addr_to_label = {}
             self._asm_jump_targets = {}
+            self._disasm_cache = {}
             self.dbg.snapshot_registers(self.machine.dump_registers())
+            self._update_program_title()
+            self._update_disk_title()
             return CommandResult(
                 True, "[green]Reset (memory + CPU). Storage intact.[/green]"
             )
@@ -2893,12 +3256,15 @@ class KCPU16TUI(App[None]):
             self.machine.cold_reset()
             self.machine.storage.reset()
             self.is_assembled = False
+            self.current_disk_file = None
             self.addr_to_line = {}
             self._asm_addr_to_src = {}
             self._asm_addr_to_label = {}
             self._asm_jump_targets = {}
+            self._disasm_cache = {}
             self.dbg.snapshot_registers(self.machine.dump_registers())
             self._disk_dirty = False
+            self._update_program_title()
             self._update_disk_title()
             return CommandResult(
                 True, "[green]Deep reset (memory + CPU + storage).[/green]"
@@ -2921,8 +3287,13 @@ class KCPU16TUI(App[None]):
         Tukee Rich-markupia (esim. [bold], [red], [dim]).
         """
         try:
-            self.query_one("#output-view", RichLog).write(message)
-            self._output_buffer.append(_RICH_MARKUP_RE.sub("", message))
+            formatted = message
+            if message.strip():
+                ts = time.strftime("%H:%M:%S")
+                formatted = f"[dim][{ts}][/dim] {message}"
+
+            self.query_one("#output-view", RichLog).write(formatted)
+            self._output_buffer.append(_RICH_MARKUP_RE.sub("", formatted))
         except Exception:
             pass
 

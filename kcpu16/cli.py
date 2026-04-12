@@ -220,7 +220,8 @@ def _run_test(path: Path) -> int:
     """
     from .testrunner import run_test
 
-    return run_test(path)
+    passed, total = run_test(path)
+    return 0 if passed == total else 1
 
 
 def _run_test_all(test_dir: Path) -> int:

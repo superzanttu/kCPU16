@@ -39,6 +39,8 @@ SYNTAKSI:
   - .inject_key KOODI (esim. .inject_key 0x41, simuloi A-painallus; testaukseen)
   - .inject_key_release KOODI (esim. .inject_key_release 0x41, simuloi A-vapautus; testaukseen)
   - .diskblock N (esim. .diskblock 0, tallenna konekieli levyblokkiin N)
+    - .bootblock "LEVYKUVA", overwrite=0|1, boot=0|1 (bootsektoriksi kirjoitettava osuus)
+    - .endbootblock (paattaa .bootblock-osuuden)
   - .include "TIEDOSTO" tai .include 'TIEDOSTO' (liitä toinen asm-tiedosto tähän
               kohtaan; polku suhteessa nykyiseen tiedostoon; silmukkasuojaus)
 
@@ -82,6 +84,7 @@ VRAM_DATA-symboli osoittaa 0xF800.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 
 from .constants import ARCH_SYMBOLS, BOOT_RAM_START, STORAGE_BLOCK_SIZE, WORD_MASK
@@ -132,6 +135,50 @@ _DEPRECATED_MNEMONICS: frozenset[str] = frozenset(
 )
 
 
+@dataclass(slots=True, frozen=True)
+class _ParsedLine:
+    """Esiparsittu lähderivi - vältä redundanttia split/strip/lower toimintoa."""
+
+    raw: str  # Alkuperäinen rivi
+    stripped: str  # Kommentit poistettu, välilyönnit trimmattu
+    lower: str  # stripped.lower()
+
+    @staticmethod
+    def parse(raw: str) -> "_ParsedLine":
+        """Parsii lähdekoodi-rivin yksinkertaisesti."""
+        stripped = raw.split(";", 1)[0].strip()
+        return _ParsedLine(raw=raw, stripped=stripped, lower=stripped.lower())
+
+
+def _parse_all_lines(source: str) -> list[_ParsedLine]:
+    """Rakenna kaikki rivit ParsedLine-muotoon kerralla.Tämä vähentää moninkertaista split/strip/lower kutsua pass-metodeissa."""
+    return [_ParsedLine.parse(line) for line in source.splitlines()]
+
+
+@dataclass(slots=True, frozen=True)
+class BootBlockDirective:
+    """Bootblock-osuuden levykuva-asetukset."""
+
+    disk_path: Path
+    allow_overwrite: bool
+    boot_after_write: bool
+
+
+def _parse_bool_option(value: str, option_name: str) -> bool:
+    """Parsi direktiivin totuusarvo-optio merkkijonosta."""
+    normalized = value.strip().lower()
+    truthy = {"1", "true", "yes", "on"}
+    falsy = {"0", "false", "no", "off"}
+    if normalized in truthy:
+        return True
+    if normalized in falsy:
+        return False
+    raise ValueError(
+        f".bootblock: option '{option_name}' must be one of "
+        f"{sorted(truthy | falsy)}, got {value!r}"
+    )
+
+
 class Assembler:
     """
     kCPU16 Assembler - muuntaa assembly-koodin konekieleksi.
@@ -167,6 +214,21 @@ class Assembler:
         """Palattaa label -> osoite -hakutaulukon assemble()-kutsun jalkeen."""
         return self._labels
 
+    @property
+    def included_files(self) -> tuple[Path, ...]:
+        """Palauttaa assemble()-kutsussa laajennetut .include-tiedostot."""
+        return tuple(self._included_files)
+
+    @property
+    def bootblock_directive(self) -> BootBlockDirective | None:
+        """Palauttaa .bootblock-direktiivin asetukset tai None."""
+        return self._bootblock_directive
+
+    @property
+    def has_bootblock(self) -> bool:
+        """Kertoo onko lähteessä .bootblock-osuus."""
+        return self._bootblock_directive is not None and bool(self._bootblock_source)
+
     def assemble(
         self,
         source: str,
@@ -193,13 +255,22 @@ class Assembler:
             [(512, [1, 0, 10, 68])]
         """
         self._disk_block: int | None = None
+        self._bootblock_directive: BootBlockDirective | None = None
+        self._bootblock_source: str | None = None
         self._source_map: list[tuple[str, int]] = []  # (lahderivi, abs_osoite)
         self._labels: dict[str, int] = {}
+        self._included_files: list[Path] = []
         self._current_lineno: int = 0  # Nykyinen rivinumero virheilmoituksia varten
         self._current_line: str = ""  # Nykyinen lähderivi virheilmoituksia varten
+        source = self._extract_bootblock_section(source, source_path)
         # Esikäsittely: laajenna .include-direktiivit rekursiivisesti
         base_dir = source_path.parent if source_path is not None else None
-        source = self._expand_includes(source, base_dir, frozenset())
+        source = self._expand_includes(
+            source,
+            base_dir,
+            frozenset(),
+            included_paths=self._included_files,
+        )
         try:
             # Pass 0: Makrojen ekspansointi, .origin ja .diskblock käsittely
             expanded_source, start_addr, user_constants = (
@@ -230,6 +301,148 @@ class Assembler:
         # Tarkista ettei segmentit mene päällekkäin
         self._check_segment_overlaps(segments)
         return segments
+
+    def build_boot_block_words(
+        self, source_path: Path | None = None
+    ) -> tuple[list[int], int]:
+        """Assembloi .bootblock-osuuden levykuvan bootsektoriksi.
+
+        Returns:
+            (boot_block_words, used_word_count)
+        """
+        if self._bootblock_directive is None or not self._bootblock_source:
+            raise ValueError(".bootblock: no bootblock section defined")
+
+        boot_asm = Assembler()
+        segments = boot_asm.assemble(
+            self._bootblock_source,
+            start_addr=BOOT_RAM_START,
+            source_path=source_path,
+        )
+
+        boot_words = [0] * STORAGE_BLOCK_SIZE
+        used_words = 0
+        boot_end = BOOT_RAM_START + STORAGE_BLOCK_SIZE - 1
+
+        for seg_start, words in segments:
+            if not words:
+                continue
+            seg_end = seg_start + len(words) - 1
+            if seg_start < BOOT_RAM_START or seg_end > boot_end:
+                raise ValueError(
+                    ".bootblock: section must assemble entirely into boot area "
+                    f"0x{BOOT_RAM_START:04X}-0x{boot_end:04X}, got "
+                    f"0x{seg_start:04X}-0x{seg_end:04X}"
+                )
+            offset = seg_start - BOOT_RAM_START
+            boot_words[offset : offset + len(words)] = [w & WORD_MASK for w in words]
+            used_words += len(words)
+
+        return boot_words, used_words
+
+    def _extract_bootblock_section(self, source: str, source_path: Path | None) -> str:
+        """Irrota .bootblock-osuuden metatiedot normaalista ohjelmasta.
+
+        .bootblock-osuus assembloidaan erikseen levykuvan bootsektoriksi eikä sitä
+        sisällytetä tavalliseen RAM-ohjelmaan. Tällöin bootloader voi hypätä
+        suoraan varsinaisen ohjelman entrypointiin ilman, että sama bootkoodi
+        on myös RAM-ohjelman alussa.
+        """
+        lines = source.splitlines()
+        output_lines: list[str] = []
+        boot_lines: list[str] = []
+        in_bootblock = False
+
+        for lineno, line in enumerate(lines, start=1):
+            self._current_lineno = lineno
+            self._current_line = line
+            stripped = line.split(";", 1)[0].strip()
+            lower = stripped.lower()
+
+            if lower == ".endbootblock" or lower.startswith(".endbootblock "):
+                if not in_bootblock:
+                    raise ValueError(".endbootblock without matching .bootblock")
+                in_bootblock = False
+                continue
+
+            if lower == ".bootblock" or lower.startswith(".bootblock "):
+                if self._bootblock_directive is not None:
+                    raise ValueError("Only one .bootblock section is allowed")
+                self._bootblock_directive = self._parse_bootblock_directive(
+                    stripped, source_path
+                )
+                in_bootblock = True
+                continue
+
+            if in_bootblock:
+                boot_lines.append(line)
+                continue
+            output_lines.append(line)
+
+        if in_bootblock:
+            raise ValueError(".bootblock section is missing matching .endbootblock")
+        if self._bootblock_directive is not None:
+            boot_source = "\n".join(boot_lines).strip()
+            if not boot_source:
+                raise ValueError(".bootblock section is empty")
+            self._bootblock_source = boot_source
+
+        return "\n".join(output_lines)
+
+    def _parse_bootblock_directive(
+        self, directive_line: str, source_path: Path | None
+    ) -> BootBlockDirective:
+        """Parsi .bootblock-direktiivin asetukset."""
+        rest = directive_line[len(".bootblock") :].strip()
+        if len(rest) < 2 or rest[0] not in ('"', "'"):
+            raise ValueError(
+                ".bootblock: disk image path must be quoted, for example "
+                '.bootblock "storage/boot.dsk", overwrite=1, boot=0'
+            )
+
+        quote = rest[0]
+        end = rest.find(quote, 1)
+        if end == -1:
+            raise ValueError(".bootblock: missing closing quote for disk image path")
+
+        filename = rest[1:end].strip()
+        if not filename:
+            raise ValueError(".bootblock: disk image path cannot be empty")
+
+        option_text = rest[end + 1 :].strip()
+        if option_text.startswith(","):
+            option_text = option_text[1:].strip()
+
+        allow_overwrite = False
+        boot_after_write = False
+        if option_text:
+            normalized = option_text.replace(",", " ")
+            for token in normalized.split():
+                if "=" not in token:
+                    raise ValueError(
+                        ".bootblock: options must use key=value syntax "
+                        f"(got {token!r})"
+                    )
+                key, value = token.split("=", 1)
+                key = key.strip().lower()
+                value = value.strip()
+                if key == "overwrite":
+                    allow_overwrite = _parse_bool_option(value, key)
+                elif key == "boot":
+                    boot_after_write = _parse_bool_option(value, key)
+                else:
+                    raise ValueError(f".bootblock: unknown option {key!r}")
+
+        disk_path = Path(filename)
+        if not disk_path.is_absolute() and source_path is not None:
+            disk_path = source_path.parent / disk_path
+        disk_path = disk_path.resolve()
+
+        return BootBlockDirective(
+            disk_path=disk_path,
+            allow_overwrite=allow_overwrite,
+            boot_after_write=boot_after_write,
+        )
 
     @staticmethod
     def _collect_defined_symbols(source: str) -> set[str]:
@@ -277,6 +490,7 @@ class Assembler:
         base_dir: Path | None,
         include_stack: frozenset[Path],
         known_symbols: set[str] | None = None,
+        included_paths: list[Path] | None = None,
     ) -> str:
         """
         Laajenna .include-direktiivit rekursiivisesti ennen kaantamista.
@@ -341,6 +555,8 @@ class Assembler:
                 if not inc_path.exists():
                     raise ValueError(f".include: tiedostoa ei löydy: '{inc_path}'")
                 inc_source = inc_path.read_text(encoding="utf-8")
+                if included_paths is not None and inc_path not in included_paths:
+                    included_paths.append(inc_path)
 
                 # Rekursiivinen laajennus liitettavaan tiedostoon (kayttaa samaa
                 # known_symbols-joukkoa, joten myos sen alaincludet tarkistetaan)
@@ -349,7 +565,11 @@ class Assembler:
                 # (laajennetaan ensin rekursiivisesti, jotta saadaan myos
                 # alaincludejen symbolit tarkistettua)
                 inc_expanded = Assembler._expand_includes(
-                    inc_source, inc_path.parent, new_stack, known_symbols=None
+                    inc_source,
+                    inc_path.parent,
+                    new_stack,
+                    known_symbols=None,
+                    included_paths=included_paths,
                 )
                 # Keraa kaikki symbolit laajennetusta sisallosta (sis. alaincludet)
                 inc_symbols = Assembler._collect_defined_symbols(inc_expanded)
@@ -371,7 +591,10 @@ class Assembler:
     @staticmethod
     def _check_segment_overlaps(segments: list[tuple[int, list[int]]]) -> None:
         """
-        Tarkista ettei segmentit mene päällekkäin muistissa.
+        Tarkista ettei segmentit mene päällekkäin muistissa (optimoitu O(n log n)).
+
+        Algoritmi: lajittele segmentit alkuosoitteen mukaan, tarkista lineaarisesti
+        että jokaisen segmentin loppu ei ylety seuraavan segmentin alkuun.
 
         Args:
             segments: Lista (aloitusosoite, sanat) -pareista
@@ -379,17 +602,23 @@ class Assembler:
         Raises:
             ValueError: Jos kaksi segmenttia kayttaa samaa muistiosoitetta
         """
-        ranges: list[tuple[int, int]] = [
-            (start, start + len(words) - 1) for start, words in segments if words
+        ranges: list[tuple[int, int, int]] = [
+            (start, start + len(words) - 1, idx)
+            for idx, (start, words) in enumerate(segments)
+            if words
         ]
-        for i, (a_start, a_end) in enumerate(ranges):
-            for b_start, b_end in ranges[i + 1 :]:
-                if a_start <= b_end and b_start <= a_end:
-                    raise ValueError(
-                        f"Segmentit menevät päällekkäin muistissa: "
-                        f"0x{a_start:04X}–0x{a_end:04X} ja "
-                        f"0x{b_start:04X}–0x{b_end:04X}"
-                    )
+        # Lajittele segmentit alkuosoitteen perusteella (O(n log n))
+        ranges.sort(key=lambda x: x[0])
+        # Tarkista lineaarisesti: jos a_end >= b_start, osuma löytyi (O(n))
+        for i in range(len(ranges) - 1):
+            a_start, a_end, a_idx = ranges[i]
+            b_start, b_end, b_idx = ranges[i + 1]
+            if a_end >= b_start:
+                raise ValueError(
+                    f"Segmentit {a_idx} ja {b_idx} menevät päällekkäin muistissa: "
+                    f"0x{a_start:04X}–0x{a_end:04X} ja "
+                    f"0x{b_start:04X}–0x{b_end:04X}"
+                )
 
     def _pass0_expand_macros_and_origin(
         self, source: str, start_addr: int

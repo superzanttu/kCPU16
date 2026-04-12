@@ -832,8 +832,8 @@ Uptime lasketaan `simulated_time_us ÷ 1 000 000`. Arvo kasvaa yhdellä sekunnil
 # 13. Tallennuslaitekirjasto (lib-disk.asm)
 
 `code/lib-disk.asm` toteuttaa yksinkertaisen tiedostojärjestelmän kCPU16:n blokkipohjaiselle
-tallennuslaitteelle. Kirjasto tarjoaa julkisen rajapinnan tiedostojen luomiseen, kirjoittamiseen,
-lukemiseen, poistamiseen, listaamiseen ja tietojen hakemiseen.
+tallennuslaitteelle. Kirjasto tarjoaa julkisen rajapinnan hakemistojen ja tiedostojen luomiseen,
+kirjoittamiseen, lukemiseen, poistamiseen, listaamiseen, eheyden tarkistamiseen ja tietojen hakemiseen.
 
 ## 13.1 Tiedostojärjestelmän rakenne
 
@@ -858,9 +858,9 @@ Kukin sana FAT:ssa kuvaa yhden blokin tilan:
 
 ### Hakemistomerkintä (blokki 2, 32 sanaa/merkintä)
 
-| Offset | Kuvaus                                             |
-| ------ | -------------------------------------------------- |
-| 0      | Status: 0 = vapaa, 1 = aktiivinen                  |
+| Offset | Kuvaus                                              |
+| ------ | --------------------------------------------------- |
+| 0      | Status: 0 = vapaa, 1 = tiedosto, 2 = hakemisto     |
 | 1–16   | Tiedostonimi (null-terminoitu, max 16 sanaa)       |
 | 17     | Tiedoston koko sanoina                             |
 | 18     | Luontivuosi                                        |
@@ -899,6 +899,15 @@ Sisään: R0 = osoitin tiedostonimeen (null-terminoitu merkkijono)
 Ulos:   R0 = DISK_OK              onnistuminen
         R0 = DISK_ERR_NO_SPACE    hakemisto täynnä
         R0 = merkintäindeksi      nimi jo olemassa
+```
+
+### disk_mkdir — Luo uusi hakemisto
+
+```
+Sisään: R0 = osoitin hakemistonimeen/polkuun (null-terminoitu merkkijono)
+Ulos:   R0 = DISK_OK              onnistuminen
+        R0 = DISK_ERR_EXISTS      nimi jo olemassa
+        R0 = DISK_ERR_DIR_FULL    hakemisto täynnä
 ```
 
 ### disk_write — Kirjoita data tiedostoon
@@ -958,12 +967,20 @@ Täyttää puskurin metatiedoilla:
 | 5      | Ensimmäinen blokki-indeksi |
 | 6–7    | Varaus (0)                 |
 
-### disk_list — Listaa tiedostot
+### disk_list — Listaa tiedostot ja hakemistot
 
 ```
 Sisään: R0 = osoitin puskuriin (17 sanaa per tiedosto: 16 nimi + 1 koko)
         R1 = puskurin maksimikoko sanoina
 Ulos:   R0 = löydettyjen tiedostojen lukumäärä
+```
+
+### disk_check — Tarkista tiedostojärjestelmän eheys
+
+```
+Sisään: (ei parametreja)
+Ulos:   R0 = DISK_OK              eheä tiedostojärjestelmä
+        R0 = DISK_ERR_RANGE       havaittu epäjohdonmukaisuus
 ```
 
 ### disk_find — Etsi tiedosto nimellä

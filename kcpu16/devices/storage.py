@@ -32,6 +32,7 @@ Tallennuslaitteen rakenne:
 """
 
 import json
+import struct
 import zlib
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -90,6 +91,9 @@ class BlockStorageDevice:
         if not self.blocks:
             # Luo block_count blokkia, joissa kussakin block_size_words nollaa
             self.blocks = [[0] * self.block_size_words for _ in range(self.block_count)]
+
+        # Esikäännetty struct-formaatti CRC-laskentaa varten (big-endian unsigned short)
+        self._block_pack_fmt: str = f">{self.block_size_words}H"
 
     @property
     def total_words(self) -> int:
@@ -236,9 +240,10 @@ class BlockStorageDevice:
             path = path.with_suffix(".dsk")
         device_crc = 0
         blocks_data: list[dict] = []
+        pack_fmt = self._block_pack_fmt
         for i, block in enumerate(self.blocks):
             words = [w & WORD_MASK for w in block]
-            raw = b"".join(w.to_bytes(2, "big") for w in words)
+            raw = struct.pack(pack_fmt, *words)
             block_crc = zlib.crc32(raw) & 0xFFFFFFFF
             device_crc = zlib.crc32(raw, device_crc) & 0xFFFFFFFF
             first = words[0]
@@ -317,7 +322,7 @@ class BlockStorageDevice:
                     raise ValueError(
                         f"Blokki {i}: {len(words)} sanaa, odotettu {self.block_size_words}"
                     )
-            raw = b"".join((w & WORD_MASK).to_bytes(2, "big") for w in words)
+            raw = struct.pack(self._block_pack_fmt, *(w & WORD_MASK for w in words))
             block_crc = zlib.crc32(raw) & 0xFFFFFFFF
             expected_block = int(entry["checksum"], 16)
             if block_crc != expected_block:

@@ -101,6 +101,10 @@ class ScreenDevice:
     _front_rendered: str = field(default="", init=False, repr=False)
     _has_front_buffer: bool = field(default=False, init=False, repr=False)
 
+    # VRAM dirty-flag: version counter joka inkrementoidaan aina kun VRAM kirjoitetaan.
+    # TUI voi näin välttyä turhilta renderöinneiltä vertaamalla versiota edelliseen.
+    _vram_version: int = field(default=0, init=False, repr=False)
+
     def set_front_buffer(self, rendered: str) -> None:
         """Tallenna renderöintitulos etupuskuriin (kutsutaan flip-rekisterin kirjoituksessa)."""
         self._front_rendered = rendered
@@ -119,6 +123,18 @@ class ScreenDevice:
         """Tyhjennä etupuskuri (kutsutaan resetissä)."""
         self._front_rendered = ""
         self._has_front_buffer = False
+
+    def reset_vram_version(self) -> None:
+        """Nollaa VRAM-versio (kutsutaan cold_reset/reset_for_test:ssä)."""
+        self._vram_version = 0
+
+    def mark_vram_dirty(self) -> None:
+        """Merkitse VRAM muuttuneeksi (kutsutaan VRAM-kirjoituksessa)."""
+        self._vram_version = (self._vram_version + 1) & 0x7FFFFFFF  # prevent overflow
+
+    def get_vram_version(self) -> int:
+        """Palauta nykyisen VRAM-version (käytetään dirty-checkissa)."""
+        return self._vram_version
 
     def render_text(self, memory: Memory) -> str:
         """
