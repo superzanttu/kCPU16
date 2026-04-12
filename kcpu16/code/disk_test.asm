@@ -378,4 +378,8 @@ str_done:
 
 ; =============================================================================
 ; Tämä tiedosto on ensisijaisesti interaktiivinen demo eikä testrunner-testi.
+; Kevyet tarkistukset pidetään mukana, jotta perustoiminta voidaan varmistaa
+; myös automaattisesti.
 ; =============================================================================
+.expect_storage  0x0103, 0x0000   ; poistetun tiedoston datablokki vapautettu
+.expect_storage  0x0200, 0x0002   ; hakemistomerkintä 0 = hakemisto (status 2)

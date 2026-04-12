@@ -660,9 +660,8 @@ _dc_free_found:
         ; Kopioi nimi kenttään (offset 1)
         READ  R1, 1
         ADD   R0, R1              ; R0 = &entry.name
-        CPY   R3, R0              ; R3 = kohde
+        CPY   R1, R0              ; R1 = kohde
         CPY   R0, R9              ; R0 = lähde (haettu nimi)
-        CPY   R1, R3              ; R1 = kohde
         READ  R2, DISK_NAME_WORDS
         CALL  _disk_str_copy
 
@@ -779,9 +778,8 @@ _dm_free_found:
         ; Kopioi nimi kenttään (offset 1)
         READ  R1, 1
         ADD   R0, R1              ; R0 = &entry.name
-        CPY   R3, R0              ; R3 = kohde
+        CPY   R1, R0              ; R1 = kohde
         CPY   R0, R9              ; R0 = lähde
-        CPY   R1, R3              ; R1 = kohde
         READ  R2, DISK_NAME_WORDS
         CALL  _disk_str_copy
 
