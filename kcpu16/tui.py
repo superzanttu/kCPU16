@@ -1626,6 +1626,11 @@ class KCPU16TUI(App[None]):
             self.machine.cold_reset()
             self.machine.load_segments(segments)
             self.is_assembled = True
+            try:
+                # Keep manual Assemble in sync with auto-reload watcher.
+                self._watched_mtime = self.current_file.stat().st_mtime_ns
+            except Exception:
+                pass
             self._build_asm_caches(segments)
             self.addr_to_line = _build_addr_to_line(source, self.assembler)
             self.dbg.snapshot_registers(self.machine.dump_registers())
@@ -1653,10 +1658,14 @@ class KCPU16TUI(App[None]):
             self._exec_mode = "stopped"
             self._update_run_mode_ui()
             self._update_program_title()
-            self._refresh_all()
+            self._refresh_all(include_screen=True, force_screen=True)
         except Exception as e:
             self._log(f"[red]Assembly error: {e}[/red]")
             self.is_assembled = False
+            self._exec_mode = "stopped"
+            self._update_run_mode_ui()
+            self._update_program_title()
+            self._refresh_all(include_screen=True, force_screen=True)
 
     def _build_asm_caches(self, segments: list[tuple[int, list[int]]]) -> None:
         """Rakenna --asm-listauksen tukitiedot assembloinnin jälkeen.
