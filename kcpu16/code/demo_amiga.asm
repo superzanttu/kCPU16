@@ -101,62 +101,62 @@ ws_done:
 ; ALIOHJELMA: draw_border
 ; =============================================================================
 ; Piirtää vilkkuvan kehyksen blink_flag:n mukaan.
-; Näkyvä (=1): kehys näkyvä ("#" merkeillä)
-; Piilotettu (=0): kehys piilossa (välilyönnein)
-; Käyttää: R0, R1, R2, R3, R4, R5, R8, R12
+; Näkyvä (=1): kehys "█" merkeillä, piilossa (=0): välilyönnit
+;
+; VRAM-osoitteet:
+;   Rivi 0:    0xF800 – 0xF84F  (80 sanaa)
+;   Rivit 22-23: 0xFEE0 – 0xFF7F  (160 sanaa)
+;     Rivi 22: $F800 + 22*80 = $FEE0
+;     Rivi 23: $F800 + 23*80 = $FF30
+;
+; Käyttää: R0, R1, R8
+; Pysyvät vakiot: R2=0x0020, R3=1, R4=0x01DB, R12=0
 ; =============================================================================
 draw_border:
         READ  R0, [blink_flag]
-        CMP   R0, 1
-        JZ    db_show
-        
-db_hide:
-        ; Täytä rivit 0 ja 22-23 välilyönnein
-        ; Rivi 0: $F800 - $F84F (80 sanaa)
-        READ  R8, 0xF800
-        READ  R1, 80
-db_hide_top:
-        STORE [R8], R2            ; R2 = 0x0020 (välilyönti)
-        ADD   R8, R3
-        SUB   R1, R3
-        CMP   R1, R12
-        JGT   db_hide_top
-        
-        ; Rivit 22-23
-        READ  R8, 0xFF00          ; rivi 22
-        READ  R1, 160             ; 2 riviä * 80
-db_hide_bottom:
-        STORE [R8], R2
-        ADD   R8, R3
-        SUB   R1, R3
-        CMP   R1, R12
-        JGT   db_hide_bottom
-        
-        JUMP  db_done
-        
+        CMP   R0, R12
+        JZ    db_hide
+
 db_show:
-        ; Piirtää kehyksen "#" merkeillä
-        ; Rivi 0: 80 × "#"
+        ; Rivi 0: kirjoita 80 × "█" osoitteisiin $F800–$F84F
         READ  R8, 0xF800
-        READ  R1, 80
+        READ  R1, 0xF850          ; loppuosoite (eksklusiivinen)
 db_show_top:
-        STORE [R8], R4            ; R4 = 0x0123 ("#" punainen)
-        ADD   R8, R3
-        SUB   R1, R3
-        CMP   R1, R12
-        JGT   db_show_top
-        
-        ; Rivi 22-23: 80 × "#" (2 riviä)
-        READ  R8, 0xFF00
-        READ  R1, 160
-db_show_bottom:
         STORE [R8], R4
         ADD   R8, R3
-        SUB   R1, R3
-        CMP   R1, R12
-        JGT   db_show_bottom
-        
-db_done:
+        CMP   R8, R1
+        JLT   db_show_top
+
+        ; Rivit 22–23: kirjoita 160 × "█" osoitteisiin $FEE0–$FF7F
+        READ  R8, 0xFEE0
+        READ  R1, 0xFF80          ; loppuosoite
+db_show_bot:
+        STORE [R8], R4
+        ADD   R8, R3
+        CMP   R8, R1
+        JLT   db_show_bot
+
+        RET
+
+db_hide:
+        ; Rivi 0: kirjoita 80 × välilyöntiä
+        READ  R8, 0xF800
+        READ  R1, 0xF850
+db_hide_top:
+        STORE [R8], R2
+        ADD   R8, R3
+        CMP   R8, R1
+        JLT   db_hide_top
+
+        ; Rivit 22–23: kirjoita 160 × välilyöntiä
+        READ  R8, 0xFEE0
+        READ  R1, 0xFF80
+db_hide_bot:
+        STORE [R8], R2
+        ADD   R8, R3
+        CMP   R8, R1
+        JLT   db_hide_bot
+
         RET
 
 ; =============================================================================

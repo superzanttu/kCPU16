@@ -3182,8 +3182,13 @@ class KCPU16TUI(App[None]):
         Tukee Rich-markupia (esim. [bold], [red], [dim]).
         """
         try:
-            self.query_one("#output-view", RichLog).write(message)
-            self._output_buffer.append(_RICH_MARKUP_RE.sub("", message))
+            formatted = message
+            if message.strip():
+                ts = time.strftime("%H:%M:%S")
+                formatted = f"[dim][{ts}][/dim] {message}"
+
+            self.query_one("#output-view", RichLog).write(formatted)
+            self._output_buffer.append(_RICH_MARKUP_RE.sub("", formatted))
         except Exception:
             pass
 

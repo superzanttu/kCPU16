@@ -138,7 +138,10 @@ Tehtävät on merkitty hakasulkeilla, ja niiden tilaa voidaan päivittää seura
 	- Toteutus: `_cpu_run_worker()`-metodin `_done()` ohittaa vanhentuneet callbackit, jos `_exec_mode` on jo vaihtunut.
 
 ## Ryhmä G: Sekalaista
-- [ ] Lisää Output-näytön tulosteisiin aikaleima (HH:MM:SS), jotta käyttäjät näkevät milloin kukin tapahtuma on tapahtunut. Tämä auttaa erityisesti debuggaustilanteissa, joissa tapahtumien järjestys ja ajoitus ovat tärkeitä.
+- [X] Lisää Output-näytön tulosteisiin aikaleima (HH:MM:SS), jotta käyttäjät näkevät milloin kukin tapahtuma on tapahtunut. Tämä auttaa erityisesti debuggaustilanteissa, joissa tapahtumien järjestys ja ajoitus ovat tärkeitä.
+	- Toteutus: `tui.py` `_log()` lisää ei-tyhjiin lokiviesteihin automaattisen `[HH:MM:SS]`-prefixin.
+	- Huomio: tyhjät erotinrivit säilytetään tyhjinä luettavuuden vuoksi.
+	- Varmennus: kohdetesti + koko testisuite PASS (154/154).
 
 
 ### Ryhmä Ö: Viimeiset tehtävät
@@ -149,6 +152,8 @@ Näitä tehtäviä ei saa tehdä ennen kuin kaikki muut tehtävät on suoritettu
 - [ ] Analysoi projektin commit-historia ja dokumentoi kaikki merkittävät muutokset, bugikorjaukset, optimoinnit ja ominaisuuksien lisäykset. Tämä auttaa ymmärtämään projektin kehitystä ja antaa kontekstia nykyiselle tilalle. Lisää nämä tiedot todo.md-tiedoston Valmiit tehtävät -kappaleeseen, ja varmista että ne ovat selkeästi esitettynä ja helposti luettavissa. Lisää ne kronologisessa järjestyksessä suhteessa todo.md-tiedostossa jo oleviin tehtäviin, jotta lukija voi seurata projektin kehitystä vaihe vaiheelta.
 - [ ] Tarkista että Valmiit tehtävät -kappaleessa kaikilla tehtävillä on kaikissa sarakkeissa tekstiä (Kuvaus, Toteutus, Dokumentointi, Linkit, Huomautukset). Jos jokin sarake on tyhjä, täytä se asianmukaisella tiedolla. Tämä varmistaa että kaikki tehtävät on dokumentoitu kattavasti ja antaa lukijoille täydellisen kuvan siitä, mitä kukin tehtävä sisälsi.
 - [ ] Varmista että kaikki commitit ja pr:t, sekä niihin liittyvät tehtävät löytyvät Valmiit tehtävät -kappaleesta, eikä mitään merkittäviä muutoksia tai optimointeja ole jäänyt dokumentoimatta. Tämä auttaa varmistamaan että projektin historia on täydellisesti dokumentoitu ja antaa lukijoille mahdollisuuden ymmärtää projektin kehitystä ja kaikkia siihen liittyviä muutoksia.
+
+
 
 ## Analyysi: jäljellä olevien tehtävien turvalliset toteutuskokonaisuudet (2026-04-12)
 
@@ -196,3 +201,8 @@ Tämä osio ryhmittelee tekemättömät tehtävät loogisiin kokonaisuuksiin, jo
 4. Kokonaisuus D (viimeisenä)
 
 Huomio: Ryhmä Ö -tehtävät pidetään edelleen yhden aktiivisen tehtävän periaatteella, vaikka ne kuuluvat samaan loogiseen auditointikokonaisuuteen.
+ 
+
+ ### Lisätetävät
+
+ - [ ] Lisää boot-komento ja BOOT-painike käyttöliittymään, jolla emultaatorin voi käynnistää suoraan levykuvasta ilman erillistä bootblock-direktiiviä. Tämä helpottaa nopeaa testausta ja demonstrointia ilman että tarvitsee rakentaa levykuvaa ja bootblockia erikseen.
