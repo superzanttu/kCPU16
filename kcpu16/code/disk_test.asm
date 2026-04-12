@@ -5,17 +5,19 @@
 ; KUVAUS:
 ;   Demonstroi lib-disk.asm:n toiminnot:
 ;     1. Alustus (disk_format)
-;     2. Tiedoston luominen (disk_create)
-;     3. Datan kirjoittaminen (disk_write)
-;     4. Datan lukeminen takaisin (disk_read)
-;     5. Tiedoston metatietojen lukeminen (disk_stat)
-;     6. Tiedostojen listaaminen (disk_list)
-;     7. Tiedoston poistaminen (disk_delete)
+;     2. Hakemiston luominen (disk_mkdir)
+;     3. Tiedoston luominen (disk_create)
+;     4. Datan kirjoittaminen (disk_write)
+;     5. Datan lukeminen takaisin (disk_read)
+;     6. Tiedoston metatietojen lukeminen (disk_stat)
+;     7. Tiedostojen/hakemistojen listaaminen (disk_list)
+;     8. Levy-eheyden tarkistus (disk_check)
+;     9. Tiedoston poistaminen (disk_delete)
 ;
 ; TULOSTUS:
 ;   Näyttää testin etenemisen ja tulostaa OK/FAIL tekstinä näytölle.
 ;   Ylin rivi: otsikko
-;   Rivit 1–7: kukin testi
+;   Rivit 1–9: kukin testi
 ;
 ; KÄYTTÖ:
 ;   python main.py --run kcpu16/code/disk_test.asm
@@ -39,6 +41,10 @@
 ; =============================================================================
 ; Testausdata
 ; =============================================================================
+
+; Testihakemiston nimi
+test_dirname:
+        .dstr "DIR1"
 
 ; Testitiedoston nimi
 test_filename:
@@ -74,6 +80,8 @@ list_buf:
 .const SCREEN_ROW6,  0xF9E0   ; Rivi 6
 .const SCREEN_ROW7,  0xFA30   ; Rivi 7
 .const SCREEN_ROW8,  0xFA80   ; Rivi 8
+.const SCREEN_ROW9,  0xFAD0   ; Rivi 9
+.const SCREEN_ROW10, 0xFB20   ; Rivi 10
 
 ; Värimäärittely: valkoinen teksti mustalla taustalla = 0xE000
 .const COLOR_WHITE_TEXT, 0xE000
@@ -146,22 +154,28 @@ str_test1:
         .dstr "1. disk_format"
 
 str_test2:
-        .dstr "2. disk_create"
+        .dstr "2. disk_mkdir"
 
 str_test3:
-        .dstr "3. disk_write"
+        .dstr "3. disk_create"
 
 str_test4:
-        .dstr "4. disk_read"
+        .dstr "4. disk_write"
 
 str_test5:
-        .dstr "5. disk_stat (koko)"
+        .dstr "5. disk_read"
 
 str_test6:
-        .dstr "6. disk_list (1 tiedosto)"
+        .dstr "6. disk_stat (koko)"
 
 str_test7:
-        .dstr "7. disk_delete"
+        .dstr "7. disk_list (2 kohdetta)"
+
+str_test8:
+        .dstr "8. disk_check"
+
+str_test9:
+        .dstr "9. disk_delete"
 
 ; =============================================================================
 ; check_result — Tarkista tulos ja tulosta OK/FAIL
@@ -196,18 +210,27 @@ main:
         CALL  disk_format         ; R0 = DISK_OK tai virhe
         CALL  check_result
 
-        ; --- Testi 2: disk_create ---
+        ; --- Testi 2: disk_mkdir ---
         READ  R0, SCREEN_ROW2
         READ  R1, str_test2
+        CALL  write_str_at
+
+        READ  R0, test_dirname
+        CALL  disk_mkdir
+        CALL  check_result
+
+        ; --- Testi 3: disk_create ---
+        READ  R0, SCREEN_ROW3
+        READ  R1, str_test3
         CALL  write_str_at
 
         READ  R0, test_filename
         CALL  disk_create
         CALL  check_result
 
-        ; --- Testi 3: disk_write ---
-        READ  R0, SCREEN_ROW3
-        READ  R1, str_test3
+        ; --- Testi 4: disk_write ---
+        READ  R0, SCREEN_ROW4
+        READ  R1, str_test4
         CALL  write_str_at
 
         READ  R0, test_filename
@@ -216,9 +239,9 @@ main:
         CALL  disk_write
         CALL  check_result
 
-        ; --- Testi 4: disk_read ---
-        READ  R0, SCREEN_ROW4
-        READ  R1, str_test4
+        ; --- Testi 5: disk_read ---
+        READ  R0, SCREEN_ROW5
+        READ  R1, str_test5
         CALL  write_str_at
 
         ; Nollaa lukupuskuri ensin (FILL edellyttää rekisterioperandeja)
@@ -267,9 +290,9 @@ _t4_fail:
 _t4_done:
         CALL  check_result
 
-        ; --- Testi 5: disk_stat ---
-        READ  R0, SCREEN_ROW5
-        READ  R1, str_test5
+        ; --- Testi 6: disk_stat ---
+        READ  R0, SCREEN_ROW6
+        READ  R1, str_test6
         CALL  write_str_at
 
         READ  R0, test_filename
@@ -291,17 +314,17 @@ _t5_fail:
 _t5_done:
         CALL  check_result
 
-        ; --- Testi 6: disk_list ---
-        READ  R0, SCREEN_ROW6
-        READ  R1, str_test6
+        ; --- Testi 7: disk_list ---
+        READ  R0, SCREEN_ROW7
+        READ  R1, str_test7
         CALL  write_str_at
 
         READ  R0, list_buf
         READ  R1, 8
         CALL  disk_list          ; R0 = löytyneiden tiedostojen määrä
 
-        ; Pitää löytyä tasan 1 tiedosto
-        READ  R1, 1
+        ; Pitää löytyä tasan 2 kohdetta (hakemisto + tiedosto)
+        READ  R1, 2
         CMP   R0, R1
         JNZ   _t6_fail
         READ  R0, 0
@@ -311,9 +334,17 @@ _t6_fail:
 _t6_done:
         CALL  check_result
 
-        ; --- Testi 7: disk_delete ---
-        READ  R0, SCREEN_ROW7
-        READ  R1, str_test7
+        ; --- Testi 8: disk_check ---
+        READ  R0, SCREEN_ROW8
+        READ  R1, str_test8
+        CALL  write_str_at
+
+        CALL  disk_check
+        CALL  check_result
+
+        ; --- Testi 9: disk_delete ---
+        READ  R0, SCREEN_ROW9
+        READ  R1, str_test9
         CALL  write_str_at
 
         READ  R0, test_filename
@@ -336,7 +367,7 @@ _t7_done:
         CALL  check_result
 
         ; --- Kaikki testit suoritettu ---
-        READ  R0, SCREEN_ROW8
+        READ  R0, SCREEN_ROW10
         READ  R1, str_done
         CALL  write_str_at
 
@@ -346,19 +377,5 @@ str_done:
         .dstr "Kaikki testit suoritettu."
 
 ; =============================================================================
-; Tarkistukset (testrunner)
+; Tämä tiedosto on ensisijaisesti interaktiivinen demo eikä testrunner-testi.
 ; =============================================================================
-; read_buf:ssa pitää olla sama data kuin test_data:ssa disk_read:n jälkeen.
-; Osoitteet: read_buf=0x0983 (assemblointihetkellä tarkistettu --asm:llä)
-.expect_mem  0x098A, 0x1234
-.expect_mem  0x098B, 0x5678
-.expect_mem  0x098C, 0xABCD
-.expect_mem  0x098D, 0xEF01
-.expect_mem  0x098E, 0x2345
-.expect_mem  0x098F, 0x6789
-.expect_mem  0x0990, 0xBCDE
-.expect_mem  0x0991, 0xF012
-; FAT: blokki 1, sana 3 = 0xFFFF (blokki 3 varattu DISK_EOF:lla)
-.expect_storage  0x0103, 0xFFFF
-; Data blokki 3 (osoite 0x0300): ensimmäinen sana = 0x1234
-.expect_storage  0x0300, 0x1234

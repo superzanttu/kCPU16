@@ -3,7 +3,7 @@
 ; =============================================================================
 ;
 ; KUVAUS:
-;   Toteuttaa yksinkertaisen litteän tiedostojärjestelmän kCPU16:n block-
+;   Toteuttaa yksinkertaisen tiedostojärjestelmän kCPU16:n block-
 ;   tallennuslaitteelle. Käyttää DREAD/DWRITE-käskyjä suoraan laitteeseen.
 ;   Vaatii Kernel-tilan.
 ;
@@ -29,7 +29,7 @@
 ; HAKEMISTO (Blokki 2):
 ;   8 merkintää × 32 sanaa = 256 sanaa.
 ;   Merkintän rakenne (kaikki arvot sanoja):
-;     Offset  0    : status   (0 = vapaa, 1 = käytössä)
+;     Offset  0    : status   (0 = vapaa, 1 = tiedosto, 2 = hakemisto)
 ;     Offset  1–16 : nimi     (16 sanaa, null-terminoitu; max 15 merkkiä + null)
 ;     Offset 17    : koko     (sanoja, 0–65535)
 ;     Offset 18    : luontiaika_y   (vuosi, esim. 2026)
@@ -41,13 +41,15 @@
 ;
 ; TOIMINNOT:
 ;   disk_format        — Alusta tiedostojärjestelmä (tyhjennä FAT + hakemisto)
+;   disk_mkdir         — Luo hakemisto
 ;   disk_create        — Luo uusi tiedosto
 ;   disk_write         — Kirjoita dataa tiedostoon
 ;   disk_read          — Lue dataa tiedostosta
 ;   disk_delete        — Poista tiedosto
 ;   disk_find          — Etsi tiedosto nimellä
 ;   disk_stat          — Lue tiedoston metatiedot
-;   disk_list          — Listaa kaikki tiedostot (kutsuu callback-aliohjelma)
+;   disk_list          — Listaa kaikki tiedostot ja hakemistot
+;   disk_check         — Tarkista tiedostojärjestelmän eheys
 ;
 ; REKISTERIKONVENTIO (kutsuvilla aliohjelmilla):
 ;   Sisään: R0–R3 (käyttö vaihtelee, ks. kukin aliohjelma)
@@ -109,6 +111,8 @@
 .const DISK_DIR_ENTRY_SIZE, 32   ; Sanoja per merkintä
 .const DISK_NAME_WORDS,   16     ; Nimen varaama tila sanoina
 .const DISK_EOF,          0xFFFF ; FAT-ketjun päätösmerkki
+.const DISK_ENTRY_FILE,   1      ; Hakemistomerkintä on tiedosto
+.const DISK_ENTRY_DIR,    2      ; Hakemistomerkintä on hakemisto
 
 .const DISK_OK,           0      ; Toiminto onnistui
 .const DISK_ERR_NOT_FOUND, 1     ; Tiedostoa ei löydy
@@ -299,7 +303,7 @@ disk_format:
         READ  R2, disk_io_buf
         READ  R8, 256
         ADD   R2, R8              ; R2 = disk_io_buf + 256 (lopetussoite)
-        READ  R8, 1
+        READ  R8, DISK_ENTRY_FILE
         ; käytetään FILL: FILL start, end, arvo
         ; FILL [R0..R2-1] = R1 → FILL R0, R2, R1 ei ole suoraan käytettävissä
         ; Sen sijaan nollaamme käsin silmukalla
@@ -502,7 +506,7 @@ _df_loop:
         READ  R1, disk_io_buf
         ADD   R0, R1              ; R0 = &entry[R6]
 
-        ; Tarkista status (offset 0) — pitää olla 1
+        ; Tarkista status (offset 0) — pitää olla tiedosto
         READ  R1, [R0]
         CMP   R1, R8
         JNZ   _df_next
@@ -538,6 +542,75 @@ _df_not_found:
         RET
 
 ; =============================================================================
+; disk_find_any — Etsi tiedosto tai hakemisto nimellä
+;
+; Sisään: R0 = osoitin nimeen RAM:ssa (null-terminoitu)
+; Ulos:   R0 = merkintä-indeksi (0–7) jos löytyi
+;         R0 = DISK_ERR_NOT_FOUND (1) jos ei löydy
+;         disk_io_buf sisältää hakemistodatan
+; Clobbers: R0–R9
+; =============================================================================
+disk_find_any:
+        PUSH  R8
+        PUSH  R9
+        CPY   R9, R0              ; R9 = haetun nimen osoitin
+
+        ; Lue hakemisto disk_io_buf:iin
+        READ  R0, DISK_DIR_BLOCK
+        CALL  _disk_read_block
+
+        READ  R6, 0               ; R6 = merkintäindeksi
+        READ  R7, DISK_DIR_ENTRIES
+        READ  R8, 1
+
+_dfa_loop:
+        CMP   R6, R7
+        JGE   _dfa_not_found
+
+        ; Merkinnän perusosoite: disk_io_buf + indeksi * 32
+        CPY   R0, R6
+        READ  R1, DISK_DIR_ENTRY_SIZE
+        MUL   R0, R1
+        READ  R1, disk_io_buf
+        ADD   R0, R1              ; R0 = &entry[R6]
+
+        ; Tarkista status (offset 0) — pitää olla käytössä (ei 0)
+        READ  R1, [R0]
+        READ  R2, 0
+        CMP   R1, R2
+        JZ    _dfa_next
+
+        ; Tallenna indeksi
+        STORE [_dfbn_cur_idx], R6
+
+        ; Vertaa nimi: &entry[R6] + 1
+        ADD   R0, R8
+        CPY   R1, R9
+        CALL  _disk_str_cmp       ; R0 = 0 jos nimet samat
+
+        ; Palauta tallennettu indeksi ja tarkista tulos
+        READ  R2, 0
+        CMP   R0, R2
+        JZ    _dfa_found
+        JUMP  _dfa_next
+
+_dfa_next:
+        ADD   R6, R8
+        JUMP  _dfa_loop
+
+_dfa_found:
+        READ  R0, [_dfbn_cur_idx]
+        POP   R9
+        POP   R8
+        RET
+
+_dfa_not_found:
+        READ  R0, DISK_ERR_NOT_FOUND
+        POP   R9
+        POP   R8
+        RET
+
+; =============================================================================
 ; disk_create — Luo uusi tiedosto
 ;
 ; Sisään: R0 = osoitin nimeen RAM:ssa (null-terminoitu, max 15 merkkiä)
@@ -551,8 +624,8 @@ disk_create:
         PUSH  R9
         CPY   R9, R0              ; R9 = nimen osoitin
 
-        ; Tarkista ettei samanniminen tiedosto ole jo olemassa
-        CALL  disk_find
+        ; Tarkista ettei samanniminen kohde (tiedosto/hakemisto) ole jo olemassa
+        CALL  disk_find_any
         READ  R1, DISK_ERR_NOT_FOUND
         CMP   R0, R1
         JNZ   _dc_exists          ; Löytyi → virhe
@@ -581,12 +654,15 @@ _dc_find_free:
         JUMP  _dc_find_free
 
 _dc_free_found:
-        ; Täytä merkintä: status=1, nimi, koko=0, ajat, ensimmäinen blokki=0
-        STORE [R0], R8            ; status = 1
+        ; Täytä merkintä: status=tiedosto, nimi, koko=0, ajat, ensimmäinen blokki=0
+        READ  R1, DISK_ENTRY_FILE
+        STORE [R0], R1
         ; Kopioi nimi kenttään (offset 1)
         READ  R1, 1
         ADD   R0, R1              ; R0 = &entry.name
-        CPY   R1, R9              ; R1 = lähde (haettu nimi)
+        CPY   R3, R0              ; R3 = kohde
+        CPY   R0, R9              ; R0 = lähde (haettu nimi)
+        CPY   R1, R3              ; R1 = kohde
         READ  R2, DISK_NAME_WORDS
         CALL  _disk_str_copy
 
@@ -647,6 +723,123 @@ _dc_exists:
         RET
 
 _dc_dir_full:
+        READ  R0, DISK_ERR_DIR_FULL
+        POP   R9
+        POP   R8
+        RET
+
+; =============================================================================
+; disk_mkdir — Luo uusi hakemisto
+;
+; Sisään: R0 = osoitin nimeen/polkuun RAM:ssa (null-terminoitu, max 15 merkkiä)
+; Ulos:   R0 = DISK_OK           jos onnistui
+;         R0 = DISK_ERR_EXISTS   jos samanniminen kohde on jo olemassa
+;         R0 = DISK_ERR_DIR_FULL jos hakemisto on täynnä
+; Clobbers: R0–R9
+; =============================================================================
+disk_mkdir:
+        PUSH  R8
+        PUSH  R9
+        CPY   R9, R0              ; R9 = nimen osoitin
+
+        ; Tarkista ettei samanniminen kohde ole jo olemassa
+        CALL  disk_find_any
+        READ  R1, DISK_ERR_NOT_FOUND
+        CMP   R0, R1
+        JNZ   _dm_exists
+
+        ; Lue hakemisto
+        READ  R0, DISK_DIR_BLOCK
+        CALL  _disk_read_block
+
+        ; Etsi vapaa merkintä (status == 0)
+        READ  R6, 0
+        READ  R7, DISK_DIR_ENTRIES
+        READ  R8, 1
+_dm_find_free:
+        CMP   R6, R7
+        JGE   _dm_dir_full
+        CPY   R0, R6
+        READ  R1, DISK_DIR_ENTRY_SIZE
+        MUL   R0, R1
+        READ  R1, disk_io_buf
+        ADD   R0, R1              ; R0 = &entry[R6]
+        READ  R1, [R0]
+        READ  R2, 0
+        CMP   R1, R2
+        JZ    _dm_free_found
+        ADD   R6, R8
+        JUMP  _dm_find_free
+
+_dm_free_found:
+        ; status = hakemisto
+        READ  R1, DISK_ENTRY_DIR
+        STORE [R0], R1
+
+        ; Kopioi nimi kenttään (offset 1)
+        READ  R1, 1
+        ADD   R0, R1              ; R0 = &entry.name
+        CPY   R3, R0              ; R3 = kohde
+        CPY   R0, R9              ; R0 = lähde
+        CPY   R1, R3              ; R1 = kohde
+        READ  R2, DISK_NAME_WORDS
+        CALL  _disk_str_copy
+
+        ; Laske merkinnän perusosoite uudelleen
+        CPY   R0, R6
+        READ  R1, DISK_DIR_ENTRY_SIZE
+        MUL   R0, R1
+        READ  R1, disk_io_buf
+        ADD   R0, R1              ; R0 = &entry[R6]
+        READ  R1, DISK_NAME_WORDS
+        READ  R2, 1
+        ADD   R1, R2
+        ADD   R0, R1              ; R0 = &entry + 17
+
+        ; koko = 0
+        READ  R1, 0
+        STORE [R0], R1
+        ADD   R0, R2
+
+        ; Luontiaika: vuosi, kuukausi<<8|päivä
+        READ  R1, [CLOCK_YEAR]
+        STORE [R0], R1
+        ADD   R0, R2
+        READ  R3, [CLOCK_MONTH]
+        READ  R4, 8
+        SHL   R3, R4
+        READ  R4, [CLOCK_DAY]
+        OR    R3, R4
+        STORE [R0], R3
+        ADD   R0, R2
+
+        ; Muokkausaika = sama kuin luontiaika
+        READ  R1, [CLOCK_YEAR]
+        STORE [R0], R1
+        ADD   R0, R2
+        STORE [R0], R3
+        ADD   R0, R2
+
+        ; Ensimmäinen blokki = 0 (hakemistot eivät käytä datablokkeja tässä toteutuksessa)
+        READ  R1, 0
+        STORE [R0], R1
+
+        ; Kirjoita hakemisto takaisin levylle
+        READ  R0, DISK_DIR_BLOCK
+        CALL  _disk_write_block
+
+        READ  R0, DISK_OK
+        POP   R9
+        POP   R8
+        RET
+
+_dm_exists:
+        READ  R0, DISK_ERR_EXISTS
+        POP   R9
+        POP   R8
+        RET
+
+_dm_dir_full:
         READ  R0, DISK_ERR_DIR_FULL
         POP   R9
         POP   R8
@@ -1238,8 +1431,9 @@ _dl_loop:
         ADD   R0, R1              ; R0 = &entry[R6]
 
         READ  R1, [R0]            ; status (offset 0)
-        CMP   R1, R8              ; status == 1?
-        JNZ   _dl_skip
+        READ  R2, 0
+        CMP   R1, R2              ; status != 0?
+        JZ    _dl_skip
 
         ; Kirjoita nimen osoitin puskuriin (&entry + 1 = nimi-kenttä)
         ADD   R0, R8              ; R0 = &entry.name
@@ -1255,6 +1449,153 @@ _dl_skip:
 
 _dl_done:
         CPY   R0, R9              ; R0 = löytyneiden määrä
+        POP   R9
+        POP   R8
+        RET
+
+; =============================================================================
+; disk_check — Tarkista tiedostojärjestelmän eheys
+;
+; Tarkistaa:
+;   - FAT:n varatut blokit (0..2) ovat varattuina (DISK_EOF)
+;   - Hakemiston status-kentät ovat sallittuja (0, tiedosto, hakemisto)
+;   - Hakemistojen first_block = 0
+;   - Tiedostojen blokkiketjut osoittavat data-alueelle ja päättyvät oikein
+;
+; Sisään:  (ei parametreja)
+; Ulos:    R0 = DISK_OK jos eheä, muuten DISK_ERR_RANGE
+; Clobbers: R0–R9
+; =============================================================================
+disk_check:
+        PUSH  R8
+        PUSH  R9
+
+        ; FAT[0], FAT[1], FAT[2] pitää olla varattuja (DISK_EOF)
+        READ  R0, 0x0100
+        DREAD R1, R0
+        READ  R2, DISK_EOF
+        CMP   R1, R2
+        JNZ   _dchk_fail
+
+        READ  R0, 0x0101
+        DREAD R1, R0
+        CMP   R1, R2
+        JNZ   _dchk_fail
+
+        READ  R0, 0x0102
+        DREAD R1, R0
+        CMP   R1, R2
+        JNZ   _dchk_fail
+
+        ; Lue hakemisto
+        READ  R0, DISK_DIR_BLOCK
+        CALL  _disk_read_block
+
+        READ  R6, 0               ; merkintäindeksi
+        READ  R7, DISK_DIR_ENTRIES
+        READ  R8, 1
+
+_dchk_entry_loop:
+        CMP   R6, R7
+        JGE   _dchk_ok
+
+        ; R0 = &entry[R6]
+        CPY   R0, R6
+        READ  R1, DISK_DIR_ENTRY_SIZE
+        MUL   R0, R1
+        READ  R1, disk_io_buf
+        ADD   R0, R1
+
+        ; status
+        READ  R1, [R0]
+        READ  R2, 0
+        CMP   R1, R2
+        JZ    _dchk_next_entry
+
+        READ  R2, DISK_ENTRY_FILE
+        CMP   R1, R2
+        JZ    _dchk_check_file
+
+        READ  R2, DISK_ENTRY_DIR
+        CMP   R1, R2
+        JZ    _dchk_check_dir
+
+        JUMP  _dchk_fail
+
+_dchk_check_dir:
+        ; hakemistolla ei dataketjua (first_block = 0)
+        READ  R1, 22
+        ADD   R0, R1
+        READ  R1, [R0]
+        READ  R2, 0
+        CMP   R1, R2
+        JNZ   _dchk_fail
+        JUMP  _dchk_next_entry
+
+_dchk_check_file:
+        ; tiedoston first_block
+        READ  R1, 22
+        ADD   R0, R1
+        READ  R0, [R0]
+
+        ; tyhjä tiedosto on sallittu
+        READ  R1, 0
+        CMP   R0, R1
+        JZ    _dchk_next_entry
+
+        ; aloitusblokin pitää olla data-alueella
+        READ  R1, DISK_DATA_START
+        CMP   R0, R1
+        JLT   _dchk_fail
+        READ  R1, 256
+        CMP   R0, R1
+        JGE   _dchk_fail
+
+        READ  R3, 0               ; ketjun askelmäärä
+        READ  R4, DISK_BLOCK_SIZE ; yläraja silmukalle (256)
+
+_dchk_chain_loop:
+        READ  R5, 1
+        ADD   R3, R5
+        CMP   R3, R4
+        JGE   _dchk_fail
+
+        ; next = FAT[cur_block]
+        READ  R1, 0x0100
+        ADD   R1, R0
+        DREAD R2, R1
+
+        READ  R1, DISK_EOF
+        CMP   R2, R1
+        JZ    _dchk_next_entry
+
+        READ  R1, 0
+        CMP   R2, R1
+        JZ    _dchk_fail
+
+        ; seuraavan blokin pitää olla data-alueella
+        READ  R1, DISK_DATA_START
+        CMP   R2, R1
+        JLT   _dchk_fail
+        READ  R1, 256
+        CMP   R2, R1
+        JGE   _dchk_fail
+
+        CPY   R0, R2
+        JUMP  _dchk_chain_loop
+
+_dchk_next_entry:
+        ADD   R6, R8
+        JUMP  _dchk_entry_loop
+
+_dchk_ok:
+        READ  R0, DISK_OK
+        POP   R9
+        POP   R8
+        RET
+
+_dchk_fail:
+        READ  R0, DISK_ERR_RANGE
         POP   R9
         POP   R8
         RET
