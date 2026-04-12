@@ -51,6 +51,8 @@ Rekisterit: `R0`–`R15` (yleiskäyttöiset), `FP` (frame pointer), `SP` (stack 
 | `.db val, val, …`                      | Tallenna 8-bittisiä arvoja muistiin; kukin arvo maskataan arvolla 0xFF      |
 | `.dstr "teksti"` / `.dstr 'teksti'`    | Tallenna null-terminoitu merkkijono; escape: `\\` `\"` `\'` `\n` `\t` `\0`  |
 | `.diskblock N`                         | Assemblauksen jälkeen tallenna konekieli tallennuslaitteen blokkiin N       |
+| `.bootblock "levykuva", overwrite=0/1, boot=0/1` | Aloita bootsektoriin kirjoitettava osuus ja määritä kohdelevykuva |
+| `.endbootblock`                        | Päätä `.bootblock`-osuus                                                    |
 | `.const NIMI, ARVO`                    | Määrittele nimetty vakio (kokonaisluku tai heksa; ks. kohta 5)              |
 | `.macro NIMI`                          | Aloita makromäärittely                                                      |
 | `.endmacro`                            | Lopeta makromäärittely                                                      |
@@ -64,7 +66,41 @@ Rekisterit: `R0`–`R15` (yleiskäyttöiset), `FP` (frame pointer), `SP` (stack 
 
 > **Kommentit:** Puolipiste (`;`) aloittaa riviloppukommentin. Lohkokommentit `/* ... */` eivät ole tuettu.
 
-## 3.1 Datadirektiiviit: .dw ja .db
+## 3.1 Bootblock-direktiivit
+
+`.bootblock` ja `.endbootblock` rajaavat tiedostosta osan, joka assembloidaan erikseen levynkuvan bootsektoriksi.
+Sama bootblock-koodi jää silti mukaan myös normaalin ohjelman assemblaukseen, joten samassa tiedostossa voi olla sekä bootloader että tavallinen RAMiin ladattava testikoodi.
+
+Syntaksi:
+
+```asm
+.bootblock "../storage/boot.dsk", overwrite=1, boot=0
+    ; Koodi joka assembloidaan boot-alueelle 0x0100-0x01FF
+    READ R0, 1
+    HALT
+.endbootblock
+
+.origin 0x0200
+START:
+    READ R1, 2
+    HALT
+```
+
+Optiot:
+
+| Optio       | Arvot                     | Oletus | Kuvaus |
+| ----------- | ------------------------- | ------ | ------ |
+| `overwrite` | `0`, `1`, `false`, `true`, `no`, `yes`, `off`, `on` | `0` | Saako olemassa olevan levykuvan ei-tyhjää bootblokkia korvata |
+| `boot`      | `0`, `1`, `false`, `true`, `no`, `yes`, `off`, `on` | `0` | Bootataanko emulaattori heti kirjoituksen jälkeen levykuvasta |
+
+Säännöt:
+
+- Vain yksi `.bootblock`-osuus per tiedosto.
+- `.bootblock`-osuuden on assembloiduttava kokonaan boot-alueelle `BOOT_RAM_START`–`BOOT_RAM_END` eli osoitealueelle `0x0100`–`0x01FF`.
+- Bootblockin kokorajoitus koskee vain `.bootblock`-osuuden omaa konekieltä, ei koko tiedoston muuta ohjelmaa.
+- Levykuvan polku tulkitaan suhteessa nykyiseen `.asm`-tiedostoon.
+
+## 3.2 Datadirektiiviit: .dw ja .db
 
 Molemmat direktiivit tallentavat sarjan literaaliarvoja peräkkäisiin muistipaikkoihin.
 Koska kCPU16 on **sanakohtaisesti osoitettu** (word-addressed), jokainen arvo

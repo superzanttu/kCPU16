@@ -94,6 +94,7 @@ from .constants import (
     SR_FLAG_Z,
     WORD_MASK,
 )
+from .devices.storage import BlockStorageDevice
 from .debugger import DebugState
 from .disassembler import Disassembler, REVERSE_TABLE
 
@@ -1624,6 +1625,13 @@ class KCPU16TUI(App[None]):
                 self._log("[yellow]File is empty.[/yellow]")
                 return
             segments = self.assembler.assemble(source, source_path=self.current_file)
+            bootblock_words: list[int] | None = None
+            bootblock_used_words = 0
+            bootblock_config = self.assembler.bootblock_directive
+            if bootblock_config is not None:
+                bootblock_words, bootblock_used_words = self.assembler.build_boot_block_words(
+                    source_path=self.current_file
+                )
             self.machine.cold_reset()
             self.machine.load_segments(segments)
             self.is_assembled = True
@@ -1657,6 +1665,37 @@ class KCPU16TUI(App[None]):
                 f"[green]Assembled: {total_words} words in {len(segments)} "
                 f"segment(s) at 0x{self.machine.regs.pc:04X}. F7=Step, F5=Run.[/green]"
             )
+            if bootblock_config is not None and bootblock_words is not None:
+                temp_storage = BlockStorageDevice(
+                    block_size_words=self.machine.storage.block_size_words,
+                    block_count=self.machine.storage.block_count,
+                )
+                if bootblock_config.disk_path.exists():
+                    temp_storage.load_from_file(bootblock_config.disk_path)
+                if (
+                    not bootblock_config.allow_overwrite
+                    and any(temp_storage.read_block(0))
+                ):
+                    raise ValueError(
+                        ".bootblock: target disk image already has a non-empty boot block; "
+                        "use overwrite=1 to replace it"
+                    )
+                temp_storage.write_block(0, bootblock_words)
+                temp_storage.save_to_file(bootblock_config.disk_path)
+                self.machine.storage.load_from_file(bootblock_config.disk_path)
+                self.current_disk_file = bootblock_config.disk_path
+                self._disk_dirty = False
+                self._update_disk_title()
+                self._log(
+                    f"[cyan].bootblock: wrote {bootblock_used_words} words to "
+                    f"{bootblock_config.disk_path.name} block 0.[/cyan]"
+                )
+                if bootblock_config.boot_after_write:
+                    self.machine.cold_reset()
+                    self.machine.boot_from_storage()
+                    self._log(
+                        f"[cyan].bootblock: booted from {bootblock_config.disk_path.name}.[/cyan]"
+                    )
             # .diskblock-direktiivi: kirjoita konekieli levyblokkiin
             blk = self.assembler.disk_block
             if blk is not None:
