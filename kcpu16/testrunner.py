@@ -313,7 +313,7 @@ class TestResult:
     passed: bool
 
 
-def run_test(path: Path) -> int:
+def run_test(path: Path) -> tuple[int, int]:
     """
     Suorita testiohjelma ja vertaa tulosta odotuksiin.
 
@@ -321,7 +321,8 @@ def run_test(path: Path) -> int:
         path: Polku .asm-tiedostoon.
 
     Returns:
-        0 jos kaikki odotukset täyttyvät, 1 muuten (tai virhetilanteessa).
+        Tupla (passed, total): läpäistyjen tarkistusten määrä ja kokonaismäärä.
+        Virhetilanteessa palauttaa (0, 0).
     """
     WIDTH = 57
 
@@ -335,7 +336,7 @@ def run_test(path: Path) -> int:
     # --- Lataa lähdekoodi ---
     if not path.exists():
         print(f"VIRHE: Tiedostoa ei löydy: {path}", file=sys.stderr)
-        return 1
+        return 0, 0
 
     source = path.read_text(encoding="utf-8")
 
@@ -344,19 +345,19 @@ def run_test(path: Path) -> int:
         expectations = parse_expectations(source)
     except ValueError as exc:
         print(f"VIRHE odotuksissa: {exc}", file=sys.stderr)
-        return 1
+        return 0, 0
 
     # --- Parsii näppäinsyötteet (.inject_key / .inject_key_release) ---
     try:
         key_injections = parse_key_injections(source)
     except ValueError as exc:
         print(f"VIRHE näppäinsyötteissä: {exc}", file=sys.stderr)
-        return 1
+        return 0, 0
 
     if not expectations:
         print("HUOM: Ei .expect_*-direktiivejä — ei mitään tarkistettavaa.")
         print("═" * WIDTH)
-        return 0
+        return 0, 0
 
     # --- Assembloi ---
     asm = Assembler()
@@ -364,7 +365,7 @@ def run_test(path: Path) -> int:
         segments = asm.assemble(source, source_path=path)
     except Exception as exc:
         print(f"VIRHE assembloinnissa: {exc}", file=sys.stderr)
-        return 1
+        return 0, 0
 
     # --- Suorita koneessa (ilman boot-prosessia) ---
     machine = KCPU16Machine()
@@ -381,7 +382,7 @@ def run_test(path: Path) -> int:
         machine.run(max_cycles=1_000_000)  # turvaraja testien ikuisen silmukan varalle
     except Exception as exc:
         print(f"VIRHE suorituksessa: {exc}", file=sys.stderr)
-        return 1
+        return 0, len(expectations)
 
     # --- Vertaa odotuksiin ---
     results: list[TestResult] = []
@@ -431,7 +432,7 @@ def run_test(path: Path) -> int:
     print(f"Tulos: {passed}/{total} läpi  {verdict_sym} {verdict}")
     print("═" * WIDTH)
 
-    return 0 if passed == total else 1
+    return passed, total
 
 
 # =============================================================================
@@ -462,17 +463,9 @@ def run_test_all(test_dir: Path) -> int:
 
     for path in asm_files:
         print()  # tyhjä rivi testien väliin
-        exit_code = run_test(path)
-        # Lue passed/total uudelleen jotta saadaan numerot yhteenvetoon
-        try:
-            source = path.read_text(encoding="utf-8")
-            expectations = parse_expectations(source)
-            total = len(expectations)
-        except Exception:
-            total = 0
-        passed = total if exit_code == 0 else 0
+        passed, total = run_test(path)
         summary.append((path.name, passed, total))
-        if exit_code != 0:
+        if passed != total:
             errors.append(path.name)
 
     # Yhteenveto

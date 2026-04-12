@@ -71,6 +71,22 @@ class AssemblySyntaxHighlighter:
 
     DIRECTIVES = {".ORIGIN", ".ORG", ".MACRO", ".ENDMACRO"}
 
+    # Esikäännetyt regexpit: yksi kutsu per rivityyppi (ei silmukkaa per mnemonic/rekisteri)
+    _MNEMONIC_RE: re.Pattern[str] = re.compile(
+        r"\b(" + "|".join(sorted(MNEMONICS, key=len, reverse=True)) + r")\b",
+        re.IGNORECASE,
+    )
+    _REGISTER_RE: re.Pattern[str] = re.compile(
+        r"\b(" + "|".join(sorted(REGISTERS, key=len, reverse=True)) + r")\b",
+        re.IGNORECASE,
+    )
+    _NUMBER_RE: re.Pattern[str] = re.compile(
+        r"(0x[0-9A-Fa-f]+|#?0x[0-9A-Fa-f]+|#\d+|\$[0-9A-Fa-f]+|\b\d+\b)"
+    )
+    _DIRECTIVE_RE: re.Pattern[str] = re.compile(
+        r"\.(origin|org|macro|endmacro)\b", re.IGNORECASE
+    )
+
     @staticmethod
     def highlight_line(line: str) -> str:
         """Väritä yksi assembly-rivi Rich-muodossa.
@@ -118,18 +134,22 @@ class AssemblySyntaxHighlighter:
             return f"{indent}[bold white]{label}[/bold white]:" + comment
 
         # Mnemonicit
-        for m in AssemblySyntaxHighlighter.MNEMONICS:
-            code = re.sub(r"\b" + m + r"\b", f"[bold yellow]{m}[/bold yellow]", code, flags=re.IGNORECASE)
+        code = AssemblySyntaxHighlighter._MNEMONIC_RE.sub(
+            lambda m: f"[bold yellow]{m.group().upper()}[/bold yellow]", code
+        )
 
         # Rekisterit
-        for r in AssemblySyntaxHighlighter.REGISTERS:
-            code = re.sub(r"\b" + r + r"\b", f"[cyan]{r}[/cyan]", code, flags=re.IGNORECASE)
+        code = AssemblySyntaxHighlighter._REGISTER_RE.sub(
+            lambda m: f"[cyan]{m.group().upper()}[/cyan]", code
+        )
 
         # Numerot (hex, decimal, $ prefix)
-        code = re.sub(r"(0x[0-9A-Fa-f]+|#?0x[0-9A-Fa-f]+|#\d+|\$[0-9A-Fa-f]+|\b\d+\b)", r"[green]\1[/green]", code)
+        code = AssemblySyntaxHighlighter._NUMBER_RE.sub(r"[green]\1[/green]", code)
 
         # Direktiivit
-        code = re.sub(r"\.(origin|org|macro|endmacro)\b", r"[bold magenta].\1[/bold magenta]", code, flags=re.IGNORECASE)
+        code = AssemblySyntaxHighlighter._DIRECTIVE_RE.sub(
+            r"[bold magenta].\1[/bold magenta]", code
+        )
 
         return code + comment
 
