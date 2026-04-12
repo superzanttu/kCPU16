@@ -1993,6 +1993,10 @@ class KCPU16TUI(App[None]):
 
         def _done(msg: str) -> None:
             """Kutsutaan pääsäikeessä suorituksen päättyessä."""
+            # Ignore stale callbacks from an older worker if run mode has
+            # already changed (e.g. fast -> max -> stop in quick succession).
+            if self._exec_mode != mode:
+                return
             self._exec_mode = "stopped"
             self._update_run_mode_ui()
             if msg:
