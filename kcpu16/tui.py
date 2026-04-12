@@ -2113,7 +2113,7 @@ class KCPU16TUI(App[None]):
                     except Exception as exc:
                         self.call_from_thread(self._show_cpu_crash, exc)
                         return
-                    total_cycles += max(0, cpu.instruction_counter - before_ic)
+                    total_cycles += cpu.instruction_counter - before_ic
 
                 # Päivitä UI ~200ms välein
                 now = time.monotonic()

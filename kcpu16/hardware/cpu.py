@@ -466,6 +466,7 @@ class CPU:
         opcode_fill = _OPCODE_FILL
         opcode_table = OPCODE_TABLE
         bp_set = breakpoints if breakpoints is not None else ()
+        bp_contains = bp_set.__contains__ if bp_set else None
 
         cycles = 0
         while not self.halted and not self.process_exit_requested:
@@ -582,9 +583,13 @@ class CPU:
                 return cycles, _RUN_STOP_HALTED
             if self.process_exit_requested:
                 return cycles, _RUN_STOP_EXITED
-            if bp_set and regs.pc in bp_set:
+            if bp_contains is not None and bp_contains(regs.pc):
                 return cycles, _RUN_STOP_BREAKPOINT
 
+        if self.halted:
+            return cycles, _RUN_STOP_HALTED
+        if self.process_exit_requested:
+            return cycles, _RUN_STOP_EXITED
         return cycles, _RUN_STOP_CYCLES
 
     # ==========================================================================
