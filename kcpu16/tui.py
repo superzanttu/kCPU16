@@ -587,12 +587,12 @@ class SpeedSlider(Widget):
 
 
 class FilePickerDialog(ModalScreen):
-    """Modal dialog for selecting an .asm file from the code directory.
+    """Modal dialog for selecting a file from a provided list.
 
-    Shows a scrollable list of all .asm files. The user can:
+    Shows a scrollable list of files. The user can:
     - Click once to highlight a file
-    - Press Load (or Enter) to load the highlighted file
-    - Double-click a file to load it immediately
+    - Press the primary action button (or Enter) to confirm the highlighted file
+    - Double-click a file to confirm it immediately
     - Press Cancel (or Escape) to dismiss without loading
 
     Dismisses with the selected filename (str) or None on cancel.
@@ -607,7 +607,7 @@ class FilePickerDialog(ModalScreen):
         border: thick $primary;
         padding: 1 2;
         width: 64;
-        height: 24;
+        height: 26;
     }
     #file-picker-title {
         text-align: center;
@@ -616,7 +616,7 @@ class FilePickerDialog(ModalScreen):
         margin-bottom: 1;
     }
     #file-picker-list {
-        height: 16;
+        height: 1fr;
         border: solid $primary-darken-2;
     }
     #file-picker-buttons {
@@ -627,24 +627,46 @@ class FilePickerDialog(ModalScreen):
     }
     #file-picker-buttons Button {
         margin: 0 1;
+        min-width: 14;
+        height: 3;
+        content-align: center middle;
+        text-style: bold;
+    }
+    #btn-picker-load {
+        background: $accent;
+        border: solid $accent-darken-1;
+        color: $surface;
+    }
+    #btn-picker-cancel {
+        background: $panel-lighten-1;
+        border: solid $primary-darken-2;
+        color: $text;
     }
     """
 
-    def __init__(self, files: list[str]) -> None:
+    def __init__(
+        self,
+        files: list[str],
+        *,
+        title: str = "Load Program",
+        confirm_label: str = "Load",
+    ) -> None:
         super().__init__()
         self._files = files
+        self._title = title
+        self._confirm_label = confirm_label
         self._selected: str | None = files[0] if files else None
 
     def compose(self) -> ComposeResult:
         with Vertical(id="file-picker-dialog"):
-            yield Static("Load Program", id="file-picker-title")
+            yield Static(self._title, id="file-picker-title")
             with VerticalScroll(id="file-picker-list"):
                 with ListView(id="file-picker-listview"):
                     for f in self._files:
                         yield ListItem(Static(f))
             with Horizontal(id="file-picker-buttons"):
-                yield Button("Load", id="btn-picker-load", variant="primary")
-                yield Button("Cancel", id="btn-picker-cancel", variant="default")
+                yield Button(self._confirm_label, id="btn-picker-load")
+                yield Button("Cancel", id="btn-picker-cancel")
 
     def on_mount(self) -> None:
         try:
@@ -980,6 +1002,7 @@ class KCPU16TUI(App[None]):
         # Toolbar
         with Horizontal(id="toolbar"):
             yield Button("Load", id="btn-open", variant="default")
+            yield Button("Boot", id="btn-boot", variant="default")
             yield Static(" ", classes="sep")
             yield Button("Assemble ^B", id="btn-asm", variant="primary")
             yield Static(" ", classes="sep")
@@ -1110,6 +1133,7 @@ class KCPU16TUI(App[None]):
         """
         actions = {
             "btn-open": self.action_open_file,
+            "btn-boot": self.action_boot_disk,
             "btn-asm": self.action_assemble_code,
             "btn-step": self.action_step_once,
             "btn-run-full": self.action_run_full_speed,
@@ -1395,7 +1419,38 @@ class KCPU16TUI(App[None]):
                 self._do_open(self.code_dir / filename)
                 self._refresh_all()
 
-        self.push_screen(FilePickerDialog(files), callback=_on_picked)
+        self.push_screen(
+            FilePickerDialog(files, title="Load Program", confirm_label="Load"),
+            callback=_on_picked,
+        )
+
+    def action_boot_disk(self) -> None:
+        """Open a file picker dialog to boot from a .dsk image.
+
+        Mirrors action_open_file behavior:
+        - button opens a picker
+        - picked file is resolved from storage_dir
+        - boot is executed after successful load
+        """
+        files = sorted(p.name for p in self.storage_dir.iterdir() if p.suffix == ".dsk")
+        if not files:
+            self._log("[yellow]No .dsk files found in storage directory.[/yellow]")
+            return
+
+        def _on_picked(filename: str | None) -> None:
+            if filename is None:
+                return
+            result = self._boot_from_disk_image(self.storage_dir / filename)
+            if result.ok:
+                if result.message:
+                    self._log(result.message)
+            else:
+                self._log(f"[red]{result.message}[/red]")
+
+        self.push_screen(
+            FilePickerDialog(files, title="Boot Disk", confirm_label="Boot"),
+            callback=_on_picked,
+        )
 
     def action_assemble_code(self) -> None:
         """Assembloi ladattu koodi ja lataa se muistiin (Ctrl+B).
@@ -1475,6 +1530,7 @@ class KCPU16TUI(App[None]):
         self._log(
             "  load <filename>              Load .asm (watches for changes, auto-reassembles)"
         )
+        self._log("  boot <filename>              Load .dsk and boot from block 0")
         self._log("  asm                          Manually reassemble loaded file")
         self._log("  check                        Syntax check loaded file (no load)")
         self._log("[bold]CPU Control:[/bold]")
@@ -2740,6 +2796,7 @@ class KCPU16TUI(App[None]):
         Komennot:
             --- Tiedostot & assembly ---
             load <path>                  -- Avaa .asm tiedosto ja assembloi
+            boot <path>                  -- Lataa .dsk ja boottaa blokista 0
             asm                          -- Käännä uudelleen ladattu tiedosto
             check                        -- Tarkista syntaksi ilman latausta
             --- CPU-ohjaus ---
@@ -2786,6 +2843,16 @@ class KCPU16TUI(App[None]):
                     path = self.code_dir / path
                 self._do_open(path)
                 return CommandResult(True, "")
+
+            if op == "boot":
+                if not args:
+                    return CommandResult(False, "Usage: boot <filename>")
+                path = Path(" ".join(args))
+                if not path.suffix:
+                    path = path.with_suffix(".dsk")
+                if not path.is_absolute():
+                    path = self.storage_dir / path
+                return self._boot_from_disk_image(path)
 
             if op == "asm":
                 self._do_assemble()
@@ -2960,6 +3027,44 @@ class KCPU16TUI(App[None]):
             )
         except Exception as e:
             return CommandResult(False, f"[red]Syntax error: {e}[/red]")
+
+    def _boot_from_disk_image(self, path: Path) -> CommandResult:
+        """Load a .dsk image and boot from storage block 0."""
+        if not path.exists():
+            return CommandResult(False, f"File not found: {path}")
+
+        self.workers.cancel_all()
+        self._exec_mode = "stopped"
+        self._update_run_mode_ui()
+
+        self.machine.storage.load_from_file(path)
+        self.current_disk_file = path
+        self._disk_dirty = False
+
+        # Disk-booted program is no longer tied to currently opened .asm source.
+        self.current_file = None
+        self.is_assembled = False
+        self.addr_to_line = {}
+        self._asm_addr_to_src = {}
+        self._asm_addr_to_label = {}
+        self._asm_jump_targets = {}
+        self._disasm_cache = {}
+
+        self.machine.cold_reset()
+        self.machine.boot_from_storage()
+        self.dbg.snapshot_registers(self.machine.dump_registers())
+
+        self._boot_status_text = f"boot {path.name}: entry 0x{BOOT_RAM_START:04X}"
+        self._update_program_title()
+        self._update_disk_title()
+        self._exec_mode = "fast"
+        self._update_run_mode_ui()
+        self._refresh_all(include_screen=True, force_screen=True)
+        self._cpu_run_worker("fast")
+        return CommandResult(
+            True,
+            f"[green]Booted from {path.name}. Running fast... (F5/F8 to stop)[/green]",
+        )
 
     def _format_hex_dump(self, words: list[int], base_addr: int) -> str:
         """Muotoile sanalista hex-dumpiksi (8 sanaa/rivi)."""

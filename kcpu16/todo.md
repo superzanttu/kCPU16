@@ -156,54 +156,7 @@ Näitä tehtäviä ei saa tehdä ennen kuin kaikki muut tehtävät on suoritettu
 
 
 
-## Analyysi: jäljellä olevien tehtävien turvalliset toteutuskokonaisuudet (2026-04-12)
 
-Tämä osio ryhmittelee tekemättömät tehtävät loogisiin kokonaisuuksiin, jotka on turvallista toteuttaa yhdessä.
+## Lisätehtävät
 
-### Kokonaisuus A: ajonaikainen vakaus ja edge caset
-- Tehtävät:
-	- CTMR-ajastuksen analyysi
-	- Suoritustilojen vaihdon analyysi
-- Miksi yhdessä:
-	- Molemmat kohdistuvat samaan ajonaikaiseen käyttäytymiseen (CPU-ajastus + TUI-tilasiirtymät).
-	- Voidaan käyttää samaa testimatriisia (lyhyet/pitkät intervalit, nopeat tilavaihtoketjut, kuormitustilanteet).
-- Riskitaso: keskitaso
-
-### Kokonaisuus B: havainnoitavuus
-- Tehtävät:
-	- Output-näkymän aikaleimat (HH:MM:SS)
-- Miksi yksin:
-	- Rajattu käyttöliittymämuutos, ei suoraa riippuvuutta muihin avoimiin tehtäviin.
-- Riskitaso: matala
-
-### Kokonaisuus C: valmislistan auditointi ja historiatäydennys
-- Tehtävät:
-	- Etsi valmiit tehtävät, joilta puuttuu kuvaus
-	- Dokumentoi commit-historian merkittävät muutokset valmiisiin tehtäviin
-	- Täytä puuttuvat saraketiedot valmiiden tehtävien taulukossa
-	- Varmista commit/PR-kattavuus tehtäviin nähden
-- Miksi yhdessä:
-	- Kyse on yhdestä ja samasta dokumentaation laatu- ja kattavuusauditoinnista.
-	- Luonteva eteneminen: inventointi -> rikastus -> validointi.
-- Riskitaso: matala-keskitaso
-
-### Kokonaisuus D: koko projektin rakenneuudistus
-- Tehtävät:
-	- Hakemistorakenteen muuttaminen fyysistä tietokonetta vastaavaksi
-- Miksi yksin:
-	- Laajavaikutteinen muutos (importit, polut, testit, dokumentaatio).
-	- Korkein regressioriski.
-- Riskitaso: korkea
-
-### Suositeltu toteutusjärjestys
-1. Kokonaisuus A
-2. Kokonaisuus B
-3. Kokonaisuus C
-4. Kokonaisuus D (viimeisenä)
-
-Huomio: Ryhmä Ö -tehtävät pidetään edelleen yhden aktiivisen tehtävän periaatteella, vaikka ne kuuluvat samaan loogiseen auditointikokonaisuuteen.
- 
-
- ### Lisätetävät
-
- - [ ] Lisää boot-komento ja BOOT-painike käyttöliittymään, jolla emultaatorin voi käynnistää suoraan levykuvasta ilman erillistä bootblock-direktiiviä. Tämä helpottaa nopeaa testausta ja demonstrointia ilman että tarvitsee rakentaa levykuvaa ja bootblockia erikseen.
+ - [W] Lisää boot-komento ja BOOT-painike käyttöliittymään, jolla emultaatorin voi käynnistää suoraan levykuvasta ilman erillistä bootblock-direktiiviä. Tämä helpottaa nopeaa testausta ja demonstrointia ilman että tarvitsee rakentaa levykuvaa ja bootblockia erikseen.
