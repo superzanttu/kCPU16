@@ -52,6 +52,7 @@ import re
 import time
 from dataclasses import dataclass
 from pathlib import Path
+from rich.text import Text
 
 # Poistaa Rich-markup-tagit (esim. [bold], [/red], [dim]) pelkään tekstiksi
 _RICH_MARKUP_RE = re.compile(r"\[/?[^\[\]]+?\]")
@@ -783,6 +784,13 @@ class KCPU16TUI(App[None]):
         border: solid $primary-darken-2;
         border-title-color: $accent;
     }
+    #disasm-tabs.max-stale {
+        border: solid #666666;
+        border-title-color: #888888;
+    }
+    #disasm-tabs.max-stale Tab {
+        color: #888888;
+    }
     TabPane {
         padding: 0;
     }
@@ -825,6 +833,10 @@ class KCPU16TUI(App[None]):
         border-title-color: $accent;
         padding: 0 1;
     }
+    #flags-pane.max-stale {
+        border: solid #666666;
+        border-title-color: #888888;
+    }
     #regs-pane {
         width: 40;
         height: 1fr;
@@ -832,6 +844,10 @@ class KCPU16TUI(App[None]):
         border-title-color: $accent;
         padding: 0 1;
         overflow-y: auto;
+    }
+    #regs-pane.max-stale {
+        border: solid #666666;
+        border-title-color: #888888;
     }
     """
 
@@ -1522,7 +1538,9 @@ class KCPU16TUI(App[None]):
         try:
             screen_section = self.query_one("#screen-section")
             screen_section.border_subtitle = (
-                self.current_file.name if (self.current_file and self.is_assembled) else ""
+                self.current_file.name
+                if (self.current_file and self.is_assembled)
+                else ""
             )
         except Exception:
             pass
@@ -1773,13 +1791,45 @@ class KCPU16TUI(App[None]):
         visuaalisesti "ei reaaliaikaisiksi" himmentämällä niitä.
         """
         target_ids = ("#disasm-tabs", "#flags-pane", "#regs-pane")
-        opacity = 0.55 if max_mode_active else 1.0
         for target_id in target_ids:
             try:
                 widget = self.query_one(target_id)
-                widget.styles.opacity = opacity
+                if max_mode_active:
+                    widget.add_class("max-stale")
+                else:
+                    widget.remove_class("max-stale")
             except Exception:
                 continue
+
+        # Tee MAX-tilassa ei-päivittyvistä paneeleista lähes taustaväriset,
+        # jotta käyttäjä näkee heti että sisältö on stale.
+        if max_mode_active:
+            for content_id in (
+                "#disasm-content",
+                "#flags-content",
+                "#cpu-content",
+                "#regs-content",
+                "#memory-view",
+                "#stack-view",
+            ):
+                self._apply_stale_snapshot(content_id)
+
+    def _apply_stale_snapshot(self, widget_id: str) -> None:
+        """Korvaa Static-widgetin sisältö himmeällä tekstisnapshotilla.
+
+        Muuntaa nykyisen renderöinnin plain-tekstiksi ja piirtää sen
+        lähes taustavärillä. Tämä tekee stale-paneelista selkeästi
+        erottuvan myös terminaaliteemoissa, joissa opacity ei toimi.
+        """
+        try:
+            widget = self.query_one(widget_id, Static)
+            renderable = widget.renderable
+            plain = (
+                renderable.plain if hasattr(renderable, "plain") else str(renderable)
+            )
+            widget.update(Text(plain, style="#2f2f2f"))
+        except Exception:
+            pass
 
     @work(thread=True, exclusive=True)
     def _cpu_run_worker(self, mode: str = "fast") -> None:
