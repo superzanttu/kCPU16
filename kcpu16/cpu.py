@@ -63,6 +63,8 @@ from .constants import (
     KBD_STATUS,
     MEMORY_WORDS,
     RAND_MMIO,
+    VRAM_END,
+    VRAM_START,
     RAND_LFSR_MASK,
     RAND_LFSR_SEED,
     REG_IDX_MASK,
@@ -638,19 +640,42 @@ class CPU:
             addr = (self.regs.fp + ins.operands[1]) & WORD_MASK
             self.memory.check_user_access(addr, self.regs.mpr)
 
+    @staticmethod
+    def _iter_fill_ranges(start: int, end: int) -> tuple[tuple[int, int], ...]:
+        """Palauta FILL-alue 1-2 lineaarisena [start,end]-jaksona (sis. rajat)."""
+        if start <= end:
+            return ((start, end),)
+        return ((start, WORD_MASK), (0, end))
+
     def _mcheck_fill(self, ins: _Ins) -> None:
         """FILL — kirjoitussuojaustarkistus aina; käyttäjäalueen tarkistus user-tilassa."""
-        start = self._get_reg(ins.operands[0])
-        end = self._get_reg(ins.operands[1])
-        addr = start
-        while True:
-            self.memory.check_write_protected(addr)
-            if addr == end:
-                break
-            addr = (addr + 1) & WORD_MASK
+        start = self._get_reg(ins.operands[0]) & WORD_MASK
+        end = self._get_reg(ins.operands[1]) & WORD_MASK
+        ranges = self._iter_fill_ranges(start, end)
+
+        # Fast path: tarkista koko alue bytearray-maskista. Jos osuma löytyy,
+        # palaa tarkkaan tarkistukseen virheviestin oikeaa osoitetta varten.
+        write_mask = self.memory._write_mask
+        for seg_start, seg_end in ranges:
+            if any(write_mask[seg_start : seg_end + 1]):
+                addr = seg_start
+                while True:
+                    self.memory.check_write_protected(addr)
+                    if addr == seg_end:
+                        break
+                    addr = (addr + 1) & WORD_MASK
+
         if not self.regs.in_kernel_mode:
-            self.memory.check_user_access(start, self.regs.mpr)
-            self.memory.check_user_access(end, self.regs.mpr)
+            mpr = self.regs.mpr & WORD_MASK
+            for seg_start, seg_end in ranges:
+                # Koko segmentti VRAMissa -> aina sallittu.
+                if VRAM_START <= seg_start and seg_end <= VRAM_END:
+                    continue
+                # Koko segmentti MPR-rajan yläpuolella -> sallittu.
+                if seg_start >= mpr:
+                    continue
+                # Segmentissä on ainakin yksi osoite MPR:n alapuolella.
+                self.memory.check_user_access(seg_start, mpr)
 
     # ==========================================================================
     # KÄSITTELYMETODIT: yksi metodi per käsky (opcode-handler-taulukko)
@@ -714,15 +739,39 @@ class CPU:
     def _exec_fill(self, ins: _Ins) -> None:
         # Täytä muistialue [regStart..regEnd] arvolla regVal
         start_reg, end_reg, val_reg = ins.operands
-        start = self._get_reg(start_reg)
-        end = self._get_reg(end_reg)
+        start = self._get_reg(start_reg) & WORD_MASK
+        end = self._get_reg(end_reg) & WORD_MASK
         val = self._get_reg(val_reg) & WORD_MASK
-        addr = start
-        while True:
-            self._write_word(addr, val)
-            if addr == end:
+        ranges = self._iter_fill_ranges(start, end)
+
+        # Nopea aluekirjoituspolku: käytä suoraa listaviipaletta kun alue ei
+        # sisällä kirjoitettavia MMIO-erikoisosoitteita, joilla on sivuvaikutuksia.
+        has_mmio_side_effect = False
+        for seg_start, seg_end in ranges:
+            if seg_start <= CLOCK_INT_INTERVAL <= seg_end:
+                has_mmio_side_effect = True
                 break
-            addr = (addr + 1) & WORD_MASK
+            if seg_start <= RAND_MMIO <= seg_end:
+                has_mmio_side_effect = True
+                break
+            if seg_start <= GFX_FLIP_REG <= seg_end:
+                has_mmio_side_effect = True
+                break
+
+        if not has_mmio_side_effect:
+            words = self.memory.words
+            for seg_start, seg_end in ranges:
+                words[seg_start : seg_end + 1] = [val] * (seg_end - seg_start + 1)
+            return
+
+        write_word = self._write_word
+        for seg_start, seg_end in ranges:
+            addr = seg_start
+            while True:
+                write_word(addr, val)
+                if addr == seg_end:
+                    break
+                addr = (addr + 1) & WORD_MASK
 
     # --- Aritmeettiset käskyt ---
 
