@@ -188,6 +188,11 @@ class Assembler:
         """Palattaa label -> osoite -hakutaulukon assemble()-kutsun jalkeen."""
         return self._labels
 
+    @property
+    def included_files(self) -> tuple[Path, ...]:
+        """Palauttaa assemble()-kutsussa laajennetut .include-tiedostot."""
+        return tuple(self._included_files)
+
     def assemble(
         self,
         source: str,
@@ -216,11 +221,17 @@ class Assembler:
         self._disk_block: int | None = None
         self._source_map: list[tuple[str, int]] = []  # (lahderivi, abs_osoite)
         self._labels: dict[str, int] = {}
+        self._included_files: list[Path] = []
         self._current_lineno: int = 0  # Nykyinen rivinumero virheilmoituksia varten
         self._current_line: str = ""  # Nykyinen lähderivi virheilmoituksia varten
         # Esikäsittely: laajenna .include-direktiivit rekursiivisesti
         base_dir = source_path.parent if source_path is not None else None
-        source = self._expand_includes(source, base_dir, frozenset())
+        source = self._expand_includes(
+            source,
+            base_dir,
+            frozenset(),
+            included_paths=self._included_files,
+        )
         try:
             # Pass 0: Makrojen ekspansointi, .origin ja .diskblock käsittely
             expanded_source, start_addr, user_constants = (
@@ -298,6 +309,7 @@ class Assembler:
         base_dir: Path | None,
         include_stack: frozenset[Path],
         known_symbols: set[str] | None = None,
+        included_paths: list[Path] | None = None,
     ) -> str:
         """
         Laajenna .include-direktiivit rekursiivisesti ennen kaantamista.
@@ -362,6 +374,8 @@ class Assembler:
                 if not inc_path.exists():
                     raise ValueError(f".include: tiedostoa ei löydy: '{inc_path}'")
                 inc_source = inc_path.read_text(encoding="utf-8")
+                if included_paths is not None and inc_path not in included_paths:
+                    included_paths.append(inc_path)
 
                 # Rekursiivinen laajennus liitettavaan tiedostoon (kayttaa samaa
                 # known_symbols-joukkoa, joten myos sen alaincludet tarkistetaan)
@@ -370,7 +384,11 @@ class Assembler:
                 # (laajennetaan ensin rekursiivisesti, jotta saadaan myos
                 # alaincludejen symbolit tarkistettua)
                 inc_expanded = Assembler._expand_includes(
-                    inc_source, inc_path.parent, new_stack, known_symbols=None
+                    inc_source,
+                    inc_path.parent,
+                    new_stack,
+                    known_symbols=None,
+                    included_paths=included_paths,
                 )
                 # Keraa kaikki symbolit laajennetusta sisallosta (sis. alaincludet)
                 inc_symbols = Assembler._collect_defined_symbols(inc_expanded)

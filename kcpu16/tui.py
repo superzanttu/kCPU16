@@ -918,6 +918,7 @@ class KCPU16TUI(App[None]):
         self._output_buffer: list[str] = []
         self._disk_dirty: bool = False
         self._watched_mtime: int | None = None  # st_mtime_ns (kokonaisluku)
+        self._watched_sources: dict[Path, int | None] = {}
         self._exec_mode: str = (
             "stopped"  # "stopped" | "step" | "fast" | "max" | "slow" | "reset"
         )
@@ -1631,6 +1632,23 @@ class KCPU16TUI(App[None]):
                 self._watched_mtime = self.current_file.stat().st_mtime_ns
             except Exception:
                 pass
+            watched_sources: dict[Path, int | None] = {}
+            if self.current_file is not None:
+                watched_sources[self.current_file] = self._watched_mtime
+            for inc in self.assembler.included_files:
+                try:
+                    watched_sources[inc] = inc.stat().st_mtime_ns
+                except Exception:
+                    watched_sources[inc] = None
+            self._watched_sources = watched_sources
+
+            includes = list(self.assembler.included_files)
+            if includes:
+                self._log(
+                    "[dim]Includes: " + ", ".join(p.name for p in includes) + "[/dim]"
+                )
+            else:
+                self._log("[dim]Includes: (none)[/dim]")
             self._build_asm_caches(segments)
             self.addr_to_line = _build_addr_to_line(source, self.assembler)
             self.dbg.snapshot_registers(self.machine.dump_registers())
@@ -1720,12 +1738,26 @@ class KCPU16TUI(App[None]):
         if not self.current_file or not self.current_file.exists():
             return
         try:
-            mtime = self.current_file.stat().st_mtime_ns
-            if self._watched_mtime is not None and mtime != self._watched_mtime:
-                self._watched_mtime = mtime
-                self._log(
-                    f"[dim]File changed: {self.current_file.name}. Reloading...[/dim]"
-                )
+            if not self._watched_sources:
+                try:
+                    self._watched_sources = {
+                        self.current_file: self.current_file.stat().st_mtime_ns
+                    }
+                except Exception:
+                    self._watched_sources = {self.current_file: None}
+
+            changed: list[Path] = []
+            for path, old_mtime in list(self._watched_sources.items()):
+                try:
+                    mtime = path.stat().st_mtime_ns
+                except Exception:
+                    mtime = None
+                if mtime != old_mtime:
+                    changed.append(path)
+
+            if changed:
+                names = ", ".join(p.name for p in changed)
+                self._log(f"[dim]File changed: {names}. Reloading...[/dim]")
                 self._do_assemble()
         except Exception:
             pass
