@@ -435,7 +435,13 @@ class CPU:
     def run_until_breakpoint_or_cycles(
         self, max_cycles: int, breakpoints: set[int] | None
     ) -> tuple[int, str]:
-        """Aja kunnes breakpoint, HALT, EXIT tai sykliraja."""
+        """Aja kunnes breakpoint, HALT, EXIT tai sykliraja.
+
+        Returns:
+            tuple[int, str]:
+            - suoritettujen käskyjen määrä tässä ajossa
+            - pysähtymissyy ("cycles", "breakpoint", "halted" tai "exited")
+        """
         if max_cycles <= 0:
             return 0, _RUN_STOP_CYCLES
         return self._run_core(max_cycles=max_cycles, breakpoints=breakpoints)
@@ -459,8 +465,7 @@ class CPU:
         opcode_calli = _OPCODE_CALLI
         opcode_fill = _OPCODE_FILL
         opcode_table = OPCODE_TABLE
-        bp_enabled = bool(breakpoints)
-        bp_set = breakpoints if breakpoints is not None else set()
+        bp_set = breakpoints if breakpoints is not None else ()
 
         cycles = 0
         while not self.halted and not self.process_exit_requested:
@@ -577,7 +582,7 @@ class CPU:
                 return cycles, _RUN_STOP_HALTED
             if self.process_exit_requested:
                 return cycles, _RUN_STOP_EXITED
-            if bp_enabled and regs.pc in bp_set:
+            if bp_set and regs.pc in bp_set:
                 return cycles, _RUN_STOP_BREAKPOINT
 
         return cycles, _RUN_STOP_CYCLES
