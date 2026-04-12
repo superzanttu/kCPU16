@@ -14,19 +14,19 @@ Kayttajat voivat importata paaluokan suoraan:
 
 PAKETIN SISALTO:
 ----------------
-- machine.py: KCPU16Machine - korkeantason wrapper
-- cpu.py: CPU-ydin (Fetch-Decode-Execute)
-- memory.py: Muistimalli
-- registers.py: Rekisteritiedosto
+- hardware/machine.py: KCPU16Machine - korkeantason wrapper
+- hardware/cpu.py: CPU-ydin (Fetch-Decode-Execute)
+- hardware/memory.py: Muistimalli
+- hardware/registers.py: Rekisteritiedosto
 - instruction.py: Kaskyjen metatiedot
 - assembler.py: Assembly -> konekieli
 - disassembler.py: Konekieli -> assembly
 - cli.py: Komentoriviliittyma
-- devices/: Virtuaalilaitteet (naytto, nappaimisto, levy)
+- hardware/devices/: Virtuaalilaitteet (naytto, nappaimisto, levy)
 - examples/: Esimerkkiohjelmat
 """
 
-from .machine import KCPU16Machine
+from .hardware.machine import KCPU16Machine
 
 __version__ = "1.2.6"  # Semanttinen versio, kaytettavissa esim. pip-pakettina
 

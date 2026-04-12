@@ -27,7 +27,7 @@ kCPU16/
 │   ├── architecture.md          # CPU-arkkitehtuurispesifikaatio
 │   ├── assembler.md             # Assembly-kielen syntaksi ja direktiivit
 │   ├── tui.md                   # TUI-debuggerin käyttöohje
-│   ├── PROJECT_STRUCTURE.md     # Tämä tiedosto
+│   ├── project_structure.md     # Tämä tiedosto
 │   └── suunnitelmat/            # Selvitykset ja suunnitelmat (ei nykytila)
 │       ├── basic.md             # Suunnitelma BASIC-tulkin toteuttamiseksi
 │       └── grafiikkatila.md     # Selvitys grafiikkatilasta Textual-kirjaston rajoissa
@@ -39,8 +39,18 @@ kCPU16/
 │   ├── instruction.py           # Käskyjen metatiedot ja opcode-taulukko
 │   ├── registers.py             # Rekisteritiedosto (R0-R3, SP, FP, PC, SR, MPR, TMR)
 │   ├── memory.py                # Muistimalli (65536 sanaa, suojaustarkistukset)
-│   ├── cpu.py                   # CPU-ydin: Fetch-Decode-Execute -sykli
-│   ├── machine.py               # Korkeantason konewrapper (CPU + laitteet yhdessä)
+│   ├── hardware/                # Laiterakenteen mukainen ydin
+│   │   ├── cpu.py               # CPU-ydin: Fetch-Decode-Execute -sykli
+│   │   ├── memory.py            # Muistimalli (65536 sanaa, suojaustarkistukset)
+│   │   ├── registers.py         # Rekisteritiedosto (R0-R15, SP, FP, PC, SR, MPR, TMR)
+│   │   ├── machine.py           # Korkeantason konewrapper (CPU + laitteet yhdessä)
+│   │   └── devices/             # Virtuaalilaitteet
+│   │       ├── __init__.py      # Vie laiteluokat (Screen, Keyboard, Storage)
+│   │       ├── screen.py        # Tekstinäyttö (80×24, FG/BG-värit, Rich-renderöinti)
+│   │       ├── keyboard.py      # Näppäimistöpuskuri (FIFO-jono)
+│   │       └── storage.py       # Blokkipohjainen tallennuslaite (256×256 sanaa)
+│   ├── cpu.py                   # Yhteensopivuuswrapper → kcpu16.hardware.cpu
+│   ├── machine.py               # Yhteensopivuuswrapper → kcpu16.hardware.machine
 │   ├── assembler.py             # Assembler: assembly → konekieli (3-passinen)
 │   ├── disassembler.py          # Disassembler: konekieli → assembly
 │   ├── debugger.py              # DebugState: breakpointit + rekisterimuutosten seuranta
@@ -50,11 +60,7 @@ kCPU16/
 │   ├── specs.py                 # Arkkitehtuuriraportin muotoilu CLI:lle
 │   ├── testrunner.py            # Automaattinen testien suoritus (.expect_*-direktiivit)
 │   │
-│   ├── devices/                 # Virtuaalilaitteet
-│   │   ├── __init__.py          # Vie laiteluokat (Screen, Keyboard, Storage)
-│   │   ├── screen.py            # Tekstinäyttö (80×24, FG/BG-värit, Rich-renderöinti)
-│   │   ├── keyboard.py          # Näppäimistöpuskuri (FIFO-jono)
-│   │   └── storage.py           # Blokkipohjainen tallennuslaite (256×256 sanaa)
+│   ├── devices/                 # Yhteensopivuuswrapperit → kcpu16.hardware.devices
 │   │
 │   ├── code/                    # Esimerkkiohjelmat (.asm)
 │   │   ├── hello_regs.asm
@@ -89,7 +95,7 @@ kCPU16/
 | `architecture.md`      | CPU-arkkitehtuurispesifikaatio: rekisterit, muistikartta, ISA, keskeytykset. |
 | `assembler.md`         | Assembly-kielen syntaksi, direktiivit, arkkitehtuurivakiot, esimerkit.       |
 | `tui.md`               | TUI-debuggerin käyttöohje: asettelu, näppäinsidonnaisuudet, komennot.        |
-| `PROJECT_STRUCTURE.md` | Tämä dokumentti — projektin rakenne.                                         |
+| `project_structure.md` | Tämä dokumentti — projektin rakenne.                                         |
 
 ### docs/suunnitelmat/ — Selvitykset ja Suunnitelmat
 
@@ -131,21 +137,21 @@ CPU:n sisäiset virheet, jotka muunnetaan keskeytyksiksi:
 - `OPCODE_TABLE` — sanakirja: opcode → (mnemonic, operandien_määrä, vaatiiko_kernelin)
 - Käskykategoriat: tiedonsiirto (6), aritmetiikka (5), logiikka (6), pino (2), hyppykäskyt (9), keskeytykset (4), järjestelmä (5)
 
-#### `registers.py` — Rekisteritiedosto
+#### `hardware/registers.py` — Rekisteritiedosto
 `RegisterFile`-dataluokka:
 - **GPR**: R0, R1, R2, R3 (yleiskäyttöiset)
 - **Erikois**: FP (Frame Pointer), SP (Stack Pointer, alkaa 0xFFFF), PC (Program Counter, alkaa 0x0100), SR (Status Register)
 - **Järjestelmä**: MPR (Memory Protection Register), TMR (Timer Register)
 - **Metodit**: `get_flag()`, `set_flag()`, `set_zn_flags()`, `set_carry_overflow()`, `in_kernel_mode`-property
 
-#### `memory.py` — Muistimalli
+#### `hardware/memory.py` — Muistimalli
 `Memory`-dataluokka:
 - 65536 sanaa (16-bittisiä), von Neumann -arkkitehtuuri
 - `read(addr)` / `write(addr, value)` — automaattinen osoite/arvo-maskaus
 - `check_user_access(addr, mpr)` — muistisuojaustarkistus (VRAM aina sallittu)
 - `load_words(start, data)` — ohjelman lataus muistiin
 
-#### `cpu.py` — CPU-ydin
+#### `hardware/cpu.py` — CPU-ydin
 `CPU`-dataluokka toteuttaa 5-vaiheisen suoritussyklin:
 1. **Fetch/Decode**: `_fetch_decode()` — lue opcode + operandit muistista
 2. **Privilege Check**: `_check_privilege()` — User ei saa ajaa Kernel-käskyjä
@@ -155,7 +161,7 @@ CPU:n sisäiset virheet, jotka muunnetaan keskeytyksiksi:
 
 Lisäksi: keskeytysten käsittely (`_trigger_interrupt()`), pinooperaatiot (`_push()`, `_pop()`), ajastinkeskeytys (`_handle_timer_interrupt_if_needed()`).
 
-#### `machine.py` — Korkeantason Wrapper
+#### `hardware/machine.py` — Korkeantason Wrapper
 `KCPU16Machine`-dataluokka yhdistää komponentit:
 - CPU, Memory, RegisterFile, ScreenDevice, KeyboardDevice, BlockStorageDevice
 - `cold_reset()` — kylmäkäynnistys (nollaa muisti + rekisterit)
