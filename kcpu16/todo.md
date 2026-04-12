@@ -132,6 +132,12 @@ Tehtävät on merkitty hakasulkeilla, ja niiden tilaa voidaan päivittää seura
 - [ ] Bootblock ohjelmaa käännettäessä on huomioitava bootblockin kokorajoitus. 
 - [ ] Samassa .asm-tiedostossa voi olla myös muuta assembler-koodia, joka ei kuulu bootblockiin, mutta joka käännetään ja tallennetaan muistiin normaalisti. Tarkoituksena on pystyä testaamaan bootblock-koodia ja normaalia koodia samassa tiedostossa, ilman että bootblockin kokorajoitus rajoittaa koko ohjelman kokoa.
 
+## Ryhmä F: Mahdolliset bugit
+- [ ] Analysoi kCPU16:sta CTMR-ajastuksen toteutus ja varmista että se toimii tarkasti ja luotettavasti. Etsi mahdollisia edge caseja, joissa ajastin saattaa käyttäytyä odottamattomasti, kuten erittäin lyhyet tai pitkät intervalit, tai tilanteet joissa CPU on kuormitettu muilla tehtävillä. Testaa ajastimen toimintaa näissä tilanteissa ja dokumentoi löydökset.
+- [ ] Analysoi tilanteet joissa ohjelman suoritustilaa vaihdetaan. Varmista ettei simulaation tila häiriinny kun vaihdetaan esim. FAST --> MAX_SPEED --> PAUSED --> STOPPED --> RUNNING. Etsi edge caseja, joissa tilamuutokset saattavat aiheuttaa odottamatonta käyttäytymistä, kuten tilamuutosten nopea peräkkäisyys tai tilamuutokset suorituksen aikana. Testaa tilamuutosten vaikutusta simulaation vakauteen ja suorituskykyyn, ja dokumentoi löydökset.
+
+
+
 ### Ryhmä Ö: Viimeiset tehtävät
 Näitä tehtäviä ei saa tehdä ennen kuin kaikki muut tehtävät on suoritettu, koska ne vaikuttavat koko projektiin ja vaativat laajaa refaktorointia tai ovat muuten suuria kokonaisuuksia. Näitä saa suorittaa vain yhden kerrallaan.
 

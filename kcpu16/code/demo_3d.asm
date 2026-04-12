@@ -9,10 +9,13 @@
 ;     Y: hitain   (64 askelta/kierros, joka 7. kehys)
 ;     Z: keskinop. (64 askelta/kierros, joka 5. kehys)
 ;
-;   Vaihe 0 (10 s): Tila B — kuutio (säde 12 pikseliä)
-;   Vaihe 1 (10 s): Tila C — L-kirjain (skaalattu ×2)
-;   Vaihe 2 (10 s): Tila B — J-kirjain
-;   Tämän jälkeen: käynnistyy alusta vaiheesta 0.
+;   Kohtaukset ajetaan scene_table-järjestyksessä:
+;     gfx_mode: B -> C
+;     object: cube -> pyramid -> L -> J
+;     drawmode: wireframe -> solid
+;   Kohtaus vaihtuu normaalisti 10 s CTMR-ajastimella.
+;   Lisäksi käytössä on frame-pohjainen varmistus, joka estää
+;   liian pitkän jumittumisen yhteen kohtaukseen hitaassa ajossa.
 ;
 ; PYÖRITYSALGORITMI (järjestys X→Y→Z, ortografinen projektio):
 ;   X: ay=(vy·cox−vz·six)/100, az=(vy·six+vz·cox)/100, ax=vx
@@ -117,6 +120,9 @@ scene_phase:
 
 draw_mode:
         .db  0         ; 0=wireframe, 1=solid (piiloviivapoisto)
+
+scene_frames:
+        .dw  0         ; frame-laskuri nykyiselle kohtaukselle (fallback-vaihto)
 
 angle_x:
         .db  0         ; X-akselin rotaatiokulma (0–63)
@@ -794,7 +800,7 @@ _ua_cnt_y_done:
 
 ; =============================================================================
 ; main — Pääohjelma
-; Sykli: vaihe 0 = kuutio (tila B), vaihe 1 = L (tila C), vaihe 2 = J (tila B), sitten alusta
+; Sykli: 16 kohtausta scene_table-järjestyksessä (B/C × cube/pyramid/L/J × wire/solid)
 ; =============================================================================
 
 main:
@@ -826,6 +832,8 @@ scene_loop:
         JGE   restart_loop
 
         STORE [scene_phase], R0
+        READ  R0, 0
+        STORE [scene_frames], R0
         CALL  apply_scene_from_phase
 
 scene_frame_loop:
@@ -833,6 +841,27 @@ scene_frame_loop:
         CALL  draw_object_frame
         CALL  gfx_flip
         CALL  update_angles
+
+        ; Fallback: jos CTMR-vaihto viivästyy hitaassa ajossa,
+        ; siirry seuraavaan kohtaukseen frame-katon jälkeen.
+        READ  R0, [scene_frames]
+        READ  R1, 1
+        ADD   R0, R1
+        STORE [scene_frames], R0
+        READ  R1, 60
+        CMP   R0, R1
+        JLT   _scene_wait_phase
+
+        READ  R0, [phase]
+        READ  R1, [scene_phase]
+        CMP   R0, R1
+        JNZ   _scene_wait_phase
+        READ  R0, [scene_phase]
+        READ  R1, 1
+        ADD   R0, R1
+        STORE [phase], R0
+
+_scene_wait_phase:
 
         READ  R0, [phase]
         READ  R1, [scene_phase]
