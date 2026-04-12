@@ -251,3 +251,14 @@ Tehtävät on merkitty hakasulkeilla, ja niiden tilaa voidaan päivittää seura
 ### Priorisoimattomat tehtävät
 [ ] Klikattaessa hiirellä Reset-nappia, Flags-ikkunassa on tieto "Pprog: NOT LOADED", mutta silti Screen-ikkunan alareunassa lukee "demo_3dcube.asm". Tarkista myös levynkuvan nimen näkyminen Reset-napista klikkaamisen jälkeen. 
 [ ] Luo code-hakemistoon demo_screen.asm, joka käyttää lib-screen.asm-kirjastoa demonstroidakseen tekstin tulostamista ja käyttäjältä inputin pyytämistä. Varmista että demo toimii oikein ja että se esittelee kirjaston ominaisuuksia tehokkaasti.
+
+### Python-suorituskyvyn parannukset (analyysi 2026-04-11)
+[ ] Vähennä assemblerin moninkertaista riviparsintaa: rakenna yhteinen esiparsittu rivirakenne (stripped/lower/tokens) ja käytä sitä Pass 0/1/2 -vaiheissa sekä include-symboliskannauksessa.
+[ ] Optimoi assemblerin segmenttien päällekkäisyystarkistus O(n²) -> O(n log n): lajittele segmentit alkuosoitteen mukaan ja tarkista päällekkäisyys lineaarisella läpikäynnillä.
+[ ] Optimoi CPU:n FILL-polku (sekä _mcheck_fill että _exec_fill): vähennä per-sana Python-kutsujen määrää ja lisää nopea aluekirjoituspolku ei-MMIO-alueille.
+[ ] Lisää VRAM/Screen dirty-flag tai versiolaskuri, jotta TUI ei renderöi koko näyttöä uudelleen, kun VRAM ei ole muuttunut.
+[ ] Kevennä TUI:n _refresh_disassembly()-hot pathia: vältä per-rivi disassembler-kutsuja ja rakenna cache PC-ikkunan dekoodatuille riveille.
+[ ] Vähennä TUI:n query_one()-kutsujen määrää suorituksen aikana: cacheta usein käytetyt widget-viittaukset on_mount()-vaiheessa.
+[ ] Poista testirunnerin turha uudelleenluku/parsinta run_test_all()-yhteenvedossa: palauta run_test()-funktiosta myös tarkistusten määrät ja käytä niitä suoraan.
+[ ] Optimoi editorin syntaksiväritys: korvaa per-mnemonic/per-register re.sub -silmukat esikäännetyillä regexeillä ja callback-pohjaisella korvauksella.
+[ ] Nopeuta storage save/load -polkua suurille levykuville: minimoi to_bytes/join-allokaatiot käyttämällä tehokkaampaa puskurimuotoa (esim. memoryview/array) CRC-laskennassa.
