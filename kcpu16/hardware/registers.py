@@ -49,7 +49,7 @@ from ..constants import (
 
 
 def _make_default_regs() -> list:
-    """Luo oletusarvoinen 18-alkioisma rekisterilista (r0-r15=0, fp=0, sp=KERNEL_STACK_END)."""
+    """Luo oletusarvoinen 18-alkioinen rekisterilista (r0-r15=0, fp=0, sp=KERNEL_STACK_END)."""
     regs = [0] * 18
     regs[17] = KERNEL_STACK_END  # sp alkuarvo
     return regs

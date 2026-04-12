@@ -45,7 +45,7 @@ from .registers import RegisterFile
 @dataclass
 class KCPU16Machine:
     """
-    kCPU16 virtuaalikone - yhddistaa kaikki komponentit.
+    kCPU16 virtuaalikone - yhdistää kaikki komponentit.
 
     KCPU16Machine on "taysi tietokone": CPU, muisti, naytto,
     nappaimisto ja levylaite yhdessa. Tarjoaa helpon rajapinnan
