@@ -222,10 +222,10 @@ Tehtävät on merkitty hakasulkeilla, ja niiden tilaa voidaan päivittää seura
 
 ### Ryhmä B: Disk-laajennukset
 
-[ ] Lisää kirjastoon lib-disk.asm tuki hakemistoille. Tämä mahdollistaisi tiedostojen järjestämisen hierarkkisesti, ja vaatisi hakemistokohteiden ja polkujen käsittelyn.
-[ ] Varmista että kirjastossa lib-disk.asm on tuki levyn formatointiin, joka alustaa tallennuslaitteen tyhjäksi ja luo tarvittavat rakenteet tiedostojärjestelmälle.
-[ ] Lisää kirjastoon lib-disk.asm tuki levyn tarkistukseen, joka skannaa tallennuslaitteen ja raportoi mahdollisista vioista tai epäjohdonmukaisuuksista tiedostojärjestelmässä.
-[ ] Lisää disk_test.asm:iin lib-disk.asm-kirjaston kaikkien ominaisuuksien esittely
+[W] Lisää kirjastoon lib-disk.asm tuki hakemistoille. Tämä mahdollistaisi tiedostojen järjestämisen hierarkkisesti, ja vaatisi hakemistokohteiden ja polkujen käsittelyn.
+[W] Varmista että kirjastossa lib-disk.asm on tuki levyn formatointiin, joka alustaa tallennuslaitteen tyhjäksi ja luo tarvittavat rakenteet tiedostojärjestelmälle.
+[W] Lisää kirjastoon lib-disk.asm tuki levyn tarkistukseen, joka skannaa tallennuslaitteen ja raportoi mahdollisista vioista tai epäjohdonmukaisuuksista tiedostojärjestelmässä.
+[W] Lisää disk_test.asm:iin lib-disk.asm-kirjaston kaikkien ominaisuuksien esittely
 
 <!-- ============================================================ -->
 <!-- RYHMÄ C: Pienet optimoinnit (cpu.py + tui.py)               -->
