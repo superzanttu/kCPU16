@@ -16,7 +16,7 @@ interaktiivisen Textual-pohjaisen käyttöliittymän.
 - **Muistisuojaus** — MPR-rekisteri rajoittaa User-tilan muistinkäyttöä
 - **Keskeytykset** — 9 vektoria (INT 0–8), ohjelmallinen INT-käsky ja laitteistokeskeytykset
 - **Virtuaalinen tekstinäyttö** — 80 × 24 merkkiä, 8 edustusväriä (FG) + 8 taustaVäriä (BG), bold
-- **Näppäimistölaite** — KGET-käsky lukee näppäinpuskurin
+- **Näppäimistölaite** — MMIO-luku osoitteista `KBD_DATA` ($0020) ja `KBD_STATUS` ($0021)
 - **Tallennuslaite** — lohkopohjainen levylaite (DREAD/DWRITE, boot-lataus sektorilta 0)
 - **TUI-debuggeri** — Textual-pohjainen, ammattitason käyttöliittymä
 - **CLI** — komentorivi (`python main.py`)
@@ -27,12 +27,15 @@ interaktiivisen Textual-pohjaisen käyttöliittymän.
 kCPU16/
 ├── main.py
 ├── kcpu16/
-│   ├── cpu.py, memory.py, registers.py, machine.py
+│   ├── hardware/
+│   │   ├── cpu.py, memory.py, registers.py, machine.py
+│   │   └── devices/
+│   │       ├── screen.py, keyboard.py, storage.py
 │   ├── assembler.py, disassembler.py
 │   ├── tui.py, cli.py, debugger.py, editor.py, specs.py
 │   ├── constants.py, exceptions.py, instruction.py, testrunner.py
-│   ├── devices/
-│   │   ├── screen.py, keyboard.py, storage.py
+│   ├── cpu.py, memory.py, registers.py, machine.py     # yhteensopivuuswrapperit
+│   ├── devices/                                         # yhteensopivuuswrapperit
 │   ├── code/         # Esimerkkiohjelmat (.asm)
 │   └── test/         # Automaattiset testit (.asm)
 └── docs/
