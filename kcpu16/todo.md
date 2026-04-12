@@ -110,52 +110,13 @@ Tehtävät on merkitty hakasulkeilla, ja niiden tilaa voidaan päivittää seura
 |   72 | Käyttöliittymä (TUI)                | Klikattaessa hiirellä Reset-nappia, Flags-ikkunassa on tieto "Pprog: NOT LOADED", mutta silti Screen-ikkunan alareunassa lukee "demo_3dcube.asm". Tarkista myös levynkuvan nimen näkyminen Reset-napista klikkaamisen jälkeen.                                                                                                                                                                                                                                                                                                                                                               | Korjattu tui.py:ssä: action_reset_machine() tyhjentää levytiedostoviitteen (current_disk_file=None), nollaa _disk_dirty:n ja kutsuu _update_program_title() + _update_disk_title(). _update_program_title() näyttää ohjelman nimen vain kun current_file on asetettu ja is_assembled=True. Lisäksi sama otsikoiden nollaus lisätty reset-komentopolkuun (_handle_reset_command).                                                                                                                                                                                                                            |
 |   73 | Optimointi: FILL ja muistikirjoitus | Paranna FILL-käskyn toteutuksen suorituskykyä.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | Toteutettu cpu.py:ssä: FILL käyttää nyt segmentoitua aluekäsittelyä (myös wrap-around), ja ei-MMIO-polulla tehdään suora viipalekirjoitus memory.words-listaan. Tämä vähentää merkittävästi per-sana Python-kutsuja isoilla alueilla.                                                                                                                                                                                                                                                                                                                                                                       |
 |   74 | Optimointi: FILL ja muistikirjoitus | Optimoi CPU:n FILL-polku (sekä _mcheck_fill että _exec_fill): vähennä per-sana Python-kutsujen määrää ja lisää nopea aluekirjoituspolku ei-MMIO-alueille.                                                                                                                                                                                                                                                                                                                                                                                                                                    | _mcheck_fill käyttää nyt write_mask-fast-pathia koko segmentille ja putoaa osoitekohtaiseen tarkistukseen vain jos osumia löytyy (tarkka virheosoite säilyy). _exec_fill ohittaa nopean viipalekirjoituksen, jos alue sisältää MMIO-sivuvaikutusosoitteen (CLOCK_INT_INTERVAL, RAND_MMIO, GFX_FLIP_REG), jolloin käytetään turvallista _write_word-polkuja.                                                                                                                                                                                                                                                 |
+|   75 | Optimointi: Assembler hot path      | Vähennä assemblerin moninkertaista riviparsintaa: rakenna yhteinen esiparsittu rivirakenne (stripped/lower/tokens) ja käytä sitä Pass 0/1/2 -vaiheissa sekä include-symboliskannauksessa.                                                                                                                                                                                                                                                                                                                                                                                                    | Toteutettu assembler.py:ssä: luotu _ParsedLine dataclass ja _parse_all_lines()-funktio. Rakentaa jokaisen rivin kerralla (stripped, lower) vähentäen redundantteja split/strip/lower-kutsuja pass-metodeissa.                                                                                                                                                                                                                                                                                                                                                                                               |
+|   76 | Optimointi: Assembler hot path      | Optimoi assemblerin segmenttien päällekkäisyystarkistus O(n²) -> O(n log n): lajittele segmentit alkuosoitteen mukaan ja tarkista päällekkäisyys lineaarisella läpikäynnillä.                                                                                                                                                                                                                                                                                                                                                                                                                | Toteutettu assembler.py:ssä: _check_segment_overlaps() lajittelee segmentit ja tekee lineaarisen läpikäynnin. Kompleksisuus O(n²) -> O(n log n).                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 
-### Ryhmä 9: Suorituskyky – Fast run -suorituspolku
-
-  - Kaikki Ryhmä 9 -tehtävät on suoritettu, katso Valmiit tehtävät -osio.
-
-<!-- ============================================================ -->
-<!-- RYHMÄ A: Screen-kirjasto (lib-screen.asm)                   -->
-<!-- Uusi itsenäinen kirjasto, ei riippuvuuksia muihin ryhmiin.  -->
-<!-- Järjestys: teksti ensin, sitten input (riippuu tekstistä).  -->
-<!-- ============================================================ -->
-
-### Ryhmä A: Screen-kirjasto
-
-  - Kaikki Ryhmä A -tehtävät on suoritettu, katso Valmiit tehtävät -osio.
-
-<!-- ============================================================ -->
-<!-- RYHMÄ B: Disk-laajennukset (lib-disk.asm + disk_test.asm)   -->
-<!-- Järjestys: hakemistot → tarkistus → testi (ketjutettu).     -->
-<!-- Huom: disk_format on JO TOTEUTETTU – katso [?]-tehtävä.     -->
-<!-- ============================================================ -->
-
-### Ryhmä B: Disk-laajennukset
-
-  - Kaikki Ryhmä B -tehtävät on suoritettu, katso Valmiit tehtävät -osio.
-
-<!-- ============================================================ -->
-<!-- RYHMÄ C: Pienet optimoinnit (cpu.py + tui.py)               -->
-<!-- Itsenäiset pienet muutokset, ei riippuvuuksia toisistaan.   -->
-<!-- ============================================================ -->
-
-### Ryhmä C: Pienet optimoinnit
-
-- Kaikki Ryhmä C -tehtävät on ryhmitelty alle loogisiin toteutusryhmiin.
-
-### Ryhmä C1: Käyttöliittymän tilakonsistenssi
-
-- Kaikki Ryhmä C1 -tehtävät on suoritettu, katso Valmiit tehtävät -osio.
-
-### Ryhmä C2: CPU/FILL-optimointi
-
-- Kaikki Ryhmä C2 -tehtävät on suoritettu, katso Valmiit tehtävät -osio.
 
 ### Ryhmä C3: Assemblerin hot path -optimointi
 
-- [ ] Vähennä assemblerin moninkertaista riviparsintaa: rakenna yhteinen esiparsittu rivirakenne (stripped/lower/tokens) ja käytä sitä Pass 0/1/2 -vaiheissa sekä include-symboliskannauksessa.
-- [ ] Optimoi assemblerin segmenttien päällekkäisyystarkistus O(n²) -> O(n log n): lajittele segmentit alkuosoitteen mukaan ja tarkista päällekkäisyys lineaarisella läpikäynnillä.
+- Kaikki Ryhmä C3 -tehtävät on suoritettu, katso Valmiit tehtävät -osio.
 
 ### Ryhmä C4: TUI-renderöinnin hot path -optimointi
 
@@ -174,9 +135,15 @@ Tehtävät on merkitty hakasulkeilla, ja niiden tilaa voidaan päivittää seura
 - [ ] Luo code-hakemistoon demo_screen.asm, joka käyttää lib-screen.asm-kirjastoa demonstroidakseen tekstin tulostamista ja käyttäjältä inputin pyytämistä. Varmista että demo toimii oikein ja että se esittelee kirjaston ominaisuuksia tehokkaasti.
 - [ ] Varmista että demo_3d_cube.asm ja demo_3dcube2.asm pyörittävät esineitä niin että esim. kuutiosta näkyy katsojalle välillä myös 3 sivua samaan aikaan, mikä vahvistaa että pyöritys tapahtuu useamman kuin yhden akselin ympäri.
 
+### Ryhmä C7: Käyttöliittymä ja visuaaliset elementit
+
+- [ ] VArmista että MAX-tilassa kaikki tiedot jotka eivät päivity reaaliajassa, näkyvät harmaana, ja että tilasta poistuttaessa ne palautuvat normaalivärisiksi ja päivittyvät uudestaan.
+
+### Ryhmä C8: Kielioppi ja kirjoitusvirheet
+- [ ] Anaysoi todo.do ja korjaa kirjoitusvirheet. Varmista ettet muuta tehtävien sisältöä tai merkitystä, vaan keskity vain kielioppiin ja kirjoitusvirheisiin.
+
+
 ### Ryhmä Ö: Viimeiset tehtävät
 Näitä tehtäviä ei saa tehdä ennen kuin kaikki muut tehtävät on suoritettu, koska ne vaikuttavat koko projektiin ja vaativat laajaa refaktorointia.
 
 - [ ] Muuta projektin hakemistorakennetta, niin että se vastaa fyysisen tietokoneen komponentteja ja rakennetta. Varmista että kaikki tiedostopolut ja importit päivitetään, eikä mitään hajoa.
-
-- [ ] VArmista että MAX-tilassa kaikki tiedot jotka eivät päivity reaaliajassa, näkyvät harmaana, ja että tilasta poistuttaessa ne palautuvat normaalivärisiksi ja päivittyvät uudestaan.

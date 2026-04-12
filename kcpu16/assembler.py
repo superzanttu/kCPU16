@@ -82,6 +82,7 @@ VRAM_DATA-symboli osoittaa 0xF800.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 
 from .constants import ARCH_SYMBOLS, BOOT_RAM_START, STORAGE_BLOCK_SIZE, WORD_MASK
@@ -130,6 +131,26 @@ _DEPRECATED_MNEMONICS: frozenset[str] = frozenset(
         "STOREI_REL",
     }
 )
+
+
+@dataclass(slots=True, frozen=True)
+class _ParsedLine:
+    """Esiparsittu lähderivi - vältä redundanttia split/strip/lower toimintoa."""
+
+    raw: str        # Alkuperäinen rivi
+    stripped: str   # Kommentit poistettu, välilyönnit trimmattu
+    lower: str      # stripped.lower()
+
+    @staticmethod
+    def parse(raw: str) -> "_ParsedLine":
+        """Parsii lähdekoodi-rivin yksinkertaisesti."""
+        stripped = raw.split(";", 1)[0].strip()
+        return _ParsedLine(raw=raw, stripped=stripped, lower=stripped.lower())
+
+
+def _parse_all_lines(source: str) -> list[_ParsedLine]:
+    """Rakenna kaikki rivit ParsedLine-muotoon kerralla.Tämä vähentää moninkertaista split/strip/lower kutsua pass-metodeissa."""
+    return [_ParsedLine.parse(line) for line in source.splitlines()]
 
 
 class Assembler:
@@ -371,7 +392,10 @@ class Assembler:
     @staticmethod
     def _check_segment_overlaps(segments: list[tuple[int, list[int]]]) -> None:
         """
-        Tarkista ettei segmentit mene päällekkäin muistissa.
+        Tarkista ettei segmentit mene päällekkäin muistissa (optimoitu O(n log n)).
+
+        Algoritmi: lajittele segmentit alkuosoitteen mukaan, tarkista lineaarisesti
+        että jokaisen segmentin loppu ei ylety seuraavan segmentin alkuun.
 
         Args:
             segments: Lista (aloitusosoite, sanat) -pareista
@@ -379,17 +403,23 @@ class Assembler:
         Raises:
             ValueError: Jos kaksi segmenttia kayttaa samaa muistiosoitetta
         """
-        ranges: list[tuple[int, int]] = [
-            (start, start + len(words) - 1) for start, words in segments if words
+        ranges: list[tuple[int, int, int]] = [
+            (start, start + len(words) - 1, idx)
+            for idx, (start, words) in enumerate(segments)
+            if words
         ]
-        for i, (a_start, a_end) in enumerate(ranges):
-            for b_start, b_end in ranges[i + 1 :]:
-                if a_start <= b_end and b_start <= a_end:
-                    raise ValueError(
-                        f"Segmentit menevät päällekkäin muistissa: "
-                        f"0x{a_start:04X}–0x{a_end:04X} ja "
-                        f"0x{b_start:04X}–0x{b_end:04X}"
-                    )
+        # Lajittele segmentit alkuosoitteen perusteella (O(n log n))
+        ranges.sort(key=lambda x: x[0])
+        # Tarkista lineaarisesti: jos a_end >= b_start, osuma löytyi (O(n))
+        for i in range(len(ranges) - 1):
+            a_start, a_end, a_idx = ranges[i]
+            b_start, b_end, b_idx = ranges[i + 1]
+            if a_end >= b_start:
+                raise ValueError(
+                    f"Segmentit {a_idx} ja {b_idx} menevät päällekkäin muistissa: "
+                    f"0x{a_start:04X}–0x{a_end:04X} ja "
+                    f"0x{b_start:04X}–0x{b_end:04X}"
+                )
 
     def _pass0_expand_macros_and_origin(
         self, source: str, start_addr: int
