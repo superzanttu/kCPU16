@@ -8,30 +8,29 @@
 ;   peruuttamattomaan virheisiin.
 ;
 ;   Demo esittää:
-;   - VILKKUVA punainen kehys näytön ympärillä (1 Hz)
-;   - Musta tausta sisällä
-;   - Punaiset virheilmoitukset keskellä
+;   - VILKKUVA punainen kehys tekstin ympärillä (1 Hz)
+;   - Kehys näytön yläreunassa
+;   - Punaiset virheilmoitukset kehyksen sisällä
 ;
 ; NÄYTTÖASETTELU (80×24, VRAM = $F800):
 ;
-;   Rivi 0        vilkkuva kehys ylä: 80 × "#"
-;   Rivi 1        välilyönnit
-;   Rivi 2        "Software Failure. Press left mouse button to continue."
-;   Rivi 3        "Guru Meditation #80000003.0880AC0"
-;   Rivit 4-21    välilyönnit (piilotetun kehyksen väliä)
-;   Rivi 22       vilkkuva kehys ala: 80 × "#"
-;   Rivi 23       vilkkuva kehys ala: 80 × "#"
+;   Rivi 0        kehyksen yläreuna (sarake 8-71, vilkkuva)
+;   Rivi 1        teksti 1 + kehyksen sivut (vilkkuvat)
+;   Rivi 2        teksti 2 + kehyksen sivut (vilkkuvat)
+;   Rivi 3        kehyksen alareuna (sarake 8-71, vilkkuva)
+;   Rivit 4-23    musta tausta
 ;
 ; VÄRIT (VRAM-sana: bitti 14=bold, 13-11=BG, 10-8=FG, 7-0=ASCII):
-;   Tausta:    FG=0 (musta), BG=0 (musta), space              → 0x0020  (musta)
-;   Kehys:     FG=1 (punainen), BG=0 (musta), "█" (0xDB)     → 0x01DB  (täyttävä blokki)
-;   Teksti:    FG=1 (punainen), BG=0 (musta)                 → 0x0100
+;   Tausta:    FG=0 (musta), BG=0 (musta), space              → 0x0020
+;   Kehys ON:  space + BG=1 (punainen)                        → 0x0820
+;   Kehys OFF: space + BG=0 (musta)                           → 0x0020
+;   Teksti:    FG=1 (punainen), BG=0 (musta)                  → 0x0100
 ;
 ; VRAM-OSOITTEET:
-;   Rivi R: $F800 + R*80
-;   Rivi 0:  $F800      ← ylä kehys
-;   Rivi 22: $FF00      ← ala kehys
-;   Rivi 23: $FF50      ← ala kehys (toinen rivi)
+;   Kehys vasen/oikea: sarakkeet 8 ja 71
+;   Kehys ylä/alareuna: rivit 0 ja 3, sarakkeet 8-71
+;   Teksti 1: rivi 1, sarake 13
+;   Teksti 2: rivi 2, sarake 23
 ;
 ; KESKEYTYKSET:
 ;   INT 9 (SCTMR, 500 ms): vaihtaa vilkkutilan
@@ -98,64 +97,55 @@ ws_done:
         RET
 
 ; =============================================================================
-; ALIOHJELMA: draw_border
+; ALIOHJELMA: draw_frame
 ; =============================================================================
-; Piirtää vilkkuvan kehyksen blink_flag:n mukaan.
-; Näkyvä (=1): kehys "█" merkeillä, piilossa (=0): välilyönnit
+; Piirtää vilkkuvan kehyksen tekstin ympärille näytön yläreunaan.
+; Näkyvä (=1): punainen tausta kehysalueella (0x0820)
+; Piilotettu (=0): musta tausta samoissa soluissa (0x0020)
 ;
-; VRAM-osoitteet:
-;   Rivi 0:    0xF800 – 0xF84F  (80 sanaa)
-;   Rivit 22-23: 0xFEE0 – 0xFF7F  (160 sanaa)
-;     Rivi 22: $F800 + 22*80 = $FEE0
-;     Rivi 23: $F800 + 23*80 = $FF30
+; Kehysalue:
+;   Ylä/alareuna: rivi 0 ja 3, sarakkeet 8-71  (64 solua)
+;   Sivut: rivi 1 ja 2, sarakkeet 8 ja 71
 ;
-; Käyttää: R0, R1, R8
-; Pysyvät vakiot: R2=0x0020, R3=1, R4=0x01DB, R12=0
+; Käyttää: R0, R1, R5, R8
+; Pysyvät vakiot: R2=0x0020, R3=1, R12=0
 ; =============================================================================
-draw_border:
+draw_frame:
         READ  R0, [blink_flag]
         CMP   R0, R12
-        JZ    db_hide
+        JZ    df_hide
 
-db_show:
-        ; Rivi 0: kirjoita 80 × "█" osoitteisiin $F800–$F84F
-        READ  R8, 0xF800
-        READ  R1, 0xF850          ; loppuosoite (eksklusiivinen)
-db_show_top:
-        STORE [R8], R4
+df_show:
+        READ  R5, 0x0820          ; punainen BG + välilyönti
+        JUMP  df_draw
+
+df_hide:
+        CPY   R5, R2              ; musta BG + välilyönti
+
+df_draw:
+        ; Yläreuna: rivi 0, sarakkeet 8-71
+        READ  R8, 0xF808
+        READ  R1, 0xF848
+df_top_loop:
+        STORE [R8], R5
         ADD   R8, R3
         CMP   R8, R1
-        JLT   db_show_top
+        JLT   df_top_loop
 
-        ; Rivit 22–23: kirjoita 160 × "█" osoitteisiin $FEE0–$FF7F
-        READ  R8, 0xFEE0
-        READ  R1, 0xFF80          ; loppuosoite
-db_show_bot:
-        STORE [R8], R4
+        ; Alareuna: rivi 3, sarakkeet 8-71
+        READ  R8, 0xF8F8
+        READ  R1, 0xF938
+df_bottom_loop:
+        STORE [R8], R5
         ADD   R8, R3
         CMP   R8, R1
-        JLT   db_show_bot
+        JLT   df_bottom_loop
 
-        RET
-
-db_hide:
-        ; Rivi 0: kirjoita 80 × välilyöntiä
-        READ  R8, 0xF800
-        READ  R1, 0xF850
-db_hide_top:
-        STORE [R8], R2
-        ADD   R8, R3
-        CMP   R8, R1
-        JLT   db_hide_top
-
-        ; Rivit 22–23: kirjoita 160 × välilyöntiä
-        READ  R8, 0xFEE0
-        READ  R1, 0xFF80
-db_hide_bot:
-        STORE [R8], R2
-        ADD   R8, R3
-        CMP   R8, R1
-        JLT   db_hide_bot
+        ; Sivut: rivi 1 ja 2
+        STORE [0xF858], R5        ; rivi 1, sarake 8
+        STORE [0xF897], R5        ; rivi 1, sarake 71
+        STORE [0xF8A8], R5        ; rivi 2, sarake 8
+        STORE [0xF8E7], R5        ; rivi 2, sarake 71
 
         RET
 
@@ -170,7 +160,7 @@ clock_handler:
         STORE [blink_flag], R0
 
         ; Päivitä kehys
-        CALL  draw_border
+        CALL  draw_frame
 
         IRET
 
@@ -183,9 +173,8 @@ main:
         STORE [0x0009], R0
 
         ; --- Pysyvät vakiot ---
-        READ  R2, 0x0020          ; välilyönti (FG=0, BG=0, space)
+        READ  R2, 0x0020          ; musta välilyönti (BG=0, space)
         READ  R3, 1               ; VRAM-osoittimen askel
-        READ  R4, 0x01DB          ; kehys "█" punainen (täyttävä blokki, 0xDB)
         READ  R12, 0              ; nollavakio
 
         ; --- 1) Täytä koko VRAM mustalla taustalla ---
@@ -197,27 +186,21 @@ fill_loop:
         CMP   R0, R1
         JLT   fill_loop
 
-        ; --- 2) Rivi 2: "Software Failure..." (keskitettävä) ---
-        ; Rivi 2 osoite: $F800 + 2*80 = $F8A0
-        ; Teksti on noin 51 merkkiä, keskitys: (80-51)/2 = 14 välilyöntiä
-        ; Eli alkaa sarakkeesta 14: 0xF8A0 + 14 = 0xF8AE
-        READ  R8, 0xF8AE
+        ; --- 2) Kirjoita tekstit (punainen mustalla) ---
+        READ  R8, 0xF85D          ; rivi 1, sarake 13
         READ  R9, str_line1
-        READ  R10, 0x0100         ; punainen
+        READ  R10, 0x0100
         CALL  write_str
 
-        ; --- 3) Rivi 3: "Guru Meditation #80000003..." (keskitettävä) ---
-        ; Rivi 3 osoite: $F800 + 3*80 = $F8F0
-        ; Teksti on noin 30 merkkiä, keskitys: (80-30)/2 = 25 välilyöntiä
-        READ  R8, 0xF909
+        READ  R8, 0xF8B7          ; rivi 2, sarake 23
         READ  R9, str_line2
         READ  R10, 0x0100
         CALL  write_str
 
-        ; --- 4) Kehyksen alkutila: näkyvä ---
+        ; --- 3) Piirrä kehys alkuun näkyvänä ---
         READ  R0, 1
         STORE [blink_flag], R0
-        CALL  draw_border
+        CALL  draw_frame
 
         ; --- 7) Aseta kellokeskeytys 500 ms välein → 1 Hz vilkku ---
         READ  R0, 500
