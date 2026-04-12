@@ -199,6 +199,14 @@ Tehtävät on merkitty hakasulkeilla, ja niiden tilaa voidaan päivittää seura
 ; CPU.__post_init__: `self._reg_array = self.regs._regs` (sama listaviite, ei kopiota).
 ; `_get_reg`: yksi bounds-check (`idx < 18`) + `self._reg_array[idx]` – ei if/elif-ketjua.
 ; `_set_reg`: vastaava `self._reg_array[idx] = value & WORD_MASK`.
+[X] Lisää kirjastoon lib-disk.asm tuki hakemistoille. Tämä mahdollistaisi tiedostojen järjestämisen hierarkkisesti, ja vaatisi hakemistokohteiden ja polkujen käsittelyn.
+; Toteutettu lib-disk.asm:ssa: hakemistotyyppi (status=2), uusi disk_mkdir(), disk_list listaa sekä tiedostot että hakemistot.
+[X] Varmista että kirjastossa lib-disk.asm on tuki levyn formatointiin, joka alustaa tallennuslaitteen tyhjäksi ja luo tarvittavat rakenteet tiedostojärjestelmälle.
+; Varmistettu: disk_format säilytetty, FAT+hakemisto nollataan ja varatut blokit 0..2 merkitään DISK_EOF:lla.
+[X] Lisää kirjastoon lib-disk.asm tuki levyn tarkistukseen, joka skannaa tallennuslaitteen ja raportoi mahdollisista vioista tai epäjohdonmukaisuuksista tiedostojärjestelmässä.
+; Toteutettu lib-disk.asm:ssa: uusi disk_check() (FAT-varaukset, status-kentät, blokkiketjujen validointi).
+[X] Lisää disk_test.asm:iin lib-disk.asm-kirjaston kaikkien ominaisuuksien esittely
+; Päivitetty disk_test.asm: disk_format, disk_mkdir, disk_create, disk_write, disk_read, disk_stat, disk_list, disk_check, disk_delete.
 
 ### Ryhmä 9: Suorituskyky – Fast run -suorituspolku
 
@@ -222,10 +230,7 @@ Tehtävät on merkitty hakasulkeilla, ja niiden tilaa voidaan päivittää seura
 
 ### Ryhmä B: Disk-laajennukset
 
-[ ] Lisää kirjastoon lib-disk.asm tuki hakemistoille. Tämä mahdollistaisi tiedostojen järjestämisen hierarkkisesti, ja vaatisi hakemistokohteiden ja polkujen käsittelyn.
-[ ] Varmista että kirjastossa lib-disk.asm on tuki levyn formatointiin, joka alustaa tallennuslaitteen tyhjäksi ja luo tarvittavat rakenteet tiedostojärjestelmälle.
-[ ] Lisää kirjastoon lib-disk.asm tuki levyn tarkistukseen, joka skannaa tallennuslaitteen ja raportoi mahdollisista vioista tai epäjohdonmukaisuuksista tiedostojärjestelmässä.
-[ ] Lisää disk_test.asm:iin lib-disk.asm-kirjaston kaikkien ominaisuuksien esittely
+; Kaikki Ryhmä B -tehtävät on suoritettu, katso Valmiit tehtävät -osio.
 
 <!-- ============================================================ -->
 <!-- RYHMÄ C: Pienet optimoinnit (cpu.py + tui.py)               -->
