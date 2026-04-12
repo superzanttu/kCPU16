@@ -137,9 +137,9 @@ _DEPRECATED_MNEMONICS: frozenset[str] = frozenset(
 class _ParsedLine:
     """Esiparsittu lähderivi - vältä redundanttia split/strip/lower toimintoa."""
 
-    raw: str        # Alkuperäinen rivi
-    stripped: str   # Kommentit poistettu, välilyönnit trimmattu
-    lower: str      # stripped.lower()
+    raw: str  # Alkuperäinen rivi
+    stripped: str  # Kommentit poistettu, välilyönnit trimmattu
+    lower: str  # stripped.lower()
 
     @staticmethod
     def parse(raw: str) -> "_ParsedLine":
