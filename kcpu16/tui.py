@@ -1283,11 +1283,15 @@ class KCPU16TUI(App[None]):
         self._exec_mode = "reset"
         self.machine.cold_reset()
         self.is_assembled = False
+        self.current_disk_file = None
+        self._disk_dirty = False
         self.addr_to_line = {}
         self._asm_addr_to_src = {}
         self._asm_addr_to_label = {}
         self._asm_jump_targets = {}
         self.dbg.snapshot_registers(self.machine.dump_registers())
+        self._update_program_title()
+        self._update_disk_title()
         self._update_run_mode_ui()
         self._log("[green]Machine reset.[/green]")
         self._refresh_all(include_screen=True, force_screen=True)
@@ -1518,7 +1522,7 @@ class KCPU16TUI(App[None]):
         try:
             screen_section = self.query_one("#screen-section")
             screen_section.border_subtitle = (
-                self.current_file.name if self.current_file else ""
+                self.current_file.name if (self.current_file and self.is_assembled) else ""
             )
         except Exception:
             pass
@@ -1755,10 +1759,27 @@ class KCPU16TUI(App[None]):
                 btn_max.variant = "success"
                 btn_slow.variant = "success"
                 btn_stop.variant = "default"
+            self._set_max_stale_visual_state(self._exec_mode == "max")
             # Päivitä State-kenttä välittömästi kun suoritustila muuttuu
             self._refresh_cpu_status()
         except Exception:
             pass
+
+    def _set_max_stale_visual_state(self, max_mode_active: bool) -> None:
+        """Himmennä paneelit, joita ei päivitetä MAX-ajon aikana.
+
+        MAX-tilassa vain Screen-paneelia päivitetään reaaliaikaisesti,
+        joten disassembly-, flags- ja register-paneelit merkitään
+        visuaalisesti "ei reaaliaikaisiksi" himmentämällä niitä.
+        """
+        target_ids = ("#disasm-tabs", "#flags-pane", "#regs-pane")
+        opacity = 0.55 if max_mode_active else 1.0
+        for target_id in target_ids:
+            try:
+                widget = self.query_one(target_id)
+                widget.styles.opacity = opacity
+            except Exception:
+                continue
 
     @work(thread=True, exclusive=True)
     def _cpu_run_worker(self, mode: str = "fast") -> None:
@@ -2880,11 +2901,15 @@ class KCPU16TUI(App[None]):
             # Normaali reset: VRAM + muisti + CPU. Storage säilyy.
             self.machine.cold_reset()
             self.is_assembled = False
+            self.current_disk_file = None
+            self._disk_dirty = False
             self.addr_to_line = {}
             self._asm_addr_to_src = {}
             self._asm_addr_to_label = {}
             self._asm_jump_targets = {}
             self.dbg.snapshot_registers(self.machine.dump_registers())
+            self._update_program_title()
+            self._update_disk_title()
             return CommandResult(
                 True, "[green]Reset (memory + CPU). Storage intact.[/green]"
             )
@@ -2893,12 +2918,14 @@ class KCPU16TUI(App[None]):
             self.machine.cold_reset()
             self.machine.storage.reset()
             self.is_assembled = False
+            self.current_disk_file = None
             self.addr_to_line = {}
             self._asm_addr_to_src = {}
             self._asm_addr_to_label = {}
             self._asm_jump_targets = {}
             self.dbg.snapshot_registers(self.machine.dump_registers())
             self._disk_dirty = False
+            self._update_program_title()
             self._update_disk_title()
             return CommandResult(
                 True, "[green]Deep reset (memory + CPU + storage).[/green]"
