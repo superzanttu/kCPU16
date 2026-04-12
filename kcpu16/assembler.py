@@ -302,7 +302,9 @@ class Assembler:
         self._check_segment_overlaps(segments)
         return segments
 
-    def build_boot_block_words(self, source_path: Path | None = None) -> tuple[list[int], int]:
+    def build_boot_block_words(
+        self, source_path: Path | None = None
+    ) -> tuple[list[int], int]:
         """Assembloi .bootblock-osuuden levykuvan bootsektoriksi.
 
         Returns:
@@ -338,10 +340,14 @@ class Assembler:
 
         return boot_words, used_words
 
-    def _extract_bootblock_section(
-        self, source: str, source_path: Path | None
-    ) -> str:
-        """Irrota .bootblock-osuuden metatiedot ja säilytä sisältö normaalissa ohjelmassa."""
+    def _extract_bootblock_section(self, source: str, source_path: Path | None) -> str:
+        """Irrota .bootblock-osuuden metatiedot normaalista ohjelmasta.
+
+        .bootblock-osuus assembloidaan erikseen levykuvan bootsektoriksi eikä sitä
+        sisällytetä tavalliseen RAM-ohjelmaan. Tällöin bootloader voi hypätä
+        suoraan varsinaisen ohjelman entrypointiin ilman, että sama bootkoodi
+        on myös RAM-ohjelman alussa.
+        """
         lines = source.splitlines()
         output_lines: list[str] = []
         boot_lines: list[str] = []
@@ -370,6 +376,7 @@ class Assembler:
 
             if in_bootblock:
                 boot_lines.append(line)
+                continue
             output_lines.append(line)
 
         if in_bootblock:

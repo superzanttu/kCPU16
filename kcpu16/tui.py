@@ -136,6 +136,32 @@ REG_NAMES = {
     17: "SP",
 }
 
+
+def _find_bootblock_jump_target(words: list[int]) -> tuple[str, int, int] | None:
+    """Etsi bootblockin ensimmäinen eksplisiittinen hyppykohde konekielestä.
+
+    Palauttaa ensimmäisen tavallisen ohjausrakennekäskyn, jolla on välitön
+    kohdeosoite. Tämä auttaa näyttämään TUI-lokissa mihin bootloader yrittää
+    siirtyä boot=1-polussa.
+    """
+    branch_mnemonics: frozenset[str] = frozenset(
+        {"JUMP", "CALL", "JZ", "JNZ", "JLT", "JGT", "JLE", "JGE"}
+    )
+    i = 0
+    pc = BOOT_RAM_START
+    while i < len(words):
+        opcode = words[i] & WORD_MASK
+        meta = REVERSE_TABLE.get(opcode)
+        op_count = meta[1] if meta is not None else 0
+        mnemonic = meta[0] if meta is not None else None
+        if mnemonic in branch_mnemonics and op_count >= 1 and i + op_count < len(words):
+            target = words[i + op_count] & WORD_MASK
+            return mnemonic, pc, target
+        i += 1 + op_count
+        pc += 1 + op_count
+    return None
+
+
 # Käskyt joissa 1. operandi on rekisteri-indeksi (esim. LOAD R0, ...)
 _REG_FIRST = {
     "LOAD",
@@ -917,6 +943,7 @@ class KCPU16TUI(App[None]):
         self._w_memory_view: Static | None = None
         self._w_stack_view: Static | None = None
         self._output_buffer: list[str] = []
+        self._boot_status_text: str | None = None
         self._disk_dirty: bool = False
         self._watched_mtime: int | None = None  # st_mtime_ns (kokonaisluku)
         self._watched_sources: dict[Path, int | None] = {}
@@ -1323,6 +1350,7 @@ class KCPU16TUI(App[None]):
         self.machine.cold_reset()
         self.is_assembled = False
         self.current_disk_file = None
+        self._boot_status_text = None
         self._disk_dirty = False
         self.addr_to_line = {}
         self._asm_addr_to_src = {}
@@ -1624,13 +1652,14 @@ class KCPU16TUI(App[None]):
             if not source.strip():
                 self._log("[yellow]File is empty.[/yellow]")
                 return
+            self._boot_status_text = None
             segments = self.assembler.assemble(source, source_path=self.current_file)
             bootblock_words: list[int] | None = None
             bootblock_used_words = 0
             bootblock_config = self.assembler.bootblock_directive
             if bootblock_config is not None:
-                bootblock_words, bootblock_used_words = self.assembler.build_boot_block_words(
-                    source_path=self.current_file
+                bootblock_words, bootblock_used_words = (
+                    self.assembler.build_boot_block_words(source_path=self.current_file)
                 )
             self.machine.cold_reset()
             self.machine.load_segments(segments)
@@ -1672,9 +1701,8 @@ class KCPU16TUI(App[None]):
                 )
                 if bootblock_config.disk_path.exists():
                     temp_storage.load_from_file(bootblock_config.disk_path)
-                if (
-                    not bootblock_config.allow_overwrite
-                    and any(temp_storage.read_block(0))
+                if not bootblock_config.allow_overwrite and any(
+                    temp_storage.read_block(0)
                 ):
                     raise ValueError(
                         ".bootblock: target disk image already has a non-empty boot block; "
@@ -1692,10 +1720,23 @@ class KCPU16TUI(App[None]):
                 )
                 if bootblock_config.boot_after_write:
                     self.machine.cold_reset()
+                    self.machine.load_segments(segments)
                     self.machine.boot_from_storage()
-                    self._log(
-                        f"[cyan].bootblock: booted from {bootblock_config.disk_path.name}.[/cyan]"
-                    )
+                    jump_info = _find_bootblock_jump_target(bootblock_words)
+                    if jump_info is None:
+                        self._boot_status_text = f"boot {bootblock_config.disk_path.name}: entry 0x{BOOT_RAM_START:04X}, no jump"
+                        self._log(
+                            f"[cyan].bootblock: booted from {bootblock_config.disk_path.name} "
+                            f"(entry PC=0x{BOOT_RAM_START:04X}, no explicit jump target found).[/cyan]"
+                        )
+                    else:
+                        mnemonic, jump_pc, jump_target = jump_info
+                        self._boot_status_text = f"boot {bootblock_config.disk_path.name}: {mnemonic}@0x{jump_pc:04X} -> 0x{jump_target:04X}"
+                        self._log(
+                            f"[cyan].bootblock: booted from {bootblock_config.disk_path.name} "
+                            f"(entry PC=0x{BOOT_RAM_START:04X}, first {mnemonic} @ 0x{jump_pc:04X} "
+                            f"-> 0x{jump_target:04X}).[/cyan]"
+                        )
             # .diskblock-direktiivi: kirjoita konekieli levyblokkiin
             blk = self.assembler.disk_block
             if blk is not None:
@@ -2398,7 +2439,8 @@ class KCPU16TUI(App[None]):
             f"Uptime: {uptime_str}\n"
             f"TMR:  {tmr_str}\n"
             f"CTMR: {ctmr_str}\n"
-            f"GFX:  {gfx_str}"
+            f"GFX:  {gfx_str}\n"
+            f"Boot: {self._boot_status_text or '[dim]n/a[/]'}"
         )
         if self._w_flags_content:
             self._w_flags_content.update(content)

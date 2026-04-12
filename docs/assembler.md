@@ -43,33 +43,33 @@ Rekisterit: `R0`–`R15` (yleiskäyttöiset), `FP` (frame pointer), `SP` (stack 
 
 # 3. Direktiivit
 
-| Direktiivi                             | Kuvaus                                                                      |
-| -------------------------------------- | --------------------------------------------------------------------------- |
-| `.origin addr` / `.org addr`           | Aseta koodin aloitusosoite (oletus: 0x0100)                                 |
-| `.at addr`                             | Siirry uuteen muistiosoitteeseen (uusi koodisegmentti)                      |
-| `.dw val, val, …`                      | Tallenna 16-bittisiä sanoja muistiin; kukin arvo maskataan arvolla 0xFFFF   |
-| `.db val, val, …`                      | Tallenna 8-bittisiä arvoja muistiin; kukin arvo maskataan arvolla 0xFF      |
-| `.dstr "teksti"` / `.dstr 'teksti'`    | Tallenna null-terminoitu merkkijono; escape: `\\` `\"` `\'` `\n` `\t` `\0`  |
-| `.diskblock N`                         | Assemblauksen jälkeen tallenna konekieli tallennuslaitteen blokkiin N       |
-| `.bootblock "levykuva", overwrite=0/1, boot=0/1` | Aloita bootsektoriin kirjoitettava osuus ja määritä kohdelevykuva |
-| `.endbootblock`                        | Päätä `.bootblock`-osuus                                                    |
-| `.const NIMI, ARVO`                    | Määrittele nimetty vakio (kokonaisluku tai heksa; ks. kohta 5)              |
-| `.macro NIMI`                          | Aloita makromäärittely                                                      |
-| `.endmacro`                            | Lopeta makromäärittely                                                      |
-| `.include "tiedosto"` / `.include 'f'` | Liitä toinen .asm-tiedosto tähän kohtaan (silmukkasuojaus)                  |
-| `.expect_reg R, arvo`                  | Testidirektiivi: tarkista rekisterin arvo ajon jälkeen                      |
-| `.expect_flag F, arvo`                 | Testidirektiivi: tarkista tilalipun arvo ajon jälkeen                       |
-| `.expect_mem addr, arvo`               | Testidirektiivi: tarkista muistipaikan arvo ajon jälkeen                    |
-| `.expect_storage addr, arvo`           | Testidirektiivi: tarkista tallennuslaitteen arvo ajon jälkeen               |
-| `.inject_key koodi`                    | Testidirektiivi: simuloi näppäinpainallus (esim. `.inject_key 0x41`)        |
-| `.inject_key_release koodi`            | Testidirektiivi: simuloi näppäinvapautus (esim. `.inject_key_release 0x41`) |
+| Direktiivi                                       | Kuvaus                                                                      |
+| ------------------------------------------------ | --------------------------------------------------------------------------- |
+| `.origin addr` / `.org addr`                     | Aseta koodin aloitusosoite (oletus: 0x0100)                                 |
+| `.at addr`                                       | Siirry uuteen muistiosoitteeseen (uusi koodisegmentti)                      |
+| `.dw val, val, …`                                | Tallenna 16-bittisiä sanoja muistiin; kukin arvo maskataan arvolla 0xFFFF   |
+| `.db val, val, …`                                | Tallenna 8-bittisiä arvoja muistiin; kukin arvo maskataan arvolla 0xFF      |
+| `.dstr "teksti"` / `.dstr 'teksti'`              | Tallenna null-terminoitu merkkijono; escape: `\\` `\"` `\'` `\n` `\t` `\0`  |
+| `.diskblock N`                                   | Assemblauksen jälkeen tallenna konekieli tallennuslaitteen blokkiin N       |
+| `.bootblock "levykuva", overwrite=0/1, boot=0/1` | Aloita bootsektoriin kirjoitettava osuus ja määritä kohdelevykuva           |
+| `.endbootblock`                                  | Päätä `.bootblock`-osuus                                                    |
+| `.const NIMI, ARVO`                              | Määrittele nimetty vakio (kokonaisluku tai heksa; ks. kohta 5)              |
+| `.macro NIMI`                                    | Aloita makromäärittely                                                      |
+| `.endmacro`                                      | Lopeta makromäärittely                                                      |
+| `.include "tiedosto"` / `.include 'f'`           | Liitä toinen .asm-tiedosto tähän kohtaan (silmukkasuojaus)                  |
+| `.expect_reg R, arvo`                            | Testidirektiivi: tarkista rekisterin arvo ajon jälkeen                      |
+| `.expect_flag F, arvo`                           | Testidirektiivi: tarkista tilalipun arvo ajon jälkeen                       |
+| `.expect_mem addr, arvo`                         | Testidirektiivi: tarkista muistipaikan arvo ajon jälkeen                    |
+| `.expect_storage addr, arvo`                     | Testidirektiivi: tarkista tallennuslaitteen arvo ajon jälkeen               |
+| `.inject_key koodi`                              | Testidirektiivi: simuloi näppäinpainallus (esim. `.inject_key 0x41`)        |
+| `.inject_key_release koodi`                      | Testidirektiivi: simuloi näppäinvapautus (esim. `.inject_key_release 0x41`) |
 
 > **Kommentit:** Puolipiste (`;`) aloittaa riviloppukommentin. Lohkokommentit `/* ... */` eivät ole tuettu.
 
 ## 3.1 Bootblock-direktiivit
 
 `.bootblock` ja `.endbootblock` rajaavat tiedostosta osan, joka assembloidaan erikseen levynkuvan bootsektoriksi.
-Sama bootblock-koodi jää silti mukaan myös normaalin ohjelman assemblaukseen, joten samassa tiedostossa voi olla sekä bootloader että tavallinen RAMiin ladattava testikoodi.
+Bootblock-osuus ei kuulu tavalliseen RAM-ohjelmaan, joten samassa tiedostossa oleva varsinainen ohjelmakoodi voi alkaa omasta `.origin`-osoitteestaan ilman että bootloader kopioituu myös sinne.
 
 Syntaksi:
 
@@ -77,10 +77,14 @@ Syntaksi:
 .bootblock "../storage/boot.dsk", overwrite=1, boot=0
     ; Koodi joka assembloidaan boot-alueelle 0x0100-0x01FF
     READ R0, 1
-    HALT
+    JUMP 0x0200
 .endbootblock
 
 .origin 0x0200
+    JUMP START
+
+    .include "lib-screen.asm"
+
 START:
     READ R1, 2
     HALT
@@ -88,10 +92,10 @@ START:
 
 Optiot:
 
-| Optio       | Arvot                     | Oletus | Kuvaus |
-| ----------- | ------------------------- | ------ | ------ |
-| `overwrite` | `0`, `1`, `false`, `true`, `no`, `yes`, `off`, `on` | `0` | Saako olemassa olevan levykuvan ei-tyhjää bootblokkia korvata |
-| `boot`      | `0`, `1`, `false`, `true`, `no`, `yes`, `off`, `on` | `0` | Bootataanko emulaattori heti kirjoituksen jälkeen levykuvasta |
+| Optio       | Arvot                                               | Oletus | Kuvaus                                                        |
+| ----------- | --------------------------------------------------- | ------ | ------------------------------------------------------------- |
+| `overwrite` | `0`, `1`, `false`, `true`, `no`, `yes`, `off`, `on` | `0`    | Saako olemassa olevan levykuvan ei-tyhjää bootblokkia korvata |
+| `boot`      | `0`, `1`, `false`, `true`, `no`, `yes`, `off`, `on` | `0`    | Bootataanko emulaattori heti kirjoituksen jälkeen levykuvasta |
 
 Säännöt:
 

@@ -67,9 +67,9 @@ class TestExpectation:
 class KeyInjection:
     """Yksi näppäinsyöte joka lisätään puskuriin ennen testiä."""
 
-    key_code: int   # Nappainkoodi (0-127)
+    key_code: int  # Nappainkoodi (0-127)
     is_release: bool  # True = vapautus, False = painallus
-    line_no: int    # Lähdekoodirivi (virheraportointia varten)
+    line_no: int  # Lähdekoodirivi (virheraportointia varten)
 
 
 # SR-lipun nimestä bitti-indeksiin
@@ -367,10 +367,20 @@ def run_test(path: Path) -> tuple[int, int]:
         print(f"VIRHE assembloinnissa: {exc}", file=sys.stderr)
         return 0, 0
 
-    # --- Suorita koneessa (ilman boot-prosessia) ---
+    # --- Suorita koneessa ---
     machine = KCPU16Machine()
-    machine.reset_for_test()
-    machine.load_segments(segments)
+    bootblock_config = asm.bootblock_directive
+    if bootblock_config is not None and bootblock_config.boot_after_write:
+        boot_words, _ = asm.build_boot_block_words(source_path=path)
+        machine.cold_reset()
+        machine.load_segments(segments)
+        machine.storage.write_block(0, boot_words)
+        machine.cold_reset()
+        machine.load_segments(segments)
+        machine.boot_from_storage()
+    else:
+        machine.reset_for_test()
+        machine.load_segments(segments)
 
     # --- Lisää näppäimet puskuriin ennen suoritusta ---
     for inj in key_injections:
