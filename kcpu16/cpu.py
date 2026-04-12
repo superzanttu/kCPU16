@@ -130,6 +130,7 @@ from .registers import RegisterFile
 if TYPE_CHECKING:
     from .devices.storage import BlockStorageDevice
     from .devices.keyboard import KeyboardDevice
+    from .devices.screen import ScreenDevice
 
 
 @dataclass
@@ -152,6 +153,7 @@ class CPU:
     regs: RegisterFile  # Rekisterit
     storage: "BlockStorageDevice | None" = None  # Tallennuslaite (valinnainen)
     keyboard: "KeyboardDevice | None" = None  # Nappaimistolaite (valinnainen)
+    screen: "ScreenDevice | None" = None  # Nayttolaite (valinnainen)
 
     halted: bool = False  # Onko kone pysahtynyt (HALT)?
     instruction_counter: int = 0  # Suoritettujen kaskyjen maara
@@ -1199,6 +1201,9 @@ class CPU:
                 self.flip_callback()  # type: ignore[operator]
             return
         self.memory.write(addr, value)
+        # Merkitse VRAM muuttuneeksi dirty-flag-optimointia varten (TUI:n näyttöpäivitys)
+        if VRAM_START <= addr <= VRAM_END and self.screen is not None:
+            self.screen.mark_vram_dirty()
 
     def _read_clock_mmio(self, addr: int) -> int:
         """Palauttaa reaaliaikaisen kellonarvon MMIO-osoitteen mukaan."""

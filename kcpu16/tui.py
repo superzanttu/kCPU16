@@ -903,6 +903,18 @@ class KCPU16TUI(App[None]):
         self.addr_to_line: dict[int, int] = {}
         self.is_assembled: bool = False
         self._last_screen_render: str = ""
+        self._last_vram_version: int = -1  # Käytetään VRAM dirty-check-optimointiin
+        self._last_gfx_mode: int = -1  # Käytetään GFX_MODE muutoksen detektointiin
+        self._disasm_cache: dict[tuple[int, tuple[int, ...]], str] = (
+            {}
+        )  # (addr, words) → disasm_tail
+        # Widget caches (initialized in on_mount)
+        self._w_disasm_content: Static | None = None
+        self._w_regs_content: Static | None = None
+        self._w_flags_content: Static | None = None
+        self._w_screen_view: Static | None = None
+        self._w_memory_view: Static | None = None
+        self._w_stack_view: Static | None = None
         self._output_buffer: list[str] = []
         self._disk_dirty: bool = False
         self._watched_mtime: int | None = None  # st_mtime_ns (kokonaisluku)
@@ -1005,16 +1017,25 @@ class KCPU16TUI(App[None]):
         Suoritetaan kerran kun kaikki widgetit ovat luotu ja kiinnitetty
         DOM-puuhun. Tässä:
         1. Asetetaan paneelien otsikot (border_title)
-        2. Resetoidaan kone (cold_reset) ja otetaan rekisterisnapshot
-        3. Kirjoitetaan tervetuloa-viestit lokiin
-        4. Lataa käynnistysparametreilla annetut tiedostot
-        5. Päivitetään kaikki näkymät (_refresh_all)
-        6. Käynnistetään timereita: Screen-päivitys (1.0s) + tiedoston tarkkailu (1.0s)
+        2. Cacheetaan usein käytetyt widget-viittaukset hot-path optimointia varten
+        3. Resetoidaan kone (cold_reset) ja otetaan rekisterisnapshot
+        4. Kirjoitetaan tervetuloa-viestit lokiin
+        5. Lataa käynnistysparametreilla annetut tiedostot
+        6. Päivitetään kaikki näkymät (_refresh_all)
+        7. Käynnistetään timereita: Screen-päivitys (1.0s) + tiedoston tarkkailu (1.0s)
         """
         self.query_one("#regs-pane").border_title = "Registers"
         self.query_one("#flags-pane").border_title = "Flags"
         self.query_one("#screen-section").border_title = "Screen"
         self.query_one("#output-pane").border_title = "Output"
+
+        # Cache widget references for _refresh_* methods (hot-path optimization)
+        self._w_disasm_content = self.query_one("#disasm-content", Static)
+        self._w_regs_content = self.query_one("#regs-content", Static)
+        self._w_flags_content = self.query_one("#flags-content", Static)
+        self._w_screen_view = self.query_one("#screen-view-solo", Static)
+        self._w_memory_view = self.query_one("#memory-view", Static)
+        self._w_stack_view = self.query_one("#stack-view", Static)
 
         self.machine.cold_reset()
         self.dbg.snapshot_registers(self.machine.dump_registers())
@@ -1305,6 +1326,7 @@ class KCPU16TUI(App[None]):
         self._asm_addr_to_src = {}
         self._asm_addr_to_label = {}
         self._asm_jump_targets = {}
+        self._disasm_cache = {}
         self.dbg.snapshot_registers(self.machine.dump_registers())
         self._update_program_title()
         self._update_disk_title()
@@ -1976,6 +1998,9 @@ class KCPU16TUI(App[None]):
 
         Jump target -merkit (label-nimi) näytetään ennen hyppykohdetä olevaa
         käskyriviä.
+
+        Optimointi: Disassembler-kutsut cachetan. Cache invalidoidaan ohjelman
+        latauksen yhteydessä (_do_assemble).
         """
         pc = self.machine.regs.pc
 
@@ -2008,10 +2033,16 @@ class KCPU16TUI(App[None]):
                 instr_words = [
                     self.machine.memory.read(addr + i) for i in range(1 + op_count)
                 ]
-                raw = self.disassembler.disassemble(
-                    instr_words, start_addr=addr
-                ).strip()
-                disasm_tail = raw.split(": ", 1)[1] if ": " in raw else raw
+                # Etsi cachesta ennen kutsua disassembler.disassemble()
+                cache_key = (addr, tuple(instr_words))
+                if cache_key in self._disasm_cache:
+                    disasm_tail = self._disasm_cache[cache_key]
+                else:
+                    raw = self.disassembler.disassemble(
+                        instr_words, start_addr=addr
+                    ).strip()
+                    disasm_tail = raw.split(": ", 1)[1] if ": " in raw else raw
+                    self._disasm_cache[cache_key] = disasm_tail
 
             # Skip .word 0x0000 unless near PC or on a breakpoint
             if (
@@ -2077,7 +2108,8 @@ class KCPU16TUI(App[None]):
 
             addr += 1 + op_count
 
-        self.query_one("#disasm-content", Static).update("\n".join(lines))
+        if self._w_disasm_content:
+            self._w_disasm_content.update("\n".join(lines))
 
     def _fmt_disasm_tail(self, disasm_tail: str) -> str:
         """Muotoile mnemoniikka + operandit Rich-väreillä (ilman osoite-etuliitettä)."""
@@ -2216,7 +2248,8 @@ class KCPU16TUI(App[None]):
             else:
                 lines.append(left)
 
-        self.query_one("#regs-content", Static).update("\n".join(lines))
+        if self._w_regs_content:
+            self._w_regs_content.update("\n".join(lines))
 
     def _refresh_flags(self) -> None:
         """Päivitä lippupaneeli (SR-rekisterin yksittäiset bitit).
@@ -2287,7 +2320,8 @@ class KCPU16TUI(App[None]):
             f"CTMR: {ctmr_str}\n"
             f"GFX:  {gfx_str}"
         )
-        self.query_one("#flags-content", Static).update(content)
+        if self._w_flags_content:
+            self._w_flags_content.update(content)
 
     def _refresh_cpu_status(self) -> None:
         """Päivitä CPU-tilapaneeli.
@@ -2341,6 +2375,10 @@ class KCPU16TUI(App[None]):
         Kaksoisbufferointi on käytössä vain grafiikkatiloissa B ja C.
         Tekstitilassa (A) renderöidään aina suoraan VRAMista.
 
+        Dirty-flag optimointi: Tarkista VRAM-versio (inkrementoidaan VRAM-
+        kirjoituksissa) ja GFX_MODE, jotta vältetään turhaa renderöintiä kun
+        VRAM ei ole muuttunut.
+
         Parametrit:
             force: Jos True, ohitetaan etupuskuri ja renderöidään suoraan
                    VRAMista (käytetään step- ja done-tiloissa).
@@ -2349,8 +2387,19 @@ class KCPU16TUI(App[None]):
             screen = self.machine.screen
             memory = self.machine.memory
             mode = memory.read(GFX_MODE_REG)
+            vram_version = screen.get_vram_version()
 
-            if mode in (GFX_MODE_B, GFX_MODE_C):
+            # Dirty-check: Jos VRAM ei ole muuttunut ja GFX_MODE ei muuttunut (paitsi force)
+            # ja etupuskuri on olemassa, voi hyppää renderöinnin yli.
+            if (
+                not force
+                and vram_version == self._last_vram_version
+                and mode == self._last_gfx_mode
+                and screen.has_front_buffer
+            ):
+                # VRAM ei muuttunut, käytä etupuskuria
+                rendered = screen.get_front_buffer()
+            elif mode in (GFX_MODE_B, GFX_MODE_C):
                 # Grafiikkatilat B/C: kaksoisbufferointi käytössä.
                 # Etupuskuri renderöidään atomisesti CPU._write_word():ssä kun
                 # GFX_FLIP_REG kirjoitetaan — ei täältä, jotta vältytään race
@@ -2365,9 +2414,14 @@ class KCPU16TUI(App[None]):
                 # Tekstitila A: ei kaksoisbufferointia, renderöi aina suoraan VRAMista
                 rendered = screen.render_auto(memory)
 
+            # Päivitä tracked versiot (dirty-checkia varten seuraavaa kutsua)
+            self._last_vram_version = vram_version
+            self._last_gfx_mode = mode
+
             if rendered != self._last_screen_render:
                 self._last_screen_render = rendered
-                self.query_one("#screen-view-solo", Static).update(rendered)
+                if self._w_screen_view:
+                    self._w_screen_view.update(rendered)
         except Exception:
             pass
 
@@ -2405,7 +2459,8 @@ class KCPU16TUI(App[None]):
                 f"[cyan]{row_addr:04X}[/]: "
                 f"{' '.join(hex_parts)}  [dim]{''.join(ascii_parts)}[/]"
             )
-        self.query_one("#memory-view", Static).update("\n".join(lines))
+        if self._w_memory_view:
+            self._w_memory_view.update("\n".join(lines))
 
     def _refresh_stack(self) -> None:
         """Päivitä Stack-välilehden pinonäkymä.
@@ -2422,7 +2477,8 @@ class KCPU16TUI(App[None]):
             word = self.machine.memory.read(addr)
             marker = "[yellow]\u2192[/] " if i == 0 else "  "
             lines.append(f"{marker}[cyan]{addr:04X}[/]: 0x{word:04X}  ({word})")
-        self.query_one("#stack-view", Static).update("\n".join(lines))
+        if self._w_stack_view:
+            self._w_stack_view.update("\n".join(lines))
 
     # ------------------------------------------------------------------
     def _log_step_info(self) -> None:
@@ -2957,6 +3013,7 @@ class KCPU16TUI(App[None]):
             self._asm_addr_to_src = {}
             self._asm_addr_to_label = {}
             self._asm_jump_targets = {}
+            self._disasm_cache = {}
             self.dbg.snapshot_registers(self.machine.dump_registers())
             self._update_program_title()
             self._update_disk_title()
@@ -2973,6 +3030,7 @@ class KCPU16TUI(App[None]):
             self._asm_addr_to_src = {}
             self._asm_addr_to_label = {}
             self._asm_jump_targets = {}
+            self._disasm_cache = {}
             self.dbg.snapshot_registers(self.machine.dump_registers())
             self._disk_dirty = False
             self._update_program_title()

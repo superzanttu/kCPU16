@@ -89,6 +89,7 @@ class KCPU16Machine:
             regs=self.regs,
             storage=self.storage,
             keyboard=self.keyboard,
+            screen=self.screen,
         )
         # Yhdistä kaksoisbufferoinnin flip-hook: renderoi VRAM → etupuskuri
         # välittömästi kun CPU kirjoittaa GFX_FLIP_REG:iin, jolloin VRAM
@@ -118,6 +119,7 @@ class KCPU16Machine:
         self.memory.reset()
         self.cpu.reset()
         self.screen.clear_front_buffer()
+        self.screen.reset_vram_version()
 
     def reset_for_test(self) -> None:
         """
@@ -136,6 +138,7 @@ class KCPU16Machine:
         self.memory.reset()
         self.cpu.reset()
         self.screen.clear_front_buffer()
+        self.screen.reset_vram_version()
 
     def boot_from_storage(self) -> None:
         """
