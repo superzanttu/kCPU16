@@ -24,7 +24,7 @@ Tama mahdollistaa myos dataosuuksien tarkastelun.
 
 from __future__ import annotations
 
-from .instruction import OPCODE_TABLE
+from .instruction import OPCODE_TABLE, format_disasm_memory_syntax
 from .constants import WORD_MASK
 
 # Kaanteinen hakutaulukko: opcode -> (mnemonic, operand_count, privileged)
@@ -33,43 +33,25 @@ REVERSE_TABLE = {opcode: meta for opcode, meta in OPCODE_TABLE.items()}
 
 # Rekisteri-indeksi -> nimi muistikaskyjen formatointia varten
 _REG_NAMES: dict[int, str] = {
-    0: "R0", 1: "R1", 2: "R2", 3: "R3",
-    4: "R4", 5: "R5", 6: "R6", 7: "R7",
-    8: "R8", 9: "R9", 10: "R10", 11: "R11",
-    12: "R12", 13: "R13", 14: "R14", 15: "R15",
-    16: "FP", 17: "SP",
+    0: "R0",
+    1: "R1",
+    2: "R2",
+    3: "R3",
+    4: "R4",
+    5: "R5",
+    6: "R6",
+    7: "R7",
+    8: "R8",
+    9: "R9",
+    10: "R10",
+    11: "R11",
+    12: "R12",
+    13: "R13",
+    14: "R14",
+    15: "R15",
+    16: "FP",
+    17: "SP",
 }
-
-
-def _format_memory_instr(mnemonic: str, op_vals: list[int]) -> str | None:
-    """Muotoile muistioperaatiot uudella [..] syntaksilla.
-
-    Palauttaa muotoillun merkkijonon jos mnemoniikka on muistioperaatio,
-    muuten None (jolloin kaytetaan vanhaa heksaformaattia).
-    """
-
-    def r(idx: int) -> str:
-        return _REG_NAMES.get(idx, f"?{idx}")
-
-    if mnemonic == "READ" and len(op_vals) >= 2:
-        return f"LOAD {r(op_vals[0])}, [0x{op_vals[1]:04X}]"
-    if mnemonic == "READ_IND" and len(op_vals) >= 2:
-        return f"LOAD {r(op_vals[0])}, [{r(op_vals[1])}]"
-    if mnemonic == "READ_REL" and len(op_vals) >= 2:
-        return f"LOAD {r(op_vals[0])}, [FP+{op_vals[1]}]"
-    if mnemonic == "STORE" and len(op_vals) >= 2:
-        return f"STORE [0x{op_vals[1]:04X}], {r(op_vals[0])}"
-    if mnemonic == "STOREI" and len(op_vals) >= 2:
-        return f"STORE [0x{op_vals[1]:04X}], {op_vals[0]}"
-    if mnemonic == "STORE_IND" and len(op_vals) >= 2:
-        return f"STORE [{r(op_vals[0])}], {r(op_vals[1])}"
-    if mnemonic == "STOREI_IND" and len(op_vals) >= 2:
-        return f"STORE [{r(op_vals[0])}], {op_vals[1]}"
-    if mnemonic == "STORE_REL" and len(op_vals) >= 2:
-        return f"STORE [FP+{op_vals[1]}], {r(op_vals[0])}"
-    if mnemonic == "STOREI_REL" and len(op_vals) >= 2:
-        return f"STORE [FP+{op_vals[1]}], {op_vals[0]}"
-    return None
 
 
 class Disassembler:
@@ -155,7 +137,7 @@ class Disassembler:
                 op_vals.append(words[i + 1 + j] & WORD_MASK)
 
             # Rakenna tulostusrivi — muistioperaatiot uudella [..] syntaksilla
-            mem_fmt = _format_memory_instr(mnemonic, op_vals)
+            mem_fmt = format_disasm_memory_syntax(mnemonic, op_vals, _REG_NAMES)
             if mem_fmt is not None:
                 lines.append(f"{pc:04X}: {mem_fmt}")
             else:

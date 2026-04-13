@@ -88,7 +88,11 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .constants import ARCH_SYMBOLS, BOOT_RAM_START, STORAGE_BLOCK_SIZE, WORD_MASK
-from .instruction import OPCODE_TABLE
+from .instruction import (
+    OPCODE_TABLE,
+    is_deprecated_assembler_mnemonic,
+    is_variable_length_mnemonic,
+)
 
 
 # =============================================================================
@@ -120,19 +124,6 @@ REGISTER_TO_ID: dict[str, int] = {
 # Kaanteinen hakutaulukko: mnemonic -> opcode
 # Luodaan OPCODE_TABLE:sta kaantamalla avain-arvot
 MNEMONIC_TO_OPCODE: dict[str, int] = {v[0]: k for k, v in OPCODE_TABLE.items()}
-
-# Mnemoniikat jotka on korvattu [..] syntaksilla — suorat viittaukset hylätään
-_DEPRECATED_MNEMONICS: frozenset[str] = frozenset(
-    {
-        "READ_IND",
-        "READ_REL",
-        "STORE_IND",
-        "STORE_REL",
-        "STOREI",
-        "STOREI_IND",
-        "STOREI_REL",
-    }
-)
 
 
 @dataclass(slots=True, frozen=True)
@@ -872,7 +863,7 @@ class Assembler:
             parts = line.replace(",", " ").split()
             mnemonic = parts[0].upper()
 
-            if mnemonic in _DEPRECATED_MNEMONICS:
+            if is_deprecated_assembler_mnemonic(mnemonic):
                 raise ValueError(
                     f"Vanhentunut mnemoniikka '{mnemonic}' — käytä [..] syntaksia: "
                     f"READ reg, [osoite]  tai  STORE [osoite], reg/arvo"
@@ -895,7 +886,7 @@ class Assembler:
             _, operand_count, _ = OPCODE_TABLE[opcode]
             # Erityiskasky: JMPI/CALLI — muuttuvanmittainen
             # Rakenne: opcode + reg + count + kohteet
-            if mnemonic in ("JMPI", "CALLI"):
+            if is_variable_length_mnemonic(mnemonic):
                 n_targets = (
                     len(parts) - 2
                 )  # kaikki osat paitsi mnemoniikka ja rekisteri
@@ -1075,7 +1066,7 @@ class Assembler:
 
             # ---------------------------------------------------------------
 
-            if mnemonic in _DEPRECATED_MNEMONICS:
+            if is_deprecated_assembler_mnemonic(mnemonic):
                 raise ValueError(
                     f"Vanhentunut mnemoniikka '{mnemonic}' — käytä [..] syntaksia: "
                     f"READ reg, [osoite]  tai  STORE [osoite], reg/arvo"
@@ -1098,7 +1089,7 @@ class Assembler:
             # Erityiskasky: JMPI/CALLI — muuttuvanmittainen indeksoitu hyppy/kutsu
             # Syntaksi:  JMPI reg, kohde0, kohde1, ...
             # Koodaus:   opcode | reg_id | count | addr[0] | ... | addr[count-1]
-            if mnemonic in ("JMPI", "CALLI"):
+            if is_variable_length_mnemonic(mnemonic):
                 self._source_map.append(
                     (raw_line.strip(), current_start + len(current_words))
                 )

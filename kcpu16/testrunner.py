@@ -45,6 +45,7 @@ from pathlib import Path
 
 from .assembler import Assembler
 from .constants import SR_FLAG_C, SR_FLAG_I, SR_FLAG_N, SR_FLAG_P, SR_FLAG_V, SR_FLAG_Z
+from .disassembler import Disassembler
 from .machine import KCPU16Machine
 
 
@@ -478,6 +479,9 @@ def run_test_all(test_dir: Path) -> int:
         if passed != total:
             errors.append(path.name)
 
+    smoke_passed, smoke_total = _run_roundtrip_smoke_suite()
+    summary.append(("roundtrip_smoke", smoke_passed, smoke_total))
+
     # Yhteenveto
     tests_total = len(summary)
     tests_passed = sum(1 for _, p, t in summary if p == t)
@@ -514,3 +518,75 @@ def run_test_all(test_dir: Path) -> int:
     print("═" * WIDTH)
 
     return 0 if all_ok else 1
+
+
+def _run_roundtrip_smoke_suite() -> tuple[int, int]:
+    """Aja assembler+disassembler-smoketestit ja palauta (passed, total)."""
+    WIDTH = 57
+    header = " TEST: roundtrip_smoke "
+    print()
+    print(
+        "═" * ((WIDTH - len(header)) // 2)
+        + header
+        + "═" * ((WIDTH - len(header) + 1) // 2)
+    )
+
+    cases: list[tuple[str, str, tuple[str, ...]]] = [
+        (
+            "arith",
+            "READ R0, 42\nREAD R1, 7\nADD R0, R1\nHALT\n",
+            ("ADD", "HALT"),
+        ),
+        (
+            "memory",
+            "READ R1, [0x0300]\nSTORE [0x0301], R1\nHALT\n",
+            ("LOAD R1, [0x0300]", "STORE [0x0301], R1", "HALT"),
+        ),
+        (
+            "indirect-jump",
+            "READ R0, 1\nJMPI R0, target0, target1\ntarget0:\nNOP\ntarget1:\nHALT\n",
+            ("JMPI R0", "NOP", "HALT"),
+        ),
+    ]
+
+    passed = 0
+    total = len(cases)
+    asm = Assembler()
+    dis = Disassembler()
+
+    for name, source, required_tokens in cases:
+        ok = True
+        reason = ""
+        try:
+            segments = asm.assemble(source)
+            if len(segments) != 1:
+                ok = False
+                reason = f"unexpected segment count {len(segments)}"
+            else:
+                start_addr, words = segments[0]
+                text = dis.disassemble(words, start_addr=start_addr)
+                if ".word" in text:
+                    ok = False
+                    reason = "disassembler emitted unknown .word"
+                else:
+                    for token in required_tokens:
+                        if token not in text:
+                            ok = False
+                            reason = f"missing token '{token}'"
+                            break
+        except Exception as exc:
+            ok = False
+            reason = str(exc)
+
+        status = "PASS" if ok else "FAIL"
+        detail = "ok" if ok else reason
+        print(f"{status:<5} smoke    {name:<12} {detail}")
+        if ok:
+            passed += 1
+
+    print("─" * WIDTH)
+    verdict = "PASS" if passed == total else "FAIL"
+    verdict_sym = "✓" if passed == total else "✗"
+    print(f"Tulos: {passed}/{total} läpi  {verdict_sym} {verdict}")
+    print("═" * WIDTH)
+    return passed, total

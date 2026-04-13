@@ -22,6 +22,10 @@ Tama suunnitelma kuvaa hallitun refaktoroinnin, jolla parannetaan koodirakennett
 - [x] Vaihe 1, askel 2: Muistitarkistusmetodit eroteltu tiedostoon `kcpu16/hardware/cpu_memcheck.py` mixin-rakenteella.
 - [x] Vaihe 1, askel 3: Exec-handlerien erotus tiedostoon `kcpu16/hardware/cpu_exec.py`.
 - [x] Vaihe 1, askel 4: Run-loop/decode/facade-siivous (`cpu_core.py` + `cpu.py`).
+- [x] Vaihe 2, askel 1: Operandityyppien metadata lisatty `instruction.py`:hin (OPERAND_TYPE_TABLE + helperit).
+- [x] Vaihe 2, askel 2: Assemblerin validointisaantoja ohjataan metadatasta (`is_deprecated_assembler_mnemonic`, `is_variable_length_mnemonic`).
+- [x] Vaihe 2, askel 3: Disassemblerin muistioperandien esityssaannot siirretty metadata-kerrokseen (`format_disasm_memory_syntax`).
+- [x] Vaihe 2, askel 4: Roundtrip-smoketestien automatisointi (assembler + disassembler).
 
 ### Vaihe 1: Rajaa CPU-vastuut pienempiin moduuleihin
 Tavoite: pilko `cpu.py` sisallot loogisiin osiin ilman API-muutosta.
