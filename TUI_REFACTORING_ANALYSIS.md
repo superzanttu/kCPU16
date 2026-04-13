@@ -467,15 +467,15 @@ These can move to separate `tui_dialogs.py` or stay in app file, depending on co
 
 ## 8. BENEFITS OF SPLIT
 
-| Aspect | Benefit |
-|--------|---------|
-| **Maintainability** | Smaller, focused modules (~200-400 lines each) vs. 4000+ line monolith |
-| **Testability** | Rendering logic can be tested independently of UI framework |
-| **Reusability** | Rendering functions usable by CLI/web clients |
-| **Parallel Development** | Multiple developers can work on different modules |
-| **Debugging** | Stack traces shorter; issues localized to specific module |
-| **Code Review** | Smaller diff sizes for PRs |
-| **Performance** | Easier to profile and optimize individual modules |
+| Aspect                   | Benefit                                                                |
+| ------------------------ | ---------------------------------------------------------------------- |
+| **Maintainability**      | Smaller, focused modules (~200-400 lines each) vs. 4000+ line monolith |
+| **Testability**          | Rendering logic can be tested independently of UI framework            |
+| **Reusability**          | Rendering functions usable by CLI/web clients                          |
+| **Parallel Development** | Multiple developers can work on different modules                      |
+| **Debugging**            | Stack traces shorter; issues localized to specific module              |
+| **Code Review**          | Smaller diff sizes for PRs                                             |
+| **Performance**          | Easier to profile and optimize individual modules                      |
 
 ---
 

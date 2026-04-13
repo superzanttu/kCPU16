@@ -158,13 +158,13 @@ def build_addr_to_line(source: str, assembler: Assembler) -> dict[int, int]:
 
 class StateManager:
     """Apuluokka TUI:n tila-hallinnalle.
-    
+
     Sisältää metodit, joita kutsutaan KCPU16TUI:sta tilamuutosten käsittelyyn.
     """
 
     def __init__(self, app: App) -> None:
         """Alusta StateManager tietyllä TUI-sovelluksella.
-        
+
         Args:
             app: KCPU16TUI-instanssi, josta käytetään machine, assembler, jne.
         """
@@ -172,7 +172,7 @@ class StateManager:
 
     def do_open(self, path: Path) -> None:
         """Avaa tiedosto, tallentaa polun ja kääntää sen automaattisesti.
-        
+
         Tiedoston olemassaolo tarkistetaan ennen latausta. Onnistuessa
         asetetaan current_file = path, tallennetaan tiedoston mtime
         tiedoston tarkkailua varten ja kutsutaan do_assemble().
@@ -199,7 +199,9 @@ class StateManager:
         """
         self.app.workers.cancel_all()
         if not self.app.current_file:
-            self.app._log("[yellow]No file loaded. Use 'load <file>' or Ctrl+O.[/yellow]")
+            self.app._log(
+                "[yellow]No file loaded. Use 'load <file>' or Ctrl+O.[/yellow]"
+            )
             return
         try:
             source = self.app.current_file.read_text(encoding="utf-8")
@@ -326,7 +328,9 @@ class StateManager:
         _BRANCH_MNEMONICS: frozenset[str] = frozenset(
             {"JUMP", "CALL", "JZ", "JNZ", "JLT", "JGT", "JLE", "JGE"}
         )
-        self.app._asm_addr_to_src = {addr: src for src, addr in self.app.assembler.source_map}
+        self.app._asm_addr_to_src = {
+            addr: src for src, addr in self.app.assembler.source_map
+        }
         arch_addrs: set[int] = set(ARCH_SYMBOLS.values())
         self.app._asm_addr_to_label = {
             addr: name

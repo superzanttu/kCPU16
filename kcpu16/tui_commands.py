@@ -60,6 +60,7 @@ if TYPE_CHECKING:
 # Command Result Dataclass
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class CommandResult:
     """Komentotulkin (_execute_command) paluuarvo.
@@ -80,6 +81,7 @@ class CommandResult:
 # ---------------------------------------------------------------------------
 # TUI Commands Mixin Class
 # ---------------------------------------------------------------------------
+
 
 class TUICommandsMixin:
     """Mixin class providing command-line interface handlers for KCPU16TUI.
