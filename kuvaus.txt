@@ -1,0 +1,18 @@
+Suosittelen lämpimästi seuraavien työkalujen käyttöä koodauksessa:
+- Visual Studio Code editoriksi
+- GitHub ja Git versionhallintaan
+- GitHub Copilot avuksi koodaukseen
+
+Visual Studio Code integroituu GitHubiin hyvin, ja se on muutenkin erinomainen editori.
+Git auttaa pitämään muutokset hallinnassa, ja GitHub pitää paikallisen koodin synkassa etärepositorion kanssa.
+GitHub Copilot voi nopeuttaa kehitystä merkittävästi erityisesti silloin, kun sitä käyttää yhdessä hyvän testauksen ja oman koodikatselmoinnin kanssa.
+
+Pääsiäisenä sain päähäni luoda kuvitteellisen prosessorin ja sille oman konekielen. Lopputuloksena syntyi toimiva CPU-emulaattori käyttöliittymineen, assemblerineen, disassemblerineen, ohjeineen ja laajoine dokumentaatioineen.
+
+Projektin nykyisessä repositoriossa on noin 38 Python-tiedostoa (yhteensä noin 12 975 riviä) ja 200 assembler-tiedostoa (yhteensä noin 20 196 riviä). Assembler-koodia on paljon, koska käskykantaa on testattu kattavasti erillisillä testiohjelmilla. Mukana on myös grafiikkakirjastoja ja levykoodia, mukaan lukien FAT-tyylisen tiedostojärjestelmän toteutusta.
+
+Ohjelma emuloi laitetta, jossa on näyttötila (tekstitila sekä kaksi grafiikkatilaa), tallennuslaite (lohko 0 sisältää boot-ohjelman), näppäimistö ja 16-bittinen muistiavaruus (65 536 sanaa).
+
+Käyttöliittymässä on simuloitu näyttö, disassembleri, rekisterit, liput sekä hallintaan tarvittavat toiminnot.
+
+Tekoälyn avulla kehitys nopeutui selvästi. Esimerkiksi suorituskyvyn pullonkaulojen läpikäynti ja optimointiehdotusten tuottaminen onnistui nopeasti, ja simuloinnin suorituskyky nousi noin 50 000 käskystä/sekunti noin 400 000 käskyyn/sekunti.
