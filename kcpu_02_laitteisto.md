@@ -57,7 +57,7 @@ Käytössä bitit 0–5:
 - Käytössä käynnistyksessä ja keskeytysrutiineissa
 
 ### User Mode (P=0)
-- Muistipääsy: osoitteet `< MPR` ovat estettyjä (MPR on suora 16-bittinen alarajaosoite)
+- Muistipääsy: user-tila saa käyttää osoitteita `>= MPR`, ja osoitteet `< MPR` ovat kernel-suojattuja (MPR on suora 16-bittinen alarajaosoite)
 - Etuoikeutetut käskyt aiheuttavat **INT 4**
 - Kielletty muistipääsy aiheuttaa **INT 5**
 - Poikkeus: **VRAM-alue** on aina käytettävissä myös user-tilassa
@@ -105,7 +105,7 @@ Jokainen painallus/vapautus voi laukaista **INT 6** (jos I=1).
 - `RAND_MMIO`:
   - luku: seuraava 16-bittinen pseudosatunnaisluku
   - kirjoitus: aseta siemen
-- Toteutus: 16-bittinen Galois LFSR (maski `0xB400`; nollatila ei kuulu jaksoon)
+- Toteutus: 16-bittinen Galois LFSR (maski `0xB400`); nollasiemen vältetään, koska nollatila ei kuulu jaksoon (käytännössä 0 korvataan arvolla 1)
 
 ### 5.4 Video RAM (`0xF800–0xFF7F`)
 
@@ -248,7 +248,7 @@ Tyypillisiä syklejä:
 - `DIV` 8
 - `DREAD/DWRITE` 10
 - `INT/IRET/EXIT` 4
-- `FILL` 1 + N sykliä, missä N on täyttöalueen kirjoitettujen sanojen määrä (`rS..rE`, wrap mahdollinen)
+- `FILL` 1 + N sykliä, missä N on täyttöalueen kirjoitettujen sanojen määrä (myös wrap-tilassa: `rS..0xFFFF` ja `0x0000..rE`)
 
 ---
 
