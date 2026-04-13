@@ -201,7 +201,7 @@ Valittu nappi korostuu. Oletuksena `x1` on valittuna.
 ## Huomioita
 
 - Nopeuden muutos vaikuttaa **heti** jos CPU on käynnissä SLOW-tilassa — uudelleenkäynnistystä ei tarvita.
-- Very suuria kerroimen arvoja (x100 + säädin max) käyttäessä suoritusnopeus voi ylittää FULL-tilan nopeuden — tässä tilanteessa suoritus on silti yksikäskyinen eikä yhtä tehokas kuin FULL-tila (erä-suoritus).
+- Erittäin suuria kerroimen arvoja (x100 + säädin max) käyttäessä suoritusnopeus voi ylittää FAST-tilan nopeuden — tässä tilanteessa suoritus on silti yksikäskyinen eikä yhtä tehokas kuin FAST-tila (erä-suoritus).
 - Liukusäädin käyttää **logaritmista asteikkoa**, joten se antaa enemmän tarkkuutta pienillä nopeuksilla (esim. 1–10 IPS) ja suuremmilla harppauksin suurilla nopeuksilla.
 
 ---

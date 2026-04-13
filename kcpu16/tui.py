@@ -765,7 +765,7 @@ class KCPU16TUI(App[None], TUIRenderMixin, TUICommandsMixin):
         Binding("ctrl+q", "quit", "Quit", priority=True),
         Binding("f2", "toggle_breakpoint", "BP F2", priority=True),
         Binding("f4", "run_max_speed", "Max F4", priority=True),
-        Binding("f5", "run_full_speed", "Fast F5", priority=True),
+        Binding("f5", "run_fast_speed", "Fast F5", priority=True),
         Binding("f6", "run_slow_speed", "Slow F6", priority=True),
         Binding("f8", "stop_program", "Stop F8", priority=True),
         Binding("f7", "step_once", "Step F7", priority=True),
@@ -867,7 +867,7 @@ class KCPU16TUI(App[None], TUIRenderMixin, TUICommandsMixin):
             yield Button("Assemble ^B", id="btn-asm", variant="primary")
             yield Static(" ", classes="sep")
             yield Button("Step F7", id="btn-step", variant="primary")
-            yield Button("Fast F5", id="btn-run-full", variant="success")
+            yield Button("Fast F5", id="btn-run-fast", variant="success")
             yield Button("Max F4", id="btn-run-max", variant="success")
             yield Button("Slow F6", id="btn-run-slow", variant="success")
             yield Button("Stop F8", id="btn-stop", variant="default")
@@ -996,7 +996,7 @@ class KCPU16TUI(App[None], TUIRenderMixin, TUICommandsMixin):
             "btn-boot": self.action_boot_disk,
             "btn-asm": self.action_assemble_code,
             "btn-step": self.action_step_once,
-            "btn-run-full": self.action_run_full_speed,
+            "btn-run-fast": self.action_run_fast_speed,
             "btn-run-max": self.action_run_max_speed,
             "btn-run-slow": self.action_run_slow_speed,
             "btn-stop": self.action_stop_program,
@@ -1136,11 +1136,11 @@ class KCPU16TUI(App[None], TUIRenderMixin, TUICommandsMixin):
         self._update_run_mode_ui()
         self._refresh_all(include_screen=True, force_screen=True)
 
-    def action_run_full_speed(self) -> None:
-        """Käynnistä CPU täydellä nopeudella (F5). Toinen painalus pysäyttää.
+    def action_run_fast_speed(self) -> None:
+        """Käynnistä CPU FAST-nopeudella (F5). Toinen painalus pysäyttää.
 
         Jos CPU on pysähtynyt (HALT/EXIT), ladataan ohjelma uudelleen ja
-        käynnistetään täydellä nopeudella.
+        käynnistetään FAST-tilassa.
         """
         if self._exec_mode == "fast":
             self.action_stop_program()
@@ -1804,27 +1804,27 @@ class KCPU16TUI(App[None], TUIRenderMixin, TUICommandsMixin):
         Turvallinen kutsua pääsäikeessä tai call_from_thread():n kautta.
         """
         try:
-            btn_full = self.query_one("#btn-run-full", Button)
+            btn_fast = self.query_one("#btn-run-fast", Button)
             btn_max = self.query_one("#btn-run-max", Button)
             btn_slow = self.query_one("#btn-run-slow", Button)
             btn_stop = self.query_one("#btn-stop", Button)
             if self._exec_mode == "fast":
-                btn_full.variant = "warning"
+                btn_fast.variant = "warning"
                 btn_max.variant = "default"
                 btn_slow.variant = "default"
                 btn_stop.variant = "error"
             elif self._exec_mode == "max":
-                btn_full.variant = "default"
+                btn_fast.variant = "default"
                 btn_max.variant = "warning"
                 btn_slow.variant = "default"
                 btn_stop.variant = "error"
             elif self._exec_mode == "slow":
-                btn_full.variant = "default"
+                btn_fast.variant = "default"
                 btn_max.variant = "default"
                 btn_slow.variant = "warning"
                 btn_stop.variant = "error"
             else:  # stopped, step, reset
-                btn_full.variant = "success"
+                btn_fast.variant = "success"
                 btn_max.variant = "success"
                 btn_slow.variant = "success"
                 btn_stop.variant = "default"
