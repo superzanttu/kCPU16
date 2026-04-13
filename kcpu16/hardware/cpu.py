@@ -183,12 +183,17 @@ class CPU:
 
     def __post_init__(self) -> None:
         """Rakenna opcode-pohjaiset käsittelytaulukot CPU:n alustuksen jälkeen."""
-        # Suoritustaulukko: opcode → handler-metodi
+        # Suoritustaulukko: opcode → handler-metodi (dict, käytetään step():ssä)
         self._exec_table: dict[int, object] = {}
         # Muistitarkistustaulukko: opcode → check-metodi (tai None)
         self._mem_check_table: dict[int, object] = {}
         # Sykliarvotaulukko: opcode → perus-exec-cycles
         self._cycles_table: dict[int, int] = {}
+        # Listapohjainen dispatch (nopea hot-loop): indeksi = opcode >> 6 (0-1023)
+        # Kaikki validit opcodet asettavat bitit [5:0] = 0, joten >> 6 on bijektio.
+        self._exec_list: list[object] = [None] * 1024
+        self._mem_check_list: list[object] = [None] * 1024
+        self._cycles_list: list[int] = [1] * 1024
         # Suora viite RegisterFile:n sisäiseen rekisterilistaan (r0-r15, fp, sp)
         # Sama lista kuin regs._regs — ei kopiota, ei synkronointia tarvita.
         self._reg_array: list[int] = self.regs._regs
@@ -266,9 +271,13 @@ class CPU:
         for opcode, (mnemonic, _, _) in OPCODE_TABLE.items():
             if mnemonic in handler_map:
                 self._exec_table[opcode] = handler_map[mnemonic]
+                self._exec_list[opcode >> 6] = handler_map[mnemonic]
             if mnemonic in mem_check_map:
                 self._mem_check_table[opcode] = mem_check_map[mnemonic]
-            self._cycles_table[opcode] = EXEC_CYCLES.get(mnemonic, 1)
+                self._mem_check_list[opcode >> 6] = mem_check_map[mnemonic]
+            cycles_val = EXEC_CYCLES.get(mnemonic, 1)
+            self._cycles_table[opcode] = cycles_val
+            self._cycles_list[opcode >> 6] = cycles_val
 
     def reset(self) -> None:
         """
@@ -354,11 +363,13 @@ class CPU:
             # Paivita laskurit ja tarkista keskeytykset
             self.instruction_counter += 1
             self._simulated_time_us += exec_cycles
-            self._handle_keyboard_interrupt_if_needed()
-            if self._simulated_time_us >= self._next_tmr_time_us:
-                self._handle_timer_interrupt_if_needed()
-            if self._simulated_time_us >= self._next_ctmr_time_us:
-                self._handle_clock_interrupt_if_needed()
+            # Interrupt fast gate: ohita kaikki keskeytystarkistukset jos I=0
+            if self.regs.sr & 0x0010:  # SR_FLAG_I = bitti 4
+                self._handle_keyboard_interrupt_if_needed()
+                if self._simulated_time_us >= self._next_tmr_time_us:
+                    self._handle_timer_interrupt_if_needed()
+                if self._simulated_time_us >= self._next_ctmr_time_us:
+                    self._handle_clock_interrupt_if_needed()
 
         # ----------------------------------------------------------------------
         # VIRHEENKASITTELY: Muunna poikkeukset keskeytyksiksi
@@ -454,9 +465,9 @@ class CPU:
         # Python LOAD_FAST (lokaalit) on nopeampi kuin LOAD_ATTR (self.xxx).
         regs = self.regs
         mem_words = self.memory.words  # Suora lista — ei method call per muistiluku
-        exec_table = self._exec_table
-        mem_check_table = self._mem_check_table
-        cycles_table = self._cycles_table
+        exec_list = self._exec_list
+        mem_check_list = self._mem_check_list
+        cycles_list = self._cycles_list
         reg_array = self._reg_array
         word_mask = WORD_MASK  # Vakio lokaalina (ei module-tason lookup)
         nops_shift = OPCODE_NOPS_SHIFT
@@ -465,6 +476,7 @@ class CPU:
         opcode_calli = _OPCODE_CALLI
         opcode_fill = _OPCODE_FILL
         opcode_table = OPCODE_TABLE
+        sr_i_mask = 1 << 4  # SR_FLAG_I = bitti 4 → maski 0x0010
         bp_contains = breakpoints.__contains__ if breakpoints is not None else None
 
         cycles = 0
@@ -510,18 +522,18 @@ class CPU:
                     ins = _Ins(opcode, operands, 1 + nops)
 
                 # MEMORY CHECK
-                check_fn = mem_check_table.get(opcode)
+                check_fn = mem_check_list[opcode >> 6]
                 if check_fn is not None:
                     check_fn(ins)
 
                 # EXECUTE
-                exec_cycles = cycles_table.get(opcode, 1)
+                exec_cycles = cycles_list[opcode >> 6]
                 if opcode == opcode_fill and len(ins.operands) >= 2:
                     start = reg_array[ins.operands[0]] & word_mask
                     end = reg_array[ins.operands[1]] & word_mask
                     exec_cycles += ((end - start) & word_mask) + 1
 
-                handler = exec_table.get(opcode)
+                handler = exec_list[opcode >> 6]
                 if handler is None:
                     raise InvalidOpcodeError(f"Unknown opcode: 0x{opcode:04X}")
                 handler(ins)
@@ -532,12 +544,14 @@ class CPU:
                 # LASKURIT JA KESKEYTYKSET
                 self.instruction_counter += 1
                 self._simulated_time_us += exec_cycles
-                self._handle_keyboard_interrupt_if_needed()
-                sim_time = self._simulated_time_us
-                if sim_time >= self._next_tmr_time_us:
-                    self._handle_timer_interrupt_if_needed()
-                if sim_time >= self._next_ctmr_time_us:
-                    self._handle_clock_interrupt_if_needed()
+                # Interrupt fast gate: ohita kaikki keskeytystarkistukset jos I=0
+                if regs.sr & sr_i_mask:
+                    self._handle_keyboard_interrupt_if_needed()
+                    sim_time = self._simulated_time_us
+                    if sim_time >= self._next_tmr_time_us:
+                        self._handle_timer_interrupt_if_needed()
+                    if sim_time >= self._next_ctmr_time_us:
+                        self._handle_clock_interrupt_if_needed()
 
             # ---- POIKKEUSPOLKU (erotettu normaalista suorituksesta) ----
             except PrivilegeViolationError:

@@ -339,11 +339,14 @@ class RegisterFile:
             Z = 1 jos value == 0
             N = 1 jos value:n ylin bitti (bitti 15) = 1
         """
-        value &= WORD_MASK  # Varmista 16-bittisyys
-        # Zero: onko arvo nolla?
-        self.set_flag(SR_FLAG_Z, 1 if value == 0 else 0)
-        # Negative: onko ylin bitti 1? (bitti 15 = 0x8000)
-        self.set_flag(SR_FLAG_N, 1 if (value & WORD_SIGN_BIT) else 0)
+        value &= WORD_MASK
+        # Inlinattu: nollaa Z (bitti 0) ja N (bitti 1), aseta tarvittaessa
+        sr = self.sr & 0xFFFC  # ~0x0003 — nollaa Z ja N
+        if value == 0:
+            sr |= 0x0001  # Z = 1
+        if value & WORD_SIGN_BIT:
+            sr |= 0x0002  # N = 1
+        self.sr = sr
 
     def set_carry_overflow(self, carry: bool, overflow: bool) -> None:
         """
@@ -355,5 +358,10 @@ class RegisterFile:
             overflow: True jos tapahtui etumerkillinen ylivuoto
                    (positiivinen + positiivinen = negatiivinen jne.)
         """
-        self.set_flag(SR_FLAG_C, 1 if carry else 0)
-        self.set_flag(SR_FLAG_V, 1 if overflow else 0)
+        # Inlinattu: nollaa C (bitti 2) ja V (bitti 3), aseta tarvittaessa
+        sr = self.sr & 0xFFF3  # ~0x000C — nollaa C ja V
+        if carry:
+            sr |= 0x0004  # C = 1
+        if overflow:
+            sr |= 0x0008  # V = 1
+        self.sr = sr

@@ -150,15 +150,17 @@ Tehtävät on merkitty hakasulkeilla, ja niiden tilaa voidaan päivittää seura
 - [X] Vähennä hot-loopin allokaatioita (operandit kiinteänä tuple-rakenteena tai erilliset 0/1/2/3 operandin kevyet polut ilman listaluontia).
 
 #### P2 — Keskisuuri vaikutus
-- [ ] Korvaa opcode-dict-haut nopeammalla rakenteella (esim. taulukko/lista opcode-indeksillä, `None` tuntemattomille).
-- [ ] Inline-optimoi yleisimpien käskyjen lippupäivitykset (välttää useita `set_flag`-kutsuja per käsky).
-- [ ] Lisää "interrupt fast gate": jos I=0 ja ajastimet pois eikä keyboard pending, ohita keskeytyscheckit yhdellä ehdolla.
+- [X] Korvaa opcode-dict-haut nopeammalla rakenteella (esim. taulukko/lista opcode-indeksillä, `None` tuntemattomille).
+- [X] Inline-optimoi yleisimpien käskyjen lippupäivitykset (välttää useita `set_flag`-kutsuja per käsky).
+- [X] Lisää "interrupt fast gate": jos I=0 ja ajastimet pois eikä keyboard pending, ohita keskeytyscheckit yhdellä ehdolla.
 
 #### P3 — Täydentävät optimoinnit
 - [ ] Optimoi FILL-muistitarkistus ilman suuria viipalekopioita.
 - [ ] Tee renderöintiin kevyt "text-only fast mode" ja aggressiivisempi dirty-region-päivitys.
 - [ ] Vähennä `datetime.now()`-kutsuja kellon MMIO-luvuissa (snapshot per käsky tai per lukujakso).
 
+### Uudet käskyt
+- [ ] Lisää COPY-käsky, joka kopioi muistialueen toiseen ilman CPU:n väliintuloa (DMA-tyyppinen operaatio). Tämä nopeuttaisi suurten datamäärien siirtoa, kuten VRAM-päivityksiä tai FILL-käskyjä, ilman että CPU:n hot-loopin allokaatio- ja tarkistuskustannukset kasvavat. Käskyn tulee huomioida luettavan alueen rajoitusket, kirjoitettavan alueen rajoitukset. Parametrit: Kopioitavan alueen alku- ja loppuosoitteet, sekä kohdeosoite.
 
 ### Ryhmä Ö: Viimeiset tehtävät
 - [ ] Muuta projektin hakemistorakennetta, niin että se vastaa fyysisen tietokoneen komponentteja ja rakennetta. Varmista että kaikki tiedostopolut ja importit päivitetään, eikä mitään hajoa.
