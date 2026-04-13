@@ -5,6 +5,8 @@
         .include "lib-screen.asm"
         .include "lib-disk.asm"
 
+.const CH_SLASH, 47
+
 ; -----------------------------------------------------------------------------
 ; Data
 ; -----------------------------------------------------------------------------
@@ -27,6 +29,7 @@ arg_buf:
 scoped_name_buf:
         .dw  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
 cwd_buf:
+        ; "/" = root directory
         .dw  47,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
 
 line_buf:
@@ -102,8 +105,8 @@ str_run_err42:
         .dstr "Error 42: Life not found\\n"
 str_cd_now:
         .dstr "Current dir: "
-str_root:
-        .dstr "/\\n"
+str_nl:
+        .dstr "\\n"
 
 cmd_help:
         .dstr "help"
@@ -156,38 +159,6 @@ print_str:
 ; Out: R0=1 equal, 0 not equal
 ; -----------------------------------------------------------------------------
 
-str_eq:
-        PUSH  R2
-        PUSH  R3
-        READ  R2, 1
-        READ  R3, 0
-_se_loop:
-        READ  R0, [R0]
-        READ  R1, [R1]
-        CMP   R0, R1
-        JNZ   _se_no
-        CMP   R0, R3
-        JZ    _se_yes
-        ADD   R0, R2
-        ADD   R1, R2
-        ; reload original pointers from stack-relative is unavailable -> use temp vars
-        ; so use helper below instead
-        JUMP  _se_fallback
-_se_fallback:
-        ; fallback branch is never used; replaced by dedicated routine call
-        JUMP  _se_no
-_se_yes:
-        READ  R0, 1
-        POP   R3
-        POP   R2
-        RET
-_se_no:
-        READ  R0, 0
-        POP   R3
-        POP   R2
-        RET
-
-; reliable comparison routine using dedicated pointers
 str_eq2_a:
         .dw 0
 str_eq2_b:
@@ -437,7 +408,7 @@ build_scoped_name:
 
         ; root cwd? cwd_buf == "/" + null
         READ  R4, [cwd_buf]
-        READ  R5, 47
+        READ  R5, CH_SLASH
         CMP   R4, R5
         JNZ   _bsn_with_prefix
         READ  R4, cwd_buf
@@ -469,7 +440,7 @@ _bsn_add_slash:
         READ  R5, 0
         CMP   R2, R5
         JZ    _bsn_fail
-        READ  R4, 47
+        READ  R4, CH_SLASH
         STORE [R1], R4
         ADD   R1, R3
         SUB   R2, R3
@@ -481,7 +452,7 @@ _bsn_arg_loop:
         READ  R5, 0
         CMP   R4, R5
         JZ    _bsn_done
-        READ  R5, 47
+        READ  R5, CH_SLASH
         CMP   R4, R5
         JZ    _bsn_fail
         READ  R5, 0
@@ -517,12 +488,68 @@ _bsn_ret:
 
 cwd_set_root:
         READ  R0, cwd_buf
-        READ  R1, 47
+        READ  R1, CH_SLASH
         STORE [R0], R1
         READ  R1, 1
         ADD   R0, R1
         READ  R1, 0
         STORE [R0], R1
+        RET
+
+; -----------------------------------------------------------------------------
+; cwd_parent (cd ..)
+; -----------------------------------------------------------------------------
+
+cwd_parent:
+        PUSH  R0
+        PUSH  R1
+        PUSH  R2
+        PUSH  R3
+        PUSH  R4
+
+        READ  R0, cwd_buf
+        READ  R1, 1
+        READ  R2, 0
+        ADD   R0, R1
+        READ  R3, [R0]
+        CMP   R3, R2
+        JZ    _cwp_done               ; already root
+
+        READ  R0, cwd_buf
+_cwp_seek_end:
+        READ  R3, [R0]
+        CMP   R3, R2
+        JZ    _cwp_back
+        ADD   R0, R1
+        JUMP  _cwp_seek_end
+
+_cwp_back:
+        SUB   R0, R1                  ; last char
+        READ  R4, cwd_buf
+_cwp_scan:
+        CMP   R0, R4
+        JZ    _cwp_root
+        READ  R3, [R0]
+        READ  R2, CH_SLASH
+        CMP   R3, R2
+        JZ    _cwp_cut
+        SUB   R0, R1
+        JUMP  _cwp_scan
+
+_cwp_root:
+        CALL  cwd_set_root
+        JUMP  _cwp_done
+
+_cwp_cut:
+        READ  R2, 0
+        STORE [R0], R2
+
+_cwp_done:
+        POP   R4
+        POP   R3
+        POP   R2
+        POP   R1
+        POP   R0
         RET
 
 ; -----------------------------------------------------------------------------
@@ -554,7 +581,7 @@ _caa_at_end:
         ADD   R3, R2
         CMP   R1, R3
         JZ    _caa_copy_arg
-        READ  R3, 47
+        READ  R3, CH_SLASH
         STORE [R1], R3
         ADD   R1, R2
 
@@ -640,7 +667,7 @@ _dhc_cmp_pref:
         JUMP  _dhc_cmp_pref
 
 _dhc_need_slash:
-        READ  R4, 47
+        READ  R4, CH_SLASH
         READ  R2, [R1]
         CMP   R2, R4
         JNZ   _dhc_next
@@ -746,7 +773,7 @@ _lpf_build_line:
 
         ; root?
         READ  R3, [cwd_buf]
-        READ  R4, 47
+        READ  R4, CH_SLASH
         CMP   R3, R4
         JNZ   _lpf_skip
         READ  R3, cwd_buf
@@ -763,7 +790,7 @@ _lpf_root_copy:
         READ  R4, 0
         CMP   R3, R4
         JZ    _lpf_finish_name
-        READ  R4, 47
+        READ  R4, CH_SLASH
         CMP   R3, R4
         JZ    _lpf_skip
         STORE [R2], R3
@@ -788,7 +815,7 @@ _lpf_pref_cmp:
         JUMP  _lpf_pref_cmp
 _lpf_pref_slash:
         READ  R3, [R1]
-        READ  R4, 47
+        READ  R4, CH_SLASH
         CMP   R3, R4
         JNZ   _lpf_skip
         ADD   R1, R7
@@ -798,7 +825,7 @@ _lpf_child_copy:
         READ  R4, 0
         CMP   R3, R4
         JZ    _lpf_finish_name
-        READ  R4, 47
+        READ  R4, CH_SLASH
         CMP   R3, R4
         JZ    _lpf_skip
         STORE [R2], R3
@@ -815,7 +842,7 @@ _lpf_finish_name:
         READ  R4, DISK_ENTRY_DIR
         CMP   R3, R4
         JNZ   _lpf_add_nl
-        READ  R3, 47
+        READ  R3, CH_SLASH
         STORE [R2], R3
         ADD   R2, R7
 _lpf_add_nl:
@@ -1005,12 +1032,12 @@ _cd_has_arg:
         READ  R1, 1
         CMP   R0, R1
         JNZ   _cd_into
-        CALL  cwd_set_root
+        CALL  cwd_parent
         READ  R0, str_cd_now
         CALL  print_str
         READ  R0, cwd_buf
         CALL  print_str
-        READ  R0, str_root
+        READ  R0, str_nl
         CALL  print_str
         JUMP  main_loop
 _cd_into:
@@ -1046,15 +1073,7 @@ _cd_set:
         CALL  print_str
         READ  R0, cwd_buf
         CALL  print_str
-        READ  R0, char_nl
-        ; print newline via line_buf helper
-        READ  R1, line_buf
-        STORE [R1], R0
-        READ  R2, 1
-        ADD   R1, R2
-        READ  R0, 0
-        STORE [R1], R0
-        READ  R0, line_buf
+        READ  R0, str_nl
         CALL  print_str
         JUMP  main_loop
 
