@@ -92,6 +92,7 @@ from .constants import (
     SR_FLAG_P,
     SR_FLAG_V,
     SR_FLAG_Z,
+    VRAM_START,
     WORD_MASK,
 )
 from .devices.storage import BlockStorageDevice
@@ -952,8 +953,10 @@ class KCPU16TUI(App[None]):
         self.addr_to_line: dict[int, int] = {}
         self.is_assembled: bool = False
         self._last_screen_render: str = ""
+        self._last_screen_lines: list[str] | None = None
         self._last_vram_version: int = -1  # Käytetään VRAM dirty-check-optimointiin
         self._last_gfx_mode: int = -1  # Käytetään GFX_MODE muutoksen detektointiin
+        self._text_fast_mode: bool = True
         self._disasm_cache: dict[tuple[int, tuple[int, ...]], str] = (
             {}
         )  # (addr, words) → disasm_tail
@@ -2577,17 +2580,25 @@ class KCPU16TUI(App[None]):
             memory = self.machine.memory
             mode = memory.read(GFX_MODE_REG)
             vram_version = screen.get_vram_version()
+            use_text_fast = (
+                self._text_fast_mode
+                and not force
+                and mode == 0
+                and self._exec_mode in {"fast", "max", "slow"}
+            )
 
             # Dirty-check: Jos VRAM ei ole muuttunut ja GFX_MODE ei muuttunut (paitsi force)
-            # ja etupuskuri on olemassa, voi hyppää renderöinnin yli.
+            # Tekstitilassa voidaan ohittaa suoraan viime renderiin.
             if (
                 not force
                 and vram_version == self._last_vram_version
                 and mode == self._last_gfx_mode
-                and screen.has_front_buffer
+                and (mode == 0 or screen.has_front_buffer)
             ):
-                # VRAM ei muuttunut, käytä etupuskuria
-                rendered = screen.get_front_buffer()
+                if mode == 0:
+                    rendered = self._last_screen_render
+                else:
+                    rendered = screen.get_front_buffer()
             elif mode in (GFX_MODE_B, GFX_MODE_C):
                 # Grafiikkatilat B/C: kaksoisbufferointi käytössä.
                 # Etupuskuri renderöidään atomisesti CPU._write_word():ssä kun
@@ -2600,8 +2611,32 @@ class KCPU16TUI(App[None]):
                     # Näytä viimeisin atomiesti flipattu kehys
                     rendered = screen.get_front_buffer()
             else:
-                # Tekstitila A: ei kaksoisbufferointia, renderöi aina suoraan VRAMista
-                rendered = screen.render_auto(memory)
+                # Tekstitila A: fast-tiloissa käytä kevyttä text-only renderiä,
+                # ja päivitä dirty-spanin mukaan vain muuttuneet rivit.
+                if use_text_fast and self._last_screen_lines is not None:
+                    span = screen.consume_dirty_span()
+                    if span is not None:
+                        first_row = span[0] // screen.cols
+                        last_row = span[1] // screen.cols
+                        lines = self._last_screen_lines[:]
+                        row_base = VRAM_START + (first_row * screen.cols)
+                        for row in range(first_row, last_row + 1):
+                            chars: list[str] = []
+                            addr = row_base
+                            for _ in range(screen.cols):
+                                word = memory.read(addr)
+                                ch = chr(word & 0xFF)
+                                chars.append(ch if 32 <= ord(ch) < 127 else " ")
+                                addr += 1
+                            lines[row] = "".join(chars)
+                            row_base += screen.cols
+                        rendered = "\n".join(lines)
+                    else:
+                        rendered = screen.render_text(memory)
+                elif use_text_fast:
+                    rendered = screen.render_text(memory)
+                else:
+                    rendered = screen.render_auto(memory)
 
             # Päivitä tracked versiot (dirty-checkia varten seuraavaa kutsua)
             self._last_vram_version = vram_version
@@ -2609,6 +2644,10 @@ class KCPU16TUI(App[None]):
 
             if rendered != self._last_screen_render:
                 self._last_screen_render = rendered
+                if mode == 0:
+                    self._last_screen_lines = rendered.split("\n")
+                else:
+                    self._last_screen_lines = None
                 if self._w_screen_view:
                     self._w_screen_view.update(rendered)
         except Exception:

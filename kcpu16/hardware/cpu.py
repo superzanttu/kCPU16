@@ -180,6 +180,8 @@ class CPU:
 
     # 16-bittinen Galois LFSR satunnaislukugeneraattorille ($0022)
     _lfsr: int = field(default=RAND_LFSR_SEED, init=False)
+    _clock_snapshot: datetime | None = field(default=None, init=False)
+    _clock_snapshot_sim_us: int = field(default=-1, init=False)
 
     def __post_init__(self) -> None:
         """Rakenna opcode-pohjaiset käsittelytaulukot CPU:n alustuksen jälkeen."""
@@ -297,6 +299,8 @@ class CPU:
         self._next_tmr_time_us = _TMR_DISABLED
         self._next_ctmr_time_us = _TMR_DISABLED
         self.regs.reset()
+        self._clock_snapshot = None
+        self._clock_snapshot_sim_us = -1
 
     def step(self) -> None:
         """
@@ -708,13 +712,10 @@ class CPU:
         # palaa tarkkaan tarkistukseen virheviestin oikeaa osoitetta varten.
         write_mask = self.memory._write_mask
         for seg_start, seg_end in ranges:
-            if any(write_mask[seg_start : seg_end + 1]):
-                addr = seg_start
-                while True:
-                    self.memory.check_write_protected(addr)
-                    if addr == seg_end:
-                        break
-                    addr = (addr + 1) & WORD_MASK
+            hit = write_mask.find(1, seg_start, seg_end + 1)
+            while hit != -1:
+                self.memory.check_write_protected(hit)
+                hit = write_mask.find(1, hit + 1, seg_end + 1)
 
         if not self.regs.in_kernel_mode:
             mpr = self.regs.mpr & WORD_MASK
@@ -813,6 +814,13 @@ class CPU:
             words = self.memory.words
             for seg_start, seg_end in ranges:
                 words[seg_start : seg_end + 1] = [val] * (seg_end - seg_start + 1)
+            if self.screen is not None:
+                for seg_start, seg_end in ranges:
+                    ov_start = max(seg_start, VRAM_START)
+                    ov_end = min(seg_end, VRAM_END)
+                    if ov_start <= ov_end:
+                        self.screen.mark_vram_dirty(ov_start)
+                        self.screen.mark_vram_dirty(ov_end)
             return
 
         write_word = self._write_word
@@ -1254,11 +1262,17 @@ class CPU:
         self.memory.write(addr, value)
         # Merkitse VRAM muuttuneeksi dirty-flag-optimointia varten (TUI:n näyttöpäivitys)
         if VRAM_START <= addr <= VRAM_END and self.screen is not None:
-            self.screen.mark_vram_dirty()
+            self.screen.mark_vram_dirty(addr)
 
     def _read_clock_mmio(self, addr: int) -> int:
         """Palauttaa reaaliaikaisen kellonarvon MMIO-osoitteen mukaan."""
-        now = datetime.now()
+        if (
+            self._clock_snapshot is None
+            or self._clock_snapshot_sim_us != self._simulated_time_us
+        ):
+            self._clock_snapshot = datetime.now()
+            self._clock_snapshot_sim_us = self._simulated_time_us
+        now = self._clock_snapshot
         if addr == CLOCK_YEAR:
             return now.year & WORD_MASK
         if addr == CLOCK_MONTH:

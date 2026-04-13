@@ -15,7 +15,7 @@
 ;     R6  = nykyinen  tulos / 2  (lasketaan ennen write5:ttä; säilyy sen yli)
 ;     Kynnys = R15 / 20  (≈ 5 % edellisestä)
 ;
-;   1. CPU suoritusnopeus  — käskyä/sekuntti (k/s)
+;   1. CPU suoritusnopeus  — käskyä/sekuntti (kIPS, mixed workload)
 ;   2. RAM latausnopeus    — tavua/sekuntti  (B/s)
 ;   3. RAM tallennusnopeus — tavua/sekuntti  (B/s)
 ;   4. Levy lukusnopeus    — tavua/sekuntti (B/s) ja blokkia/sekuntti (blk/s)
@@ -194,14 +194,36 @@ wait_sec_loop:
 bench_cpu:
         CALL  wait_sec
         READ  R13, 0
+        READ  R0,  RAM_BM_START
+        READ  R6,  RAM_BM_END
+        READ  R1,  0x1357
+        READ  R2,  0x2468
 cpu_bm_loop:
-        NOP
-        NOP
-        NOP
-        NOP
-        NOP
-        NOP
-        ADD   R13, R3
+        ; Mixed workload: ALU + bit-op + memory + branch
+        ADD   R1,  R2
+        XOR   R2,  R1
+        AND   R1,  R2
+        OR    R2,  R3
+        SHL   R1,  R3
+        SHR   R2,  R3
+        STORE [R0], R1
+        READ  R7,  [R0]
+        ADD   R7,  R2
+        STORE [R0], R7
+        ADD   R0,  R3
+        CMP   R0,  R6
+        JLT   cpu_bm_ptr_ok
+        READ  R0,  RAM_BM_START
+cpu_bm_ptr_ok:
+        CMP   R1,  R2
+        JZ    cpu_bm_branch_a
+        SUB   R1,  R3
+        JUMP  cpu_bm_branch_b
+cpu_bm_branch_a:
+        ADD   R2,  R3
+cpu_bm_branch_b:
+        READ  R7,  16
+        ADD   R13, R7
         READ  R14, [CLOCK_SECOND]
         CMP   R14, R12
         JZ    cpu_bm_loop
@@ -364,7 +386,7 @@ main:
 main_loop:
 
 ; ============================================================
-; MITTAUS 1: CPU-nopeus
+; MITTAUS 1: CPU-nopeus (kIPS, mixed workload)
 ; ============================================================
         READ  R15, 0            ; edellinen tulos = 0 (ensimmäinen kierros)
 
@@ -374,10 +396,10 @@ cpu_loop:
         READ  R10, COL_STAT
         CALL  write_str
 
-        CALL  bench_cpu         ; R13 = kierroksia/s
+        CALL  bench_cpu         ; R13 = arvio käskyä/s mixed-kuormalla
 
         CPY   R1,  R13
-        READ  R7,  100
+        READ  R7,  1000
         DIV   R1,  R7           ; R1 = kIPS
 
         READ  R0,  BUF_CPU

@@ -104,6 +104,8 @@ class ScreenDevice:
     # VRAM dirty-flag: version counter joka inkrementoidaan aina kun VRAM kirjoitetaan.
     # TUI voi näin välttyä turhilta renderöinneiltä vertaamalla versiota edelliseen.
     _vram_version: int = field(default=0, init=False, repr=False)
+    _dirty_min: int = field(default=-1, init=False, repr=False)
+    _dirty_max: int = field(default=-1, init=False, repr=False)
 
     def set_front_buffer(self, rendered: str) -> None:
         """Tallenna renderöintitulos etupuskuriin (kutsutaan flip-rekisterin kirjoituksessa)."""
@@ -127,14 +129,38 @@ class ScreenDevice:
     def reset_vram_version(self) -> None:
         """Nollaa VRAM-versio (kutsutaan cold_reset/reset_for_test:ssä)."""
         self._vram_version = 0
+        self._dirty_min = -1
+        self._dirty_max = -1
 
-    def mark_vram_dirty(self) -> None:
+    def mark_vram_dirty(self, addr: int | None = None) -> None:
         """Merkitse VRAM muuttuneeksi (kutsutaan VRAM-kirjoituksessa)."""
         self._vram_version = (self._vram_version + 1) & 0x7FFFFFFF  # prevent overflow
+        if addr is None:
+            return
+        if addr < VRAM_START or addr >= VRAM_START + (self.cols * self.rows):
+            return
+        idx = addr - VRAM_START
+        if self._dirty_min < 0:
+            self._dirty_min = idx
+            self._dirty_max = idx
+            return
+        if idx < self._dirty_min:
+            self._dirty_min = idx
+        if idx > self._dirty_max:
+            self._dirty_max = idx
 
     def get_vram_version(self) -> int:
         """Palauta nykyisen VRAM-version (käytetään dirty-checkissa)."""
         return self._vram_version
+
+    def consume_dirty_span(self) -> tuple[int, int] | None:
+        """Palauta ja nollaa viimeisin VRAM dirty-span (lineaarinen indeksi)."""
+        if self._dirty_min < 0:
+            return None
+        span = (self._dirty_min, self._dirty_max)
+        self._dirty_min = -1
+        self._dirty_max = -1
+        return span
 
     def render_text(self, memory: Memory) -> str:
         """

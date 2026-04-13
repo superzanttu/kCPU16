@@ -155,9 +155,9 @@ Tehtävät on merkitty hakasulkeilla, ja niiden tilaa voidaan päivittää seura
 - [X] Lisää "interrupt fast gate": jos I=0 ja ajastimet pois eikä keyboard pending, ohita keskeytyscheckit yhdellä ehdolla.
 
 #### P3 — Täydentävät optimoinnit
-- [ ] Optimoi FILL-muistitarkistus ilman suuria viipalekopioita.
-- [ ] Tee renderöintiin kevyt "text-only fast mode" ja aggressiivisempi dirty-region-päivitys.
-- [ ] Vähennä `datetime.now()`-kutsuja kellon MMIO-luvuissa (snapshot per käsky tai per lukujakso).
+- [X] Optimoi FILL-muistitarkistus ilman suuria viipalekopioita.
+- [X] Tee renderöintiin kevyt "text-only fast mode" ja aggressiivisempi dirty-region-päivitys.
+- [X] Vähennä `datetime.now()`-kutsuja kellon MMIO-luvuissa (snapshot per käsky tai per lukujakso).
 
 ### Uudet käskyt
 - [ ] Lisää COPY-käsky, joka kopioi muistialueen toiseen ilman CPU:n väliintuloa (DMA-tyyppinen operaatio). Tämä nopeuttaisi suurten datamäärien siirtoa, kuten VRAM-päivityksiä tai FILL-käskyjä, ilman että CPU:n hot-loopin allokaatio- ja tarkistuskustannukset kasvavat. Käskyn tulee huomioida luettavan alueen rajoitusket, kirjoitettavan alueen rajoitukset. Parametrit: Kopioitavan alueen alku- ja loppuosoitteet, sekä kohdeosoite.
