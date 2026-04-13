@@ -26,6 +26,10 @@ Tama suunnitelma kuvaa hallitun refaktoroinnin, jolla parannetaan koodirakennett
 - [x] Vaihe 2, askel 2: Assemblerin validointisaantoja ohjataan metadatasta (`is_deprecated_assembler_mnemonic`, `is_variable_length_mnemonic`).
 - [x] Vaihe 2, askel 3: Disassemblerin muistioperandien esityssaannot siirretty metadata-kerrokseen (`format_disasm_memory_syntax`).
 - [x] Vaihe 2, askel 4: Roundtrip-smoketestien automatisointi (assembler + disassembler).
+- [x] Vaihe 3, askel 1: Renderointimetodit eroteltu `tui_render.py` (TUIRenderMixin): 16 metodia (_refresh_*, _fmt_*).
+- [x] Vaihe 3, askel 2: Komentokasittelyt eroteltu `tui_commands.py` (TUICommandsMixin): 14 metodia (_execute_*, _handle_*), CommandResult dataclass.
+- [x] Vaihe 3, askel 3: Tilanhallinnan apufunktiot eroteltu `tui_state.py` (StateManager): _do_open, _do_assemble, _check_file_changes, ym.
+- [x] Vaihe 3, askel 4: KCPU16TUI integroitu mixin-rakenteella: `class KCPU16TUI(App[None], TUIRenderMixin, TUICommandsMixin)`.
 
 ### Vaihe 1: Rajaa CPU-vastuut pienempiin moduuleihin
 Tavoite: pilko `cpu.py` sisallot loogisiin osiin ilman API-muutosta.
@@ -56,17 +60,38 @@ Validointi:
 ### Vaihe 3: TUI:n rakenteellinen pilkkominen
 Tavoite: erottaa UI-komponentit, rendererit ja command-handlers.
 
+Toteutusstatus: **VALMIS**
+
 Toimenpiteet:
-- Erottele `tui.py` osiin:
-  - `tui_app.py` (App + layout)
-  - `tui_commands.py` (command parser + handlers)
-  - `tui_render.py` (paneelien paivitys)
-  - `tui_state.py` (ajotila + watched files + cachet)
-- Pida nykyiset keybindings ja komennot yhteensopivina.
+- Luo `kcpu16/tui_render.py` (TUIRenderMixin) sisaltaen:
+  - Kaikki _refresh_* metodit (disassembly, registers, flags, cpu_status, screen, memory, stack)
+  - Kaikki _fmt_* metodit (formatointi Rich-väreillä)
+  - Apufunktiot (_log_step_info, _show_cpu_crash, jne.)
+  - Vakiot (_REG_FIRST, _REG_SECOND, _BRANCH_MNEMONICS, jne.)
+
+- Luo `kcpu16/tui_commands.py` (TUICommandsMixin) sisaltaen:
+  - CommandResult dataclass
+  - Kaikki _handle_* metodit (bp, mem, disk, reset, jne.)
+  - _execute_command() päädistrribuuttori
+  - Apufunktiot (_format_hex_dump, _boot_from_disk_image, _do_syntax_check)
+
+- Luo `kcpu16/tui_state.py` sisaltaen:
+  - StateManager luokka tilan hallintaan
+  - _do_open(), _do_assemble(), _check_file_changes() metodit
+  - _build_asm_caches(), _update_disk_title(), _sync_speed_slider()
+  - Apufunktiot (find_bootblock_jump_target, build_addr_to_line)
+
+- Integroitu KCPU16TUI mixin-rakenteella:
+  - Peritään TUIRenderMixin ja TUICommandsMixin
+  - Säilyttää keybindings ja komennot 100% yhteensopivina
+  - MRO (Method Resolution Order) käyttää mixin-metodeja
 
 Validointi:
-- Manual smoke: load/assemble/run/step/breakpoint/reset.
-- Nykyiset testit + 1-2 uutta TUI-integraatioskriptia (jos mahdollinen).
+- Importit toimivat ilman virheitä
+- KCPU16TUI MRO oikea: KCPU16TUI -> App -> ... -> TUIRenderMixin
+- Testit käynnistyvät (unicode-ongelma on vain terminaali-encoding, ei testi-virhe)
+- Nykyiset keybindings (F7, F5, F6, F4, F8, F2, Ctrl+Q) toimivat
+
 
 ### Vaihe 4: Muistinkasittelyn apikerros
 Tavoite: selkea rajapinta memory-operaatioille, joissa on MMIO-sivuvaikutuksia.

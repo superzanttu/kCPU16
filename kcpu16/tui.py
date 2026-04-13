@@ -104,6 +104,11 @@ from .machine import KCPU16Machine
 from .specs import format_arch_spec_report
 from . import __version__
 
+# Phase 3 Refactoring: Import mixins for modular TUI
+from .tui_render import TUIRenderMixin
+from .tui_commands import TUICommandsMixin, CommandResult
+from .tui_state import StateManager
+
 
 # ---------------------------------------------------------------------------
 # Rekisteri-indeksi -> nimi
@@ -703,7 +708,7 @@ class FilePickerDialog(ModalScreen):
 # ===========================================================================
 
 
-class KCPU16TUI(App[None]):
+class KCPU16TUI(App[None], TUIRenderMixin, TUICommandsMixin):
     """Päätason Textual-sovellus: kCPU16 emulaattori-debuggeri.
 
     Tämä on koko TUI:n juuriluokka. Se luo kaikki widgetit (disassembly,
