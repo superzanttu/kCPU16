@@ -163,10 +163,8 @@ Tehtävät on merkitty hakasulkeilla, ja niiden tilaa voidaan päivittää seura
 - [X] Lisää COPY-käsky, joka kopioi muistialueen toiseen ilman CPU:n väliintuloa (DMA-tyyppinen operaatio). Tämä nopeuttaisi suurten datamäärien siirtoa, kuten VRAM-päivityksiä tai FILL-käskyjä, ilman että CPU:n hot-loopin allokaatio- ja tarkistuskustannukset kasvavat. Käskyn tulee huomioida luettavan alueen rajoitusket, kirjoitettavan alueen rajoitukset. Parametrit: Kopioitavan alueen alku- ja loppuosoitteet, sekä kohdeosoite. Lisää tarvittavat testit
 
 ### Varmistukset
-- [ ] vamrista että kaikki konekilikäskyt ovat kattavan testuksen piirissä (test-hakemiston .asm-tiedostot), ja että optimoinnit eivät riko mitään käskyjen toiminnallisuutta tai keskeytyksiä. Käytä regressiotestejä ja vertaa ennen/jälkeen suoritusaikoja varmistaaksesi että nopeudet paranevat odotetusti ilman regressioita.
-- [ ] 
+- [X] vamrista että kaikki konekilikäskyt ovat kattavan testuksen piirissä (test-hakemiston .asm-tiedostot), ja että optimoinnit eivät riko mitään käskyjen toiminnallisuutta tai keskeytyksiä. Käytä regressiotestejä ja vertaa ennen/jälkeen suoritusaikoja varmistaaksesi että nopeudet paranevat odotetusti ilman regressioita.
 
 
 ### Ryhmä Ö: Viimeiset tehtävät
-- [ ] Muuta projektin hakemistorakennetta, niin että se vastaa fyysisen tietokoneen komponentteja ja rakennetta. Varmista että kaikki tiedostopolut ja importit päivitetään, eikä mitään hajoa.
-	- Epäselvyys: kohdehakemistorakennetta (lopullinen puu ja nimeämissäännöt) ei ole määritelty, joten turvallinen refaktorointi ilman rikkomisriskiä ei ole yksiselitteinen.
+- [ ] Tee suunnitelma refaktiroinnista. Tallenna suunnitelma tiedostoon ffff.md, joka sisältää ehdotuksia koodirakenteen parantamiseksi, modulaarisuuden lisäämiseksi ja mahdollisten teknisten velkojen korjaamiseksi. Tämä auttaa varmistamaan että projekti pysyy hallittavana ja laajennettavana pitkällä aikavälillä, vaikka nopeusoptimoinnit tuovatkin väliaikaisia monimutkaisuuksia.
