@@ -1502,6 +1502,7 @@ class KCPU16TUI(App[None], TUIRenderMixin, TUICommandsMixin):
                 else "DISABLED (keyboard → TUI)"
             )
             self._log(f"[cyan]Game Input Mode: {mode_text}[/cyan]")
+            self._refresh_flags()
             return
 
         # Älä välitä jos käyttäjä kirjoittaa komentokenttään
@@ -2414,6 +2415,12 @@ class KCPU16TUI(App[None], TUIRenderMixin, TUICommandsMixin):
         else:
             gfx_str = f"[yellow]{gfx_val}[/]"
 
+        game_input_str = (
+            "[bold green]ON[/] [dim](keyboard → emulator)[/]"
+            if self._game_input_mode
+            else "[dim]OFF[/] [dim](keyboard → TUI)[/]"
+        )
+
         content = (
             f"{' '.join(parts)}\n"
             f"Mode: {mode}\n"
@@ -2421,6 +2428,7 @@ class KCPU16TUI(App[None], TUIRenderMixin, TUICommandsMixin):
             f"TMR:  {tmr_str}\n"
             f"CTMR: {ctmr_str}\n"
             f"GFX:  {gfx_str}\n"
+            f"Game Input: {game_input_str}\n"
             f"Boot: {self._boot_status_text or '[dim]n/a[/]'}"
         )
         if self._w_flags_content:
