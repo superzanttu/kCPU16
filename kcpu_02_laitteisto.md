@@ -57,7 +57,7 @@ Käytössä bitit 0–5:
 - Käytössä käynnistyksessä ja keskeytysrutiineissa
 
 ### User Mode (P=0)
-- Muistipääsy yleensä vain osoitteisiin `>= MPR`
+- Muistipääsy vain osoitteisiin `>= MPR`
 - Etuoikeutetut käskyt aiheuttavat **INT 4**
 - Kielletty muistipääsy aiheuttaa **INT 5**
 - Poikkeus: **VRAM-alue** on aina käytettävissä myös user-tilassa
@@ -137,6 +137,7 @@ Käytetyt:
 - **7**: Timer (TMR)
 - **8**: Process exit
 - **9**: Clock (CTMR)
+- **10–15**: Varattu tulevaa käyttöä varten
 
 ### 6.2 Keskeytyksen käsittelyn perusprotokolla
 
@@ -275,4 +276,3 @@ Seuraavassa osassa on luontevaa siirtyä ohjelmointimalliin:
 - keskeytysrutiinit käytännössä
 - MMIO-ajurit (näppäimistö/näyttö)
 - yksinkertainen “mini-OS” kCPU16:lle
-
