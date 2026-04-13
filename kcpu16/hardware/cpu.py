@@ -121,6 +121,7 @@ class _Ins:
 _OPCODE_JMPI: int = _op(0, 5, 9, 0)  # Indeksoitu hyppy (muuttuvanmittainen)
 _OPCODE_CALLI: int = _op(0, 5, 10, 0)  # Indeksoitu kutsu (muuttuvanmittainen)
 _OPCODE_FILL: int = _op(0, 1, 11, 3)  # Täyttökäsky (dynaaminen syklilasku)
+_OPCODE_COPY: int = _op(0, 1, 12, 3)  # Kopiokäsky (dynaaminen syklilasku)
 _RUN_STOP_CYCLES = "cycles"
 _RUN_STOP_BREAKPOINT = "breakpoint"
 _RUN_STOP_HALTED = "halted"
@@ -216,6 +217,7 @@ class CPU:
             "STOREI_IND": self._exec_storei_ind,
             "STOREI_REL": self._exec_storei_rel,
             "FILL": self._exec_fill,
+            "COPY": self._exec_copy,
             "ADD": self._exec_add,
             "SUB": self._exec_sub,
             "MUL": self._exec_mul,
@@ -269,6 +271,7 @@ class CPU:
             "STORE_REL": self._mcheck_rel_dst,
             "STOREI_REL": self._mcheck_rel_dst,
             "FILL": self._mcheck_fill,
+            "COPY": self._mcheck_copy,
         }
         for opcode, (mnemonic, _, _) in OPCODE_TABLE.items():
             if mnemonic in handler_map:
@@ -348,7 +351,7 @@ class CPU:
             # Suorita käsky opcode-taulukosta haetulla käsittelijällä
             # ------------------------------------------------------------------
             exec_cycles = self._cycles_table.get(ins.opcode, 1)
-            if ins.opcode == _OPCODE_FILL and len(ins.operands) >= 2:
+            if ins.opcode in (_OPCODE_FILL, _OPCODE_COPY) and len(ins.operands) >= 2:
                 start = self._get_reg(ins.operands[0]) & WORD_MASK
                 end = self._get_reg(ins.operands[1]) & WORD_MASK
                 exec_cycles += ((end - start) & WORD_MASK) + 1
@@ -479,6 +482,7 @@ class CPU:
         opcode_jmpi = _OPCODE_JMPI
         opcode_calli = _OPCODE_CALLI
         opcode_fill = _OPCODE_FILL
+        opcode_copy = _OPCODE_COPY
         opcode_table = OPCODE_TABLE
         sr_i_mask = 1 << 4  # SR_FLAG_I = bitti 4 → maski 0x0010
         bp_contains = breakpoints.__contains__ if breakpoints is not None else None
@@ -532,7 +536,7 @@ class CPU:
 
                 # EXECUTE
                 exec_cycles = cycles_list[opcode >> 6]
-                if opcode == opcode_fill and len(ins.operands) >= 2:
+                if opcode in (opcode_fill, opcode_copy) and len(ins.operands) >= 2:
                     start = reg_array[ins.operands[0]] & word_mask
                     end = reg_array[ins.operands[1]] & word_mask
                     exec_cycles += ((end - start) & word_mask) + 1
@@ -702,6 +706,20 @@ class CPU:
             return ((start, end),)
         return ((start, WORD_MASK), (0, end))
 
+    @staticmethod
+    def _iter_copy_dest_ranges(
+        dst_start: int, length: int
+    ) -> tuple[tuple[int, int], ...]:
+        """Palauta COPY-kohdealue lineaarisina [start,end]-jaksoina (sis. rajat)."""
+        dst_start &= WORD_MASK
+        length &= WORD_MASK
+        if length <= 0:
+            return ()
+        dst_end = (dst_start + length - 1) & WORD_MASK
+        if dst_start <= dst_end:
+            return ((dst_start, dst_end),)
+        return ((dst_start, WORD_MASK), (0, dst_end))
+
     def _mcheck_fill(self, ins: _Ins) -> None:
         """FILL — kirjoitussuojaustarkistus aina; käyttäjäalueen tarkistus user-tilassa."""
         start = self._get_reg(ins.operands[0]) & WORD_MASK
@@ -727,6 +745,37 @@ class CPU:
                 if seg_start >= mpr:
                     continue
                 # Segmentissä on ainakin yksi osoite MPR:n alapuolella.
+                self.memory.check_user_access(seg_start, mpr)
+
+    def _mcheck_copy(self, ins: _Ins) -> None:
+        """COPY — lähdealue luettavissa ja kohdealue kirjoitettavissa kokonaan."""
+        start = self._get_reg(ins.operands[0]) & WORD_MASK
+        end = self._get_reg(ins.operands[1]) & WORD_MASK
+        dst = self._get_reg(ins.operands[2]) & WORD_MASK
+        src_ranges = self._iter_fill_ranges(start, end)
+        length = ((end - start) & WORD_MASK) + 1
+        dst_ranges = self._iter_copy_dest_ranges(dst, length)
+
+        write_mask = self.memory._write_mask
+        for seg_start, seg_end in dst_ranges:
+            hit = write_mask.find(1, seg_start, seg_end + 1)
+            while hit != -1:
+                self.memory.check_write_protected(hit)
+                hit = write_mask.find(1, hit + 1, seg_end + 1)
+
+        if not self.regs.in_kernel_mode:
+            mpr = self.regs.mpr & WORD_MASK
+            for seg_start, seg_end in src_ranges:
+                if VRAM_START <= seg_start and seg_end <= VRAM_END:
+                    continue
+                if seg_start >= mpr:
+                    continue
+                self.memory.check_user_access(seg_start, mpr)
+            for seg_start, seg_end in dst_ranges:
+                if VRAM_START <= seg_start and seg_end <= VRAM_END:
+                    continue
+                if seg_start >= mpr:
+                    continue
                 self.memory.check_user_access(seg_start, mpr)
 
     # ==========================================================================
@@ -831,6 +880,72 @@ class CPU:
                 if addr == seg_end:
                     break
                 addr = (addr + 1) & WORD_MASK
+
+    def _exec_copy(self, ins: _Ins) -> None:
+        # Kopioi muistialue [regStart..regEnd] osoitteeseen regDst
+        start_reg, end_reg, dst_reg = ins.operands
+        start = self._get_reg(start_reg) & WORD_MASK
+        end = self._get_reg(end_reg) & WORD_MASK
+        dst = self._get_reg(dst_reg) & WORD_MASK
+
+        src_ranges = self._iter_fill_ranges(start, end)
+        length = ((end - start) & WORD_MASK) + 1
+        dst_ranges = self._iter_copy_dest_ranges(dst, length)
+
+        src_has_mmio = False
+        dst_has_mmio_side_effect = False
+        for seg_start, seg_end in src_ranges:
+            if seg_start <= CLOCK_MMIO_END and seg_end >= CLOCK_MMIO_START:
+                src_has_mmio = True
+                break
+            if seg_start <= KBD_MMIO_END and seg_end >= KBD_MMIO_START:
+                src_has_mmio = True
+                break
+            if seg_start <= RAND_MMIO <= seg_end:
+                src_has_mmio = True
+                break
+        for seg_start, seg_end in dst_ranges:
+            if seg_start <= CLOCK_INT_INTERVAL <= seg_end:
+                dst_has_mmio_side_effect = True
+                break
+            if seg_start <= RAND_MMIO <= seg_end:
+                dst_has_mmio_side_effect = True
+                break
+            if seg_start <= GFX_FLIP_REG <= seg_end:
+                dst_has_mmio_side_effect = True
+                break
+
+        if not src_has_mmio and not dst_has_mmio_side_effect:
+            words = self.memory.words
+            src_data: list[int] = []
+            for seg_start, seg_end in src_ranges:
+                src_data.extend(words[seg_start : seg_end + 1])
+
+            idx = 0
+            for seg_start, seg_end in dst_ranges:
+                seg_len = seg_end - seg_start + 1
+                words[seg_start : seg_end + 1] = src_data[idx : idx + seg_len]
+                idx += seg_len
+
+            if self.screen is not None:
+                for seg_start, seg_end in dst_ranges:
+                    ov_start = max(seg_start, VRAM_START)
+                    ov_end = min(seg_end, VRAM_END)
+                    if ov_start <= ov_end:
+                        self.screen.mark_vram_dirty(ov_start)
+                        self.screen.mark_vram_dirty(ov_end)
+            return
+
+        read_word = self._read_word
+        write_word = self._write_word
+        src_addr = start
+        dst_addr = dst
+        remaining = length
+        while remaining > 0:
+            write_word(dst_addr, read_word(src_addr))
+            src_addr = (src_addr + 1) & WORD_MASK
+            dst_addr = (dst_addr + 1) & WORD_MASK
+            remaining -= 1
 
     # --- Aritmeettiset käskyt ---
 

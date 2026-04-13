@@ -160,7 +160,7 @@ Tehtävät on merkitty hakasulkeilla, ja niiden tilaa voidaan päivittää seura
 - [X] Vähennä `datetime.now()`-kutsuja kellon MMIO-luvuissa (snapshot per käsky tai per lukujakso).
 
 ### Uudet käskyt
-- [ ] Lisää COPY-käsky, joka kopioi muistialueen toiseen ilman CPU:n väliintuloa (DMA-tyyppinen operaatio). Tämä nopeuttaisi suurten datamäärien siirtoa, kuten VRAM-päivityksiä tai FILL-käskyjä, ilman että CPU:n hot-loopin allokaatio- ja tarkistuskustannukset kasvavat. Käskyn tulee huomioida luettavan alueen rajoitusket, kirjoitettavan alueen rajoitukset. Parametrit: Kopioitavan alueen alku- ja loppuosoitteet, sekä kohdeosoite. Lisää tarvittavat testit
+- [X] Lisää COPY-käsky, joka kopioi muistialueen toiseen ilman CPU:n väliintuloa (DMA-tyyppinen operaatio). Tämä nopeuttaisi suurten datamäärien siirtoa, kuten VRAM-päivityksiä tai FILL-käskyjä, ilman että CPU:n hot-loopin allokaatio- ja tarkistuskustannukset kasvavat. Käskyn tulee huomioida luettavan alueen rajoitusket, kirjoitettavan alueen rajoitukset. Parametrit: Kopioitavan alueen alku- ja loppuosoitteet, sekä kohdeosoite. Lisää tarvittavat testit
 
 ### Varmistukset
 - [ ] vamrista että kaikki konekilikäskyt ovat kattavan testuksen piirissä (test-hakemiston .asm-tiedostot), ja että optimoinnit eivät riko mitään käskyjen toiminnallisuutta tai keskeytyksiä. Käytä regressiotestejä ja vertaa ennen/jälkeen suoritusaikoja varmistaaksesi että nopeudet paranevat odotetusti ilman regressioita.
