@@ -115,146 +115,182 @@ class RegisterFile:
 
     @property
     def r0(self) -> int:
+        """General purpose register R0 (0-0xFFFF)."""
         return self._regs[0]
 
     @r0.setter
     def r0(self, v: int) -> None:
+        """Set R0 register value (masked to 16-bit)."""
         self._regs[0] = v
 
     @property
     def r1(self) -> int:
+        """General purpose register R1 (0-0xFFFF)."""
         return self._regs[1]
 
     @r1.setter
     def r1(self, v: int) -> None:
+        """Set R1 register value (masked to 16-bit)."""
         self._regs[1] = v
 
     @property
     def r2(self) -> int:
+        """General purpose register R2 (0-0xFFFF)."""
         return self._regs[2]
 
     @r2.setter
     def r2(self, v: int) -> None:
+        """Set R2 register value (masked to 16-bit)."""
         self._regs[2] = v
 
     @property
     def r3(self) -> int:
+        """General purpose register R3 (0-0xFFFF)."""
         return self._regs[3]
 
     @r3.setter
     def r3(self, v: int) -> None:
+        """Set R3 register value (masked to 16-bit)."""
         self._regs[3] = v
 
     @property
     def r4(self) -> int:
+        """General purpose register R4 (0-0xFFFF)."""
         return self._regs[4]
 
     @r4.setter
     def r4(self, v: int) -> None:
+        """Set R4 register value (masked to 16-bit)."""
         self._regs[4] = v
 
     @property
     def r5(self) -> int:
+        """General purpose register R5 (0-0xFFFF)."""
         return self._regs[5]
 
     @r5.setter
     def r5(self, v: int) -> None:
+        """Set R5 register value (masked to 16-bit)."""
         self._regs[5] = v
 
     @property
     def r6(self) -> int:
+        """General purpose register R6 (0-0xFFFF)."""
         return self._regs[6]
 
     @r6.setter
     def r6(self, v: int) -> None:
+        """Set R6 register value (masked to 16-bit)."""
         self._regs[6] = v
 
     @property
     def r7(self) -> int:
+        """General purpose register R7 (0-0xFFFF)."""
         return self._regs[7]
 
     @r7.setter
     def r7(self, v: int) -> None:
+        """Set R7 register value (masked to 16-bit)."""
         self._regs[7] = v
 
     @property
     def r8(self) -> int:
+        """General purpose register R8 (0-0xFFFF)."""
         return self._regs[8]
 
     @r8.setter
     def r8(self, v: int) -> None:
+        """Set R8 register value (masked to 16-bit)."""
         self._regs[8] = v
 
     @property
     def r9(self) -> int:
+        """General purpose register R9 (0-0xFFFF)."""
         return self._regs[9]
 
     @r9.setter
     def r9(self, v: int) -> None:
+        """Set R9 register value (masked to 16-bit)."""
         self._regs[9] = v
 
     @property
     def r10(self) -> int:
+        """General purpose register R10 (0-0xFFFF)."""
         return self._regs[10]
 
     @r10.setter
     def r10(self, v: int) -> None:
+        """Set R10 register value (masked to 16-bit)."""
         self._regs[10] = v
 
     @property
     def r11(self) -> int:
+        """General purpose register R11 (0-0xFFFF)."""
         return self._regs[11]
 
     @r11.setter
     def r11(self, v: int) -> None:
+        """Set R11 register value (masked to 16-bit)."""
         self._regs[11] = v
 
     @property
     def r12(self) -> int:
+        """General purpose register R12 (0-0xFFFF)."""
         return self._regs[12]
 
     @r12.setter
     def r12(self, v: int) -> None:
+        """Set R12 register value (masked to 16-bit)."""
         self._regs[12] = v
 
     @property
     def r13(self) -> int:
+        """General purpose register R13 (0-0xFFFF)."""
         return self._regs[13]
 
     @r13.setter
     def r13(self, v: int) -> None:
+        """Set R13 register value (masked to 16-bit)."""
         self._regs[13] = v
 
     @property
     def r14(self) -> int:
+        """General purpose register R14 (0-0xFFFF)."""
         return self._regs[14]
 
     @r14.setter
     def r14(self, v: int) -> None:
+        """Set R14 register value (masked to 16-bit)."""
         self._regs[14] = v
 
     @property
     def r15(self) -> int:
+        """General purpose register R15 (0-0xFFFF)."""
         return self._regs[15]
 
     @r15.setter
     def r15(self, v: int) -> None:
+        """Set R15 register value (masked to 16-bit)."""
         self._regs[15] = v
 
     @property
     def fp(self) -> int:
+        """Frame Pointer: Subroutine stack frame base."""
         return self._regs[16]
 
     @fp.setter
     def fp(self, v: int) -> None:
+        """Set Frame Pointer value (masked to 16-bit)."""
         self._regs[16] = v
 
     @property
     def sp(self) -> int:
+        """Stack Pointer: Stack top address (grows downward from 0xFFFF)."""
         return self._regs[17]
 
     @sp.setter
     def sp(self, v: int) -> None:
+        """Set Stack Pointer value (masked to 16-bit)."""
         self._regs[17] = v
 
     def reset(self) -> None:

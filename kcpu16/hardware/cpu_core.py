@@ -145,6 +145,12 @@ class CPUCoreMixin:
             self._cycles_list[opcode >> 6] = cycles_val
 
     def reset(self) -> None:
+        """Reset CPU to initial state: clear registers, counters, and timers.
+
+        Simulates a cold-boot: all registers to 0 except SP (stack pointer),
+        clears instruction/execution counters, resets timers, and disables
+        the halted flag. Does not clear memory or storage.
+        """
         self.halted = False
         self.instruction_counter = 0
         self.process_exit_requested = False
@@ -158,6 +164,14 @@ class CPUCoreMixin:
         self._clock_snapshot_sim_us = -1
 
     def step(self) -> None:
+        """Execute a single instruction and update CPU state.
+
+        Fetch-decode-execute one instruction, update program counter,
+        accumulate simulated execution time, and check for pending
+        interrupts (keyboard, timer, clock). Handles exceptions by
+        triggering appropriate interrupts or halting on recursive errors.
+        If already halted, this is a no-op.
+        """
         if self.halted:
             return
 
@@ -232,11 +246,30 @@ class CPUCoreMixin:
                 raise
 
     def run(self, max_cycles: int | None = None) -> None:
+        """Run CPU at maximum speed until halt or breakpoint.
+
+        Executes instructions in a tight loop without UI updates.
+        Minimal overhead due to batching and direct table lookups.
+
+        Args:
+            max_cycles: Maximum instruction count before stopping (None = no limit).
+                        Breakpoints defined elsewhere are respected.
+        """
         self._run_core(max_cycles=max_cycles)
 
     def run_until_breakpoint_or_cycles(
         self, max_cycles: int, breakpoints: set[int] | None
     ) -> tuple[int, str]:
+        """Run CPU until breakpoint hit, max cycles exceeded, or halt.
+
+        Fast execution with cycle accounting and breakpoint checks.
+        Returns tuple of (cycles_executed: int, stop_reason: str) where
+        stop_reason is one of: "cycles", "breakpoint", "halted", "exited".
+
+        Args:
+            max_cycles: Maximum instruction count to execute.
+            breakpoints: Set of memory addresses where to stop, or None.
+        """
         if max_cycles <= 0:
             return 0, _RUN_STOP_CYCLES
         return self._run_core(max_cycles=max_cycles, breakpoints=breakpoints)

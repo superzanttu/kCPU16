@@ -81,7 +81,6 @@ from .assembler import Assembler
 from .constants import (
     ARCH_SYMBOLS,
     BOOT_RAM_START,
-    GFX_FLIP_REG,
     GFX_MODE_REG,
     GFX_MODE_B,
     GFX_MODE_C,
@@ -107,7 +106,6 @@ from . import __version__
 from .tui_render import TUIRenderMixin
 from .tui_commands import TUICommandsMixin, CommandResult
 from .tui_state import (
-    StateManager,
     build_addr_to_line as _build_addr_to_line,
     find_bootblock_jump_target as _find_bootblock_jump_target,
 )
@@ -834,6 +832,7 @@ class KCPU16TUI(App[None], TUIRenderMixin, TUICommandsMixin):
         )
         self._slow_ips: int = 10  # käskyä/sekuntti SLOW-tilassa (1–1000)
         self._slow_multiplier: int = 1  # kerroin: 1, 10 tai 100
+        self._game_input_mode: bool = False  # True = emulator gets keyboard; False = TUI gets shortcuts
         # --asm listing caches (rebuilt each assemble)
         self._asm_addr_to_src: dict[int, str] = {}  # addr → raw source line
         self._asm_addr_to_label: dict[int, str] = {}  # addr → label name
@@ -1385,6 +1384,7 @@ class KCPU16TUI(App[None], TUIRenderMixin, TUICommandsMixin):
         self._log("  Ctrl+R  Reset machine   F9      Clear VRAM")
         self._log("  F2      Toggle BP       F1      This help")
         self._log("  Ctrl+Q  Quit")
+        self._log("  Ctrl+Space  Toggle game input mode (keyboard → emulator|TUI)")
         self._log("")
         self._log("[bold]File & Assembly:[/bold]")
         self._log(
@@ -1455,31 +1455,46 @@ class KCPU16TUI(App[None], TUIRenderMixin, TUICommandsMixin):
     # ------------------------------------------------------------------
 
     def on_key(self, event) -> None:
-        """Välitä tulostettavat merkit emulaattorin näppäimistölaitteelle.
+        """Välitä näppäinpainallukset emulaattorille tai TUI:lle.
 
-        Kutsutaan jokaisesta näppäinpainalluksesta. Kun CPU on käynnissä ja
-        näppäimistölaite on olemassa, tulostettavat ASCII-merkit (32–126)
-        välitetään emulaattorin KeyboardDevice-jonoon – ellei käyttäjä
-        kirjoita komentokenttään (#cmd-input).
+        Kutsutaan jokaisesta näppäinpainalluksesta. 
+        - Ctrl+Space toggles between game input mode (keyboard → emulator) 
+          and TUI mode (keyboard → TUI shortcuts).
+        - Game input mode: tulostettavat ASCII-merkit (32–126) ja Enter
+          välitetään emulaattorin KeyboardDevice-jonoon. Toimii kaikissa
+          ajomoodeissa (fast, max, slow, step) kun _game_input_mode=True.
+        - TUI mode: näppäinpainallukset käytetään TUI:n pikakomentoihin.
 
         Terminaali ei tue näppäimennostotapahtumia, joten painallus ja
         vapautus lähetetään peräkkäin samasta tapahtumasta.
         """
-        if self._exec_mode not in ("fast", "max", "slow"):
+        # Toggle game input mode with Ctrl+Space
+        if event.key == "ctrl+space":
+            self._game_input_mode = not self._game_input_mode
+            mode_text = "ENABLED (keyboard → emulator)" if self._game_input_mode else "DISABLED (keyboard → TUI)"
+            self._log(f"[cyan]Game Input Mode: {mode_text}[/cyan]")
             return
-        if self.machine.keyboard is None:
-            return
+        
         # Älä välitä jos käyttäjä kirjoittaa komentokenttään
         cmd_input = self.query_one("#cmd-input", Input)
         if cmd_input is self.focused:
             return
-        char = event.character
-        if char is None or len(char) != 1:
+
+        # In game input mode, forward keyboard to emulator
+        if self._game_input_mode and self.machine.keyboard is not None:
+            char = event.character
+            if char is None or len(char) != 1:
+                return
+            code = ord(char)
+            # Forward printable ASCII (32–126) including special chars like Enter
+            if 32 <= code <= 126:  # tulostettava ASCII
+                self.machine.keyboard.push_key(code)
+                self.machine.keyboard.push_key_release(code)
+            # Handle Enter key specially (code 13 in some terminals, but event.key is "enter")
+            elif event.key == "enter":
+                self.machine.keyboard.push_key(13)  # ASCII 13 = CR
+                self.machine.keyboard.push_key_release(13)
             return
-        code = ord(char)
-        if 32 <= code <= 126:  # tulostettava ASCII
-            self.machine.keyboard.push_key(code)
-            self.machine.keyboard.push_key_release(code)
 
     # ------------------------------------------------------------------
     # Perusoperaatiot
