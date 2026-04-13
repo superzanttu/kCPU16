@@ -57,7 +57,7 @@ Käytössä bitit 0–5:
 - Käytössä käynnistyksessä ja keskeytysrutiineissa
 
 ### User Mode (P=0)
-- Muistipääsy vain osoitteisiin `>= MPR`
+- Muistipääsy vain osoitteisiin `>= MPR` (MPR sisältää suoraan alimman sallitun osoitteen)
 - Etuoikeutetut käskyt aiheuttavat **INT 4**
 - Kielletty muistipääsy aiheuttaa **INT 5**
 - Poikkeus: **VRAM-alue** on aina käytettävissä myös user-tilassa
@@ -105,7 +105,7 @@ Jokainen painallus/vapautus voi laukaista **INT 6** (jos I=1).
 - `RAND_MMIO`:
   - luku: seuraava 16-bittinen pseudosatunnaisluku
   - kirjoitus: aseta siemen
-- Toteutus: 16-bittinen Galois LFSR (maski `0xB400`, jakso 65 535)
+- Toteutus: 16-bittinen Galois LFSR (maski `0xB400`, enimmäisjakso 65 535)
 
 ### 5.4 Video RAM (`0xF800–0xFF7F`)
 
@@ -225,7 +225,7 @@ Huomioita:
 
 Kylmäkäynnistys:
 1. CPU aloittaa kernel-tilassa (P=1, I=0)
-2. Rekisterit nollataan, SP=0xFFFF, PC=0x0100
+2. Yleisrekisterit nollataan, SP asetetaan arvoon 0xFFFF ja PC arvoon 0x0100
 3. Tallennuslaitteen `0x0000–0x00FF` luetaan
 4. Data kopioidaan RAMiin `0x0100–0x01FF`
 5. Suoritus alkaa osoitteesta `0x0100`
