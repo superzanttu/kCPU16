@@ -16,14 +16,11 @@ When used as a mixin, the inheriting class provides access to:
 from __future__ import annotations
 
 import re
-from pathlib import Path
 
 from rich.text import Text
 from textual.widgets import Static
 
 from .constants import (
-    BOOT_RAM_START,
-    GFX_FLIP_REG,
     GFX_MODE_B,
     GFX_MODE_C,
     GFX_MODE_REG,
@@ -759,9 +756,7 @@ class TUIRenderMixin:
         line_no = self.addr_to_line.get(pc)
         if line_no:
             line_info = f" [dim](line {line_no})[/dim]"
-        self._log(
-            f"[dim]IC={ic}[/dim] PC=0x{pc:04X}: " f"[bold]{instr}[/bold]{line_info}"
-        )
+        self._log(f"[dim]IC={ic}[/dim] PC=0x{pc:04X}: [bold]{instr}[/bold]{line_info}")
         if self.machine.cpu.halted:
             self._log("[bold red]CPU halted (HALT).[/bold red]")
         elif self.process_exited:

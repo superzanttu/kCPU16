@@ -53,9 +53,6 @@ import time
 from pathlib import Path
 from rich.text import Text
 
-# Poistaa Rich-markup-tagit (esim. [bold], [/red], [dim]) pelkään tekstiksi
-_RICH_MARKUP_RE = re.compile(r"\[/?[^\[\]]+?\]")
-
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
@@ -109,6 +106,9 @@ from .tui_state import (
     build_addr_to_line as _build_addr_to_line,
     find_bootblock_jump_target as _find_bootblock_jump_target,
 )
+
+# Poistaa Rich-markup-tagit (esim. [bold], [/red], [dim]) pelkään tekstiksi
+_RICH_MARKUP_RE = re.compile(r"\[/?[^\[\]]+?\]")
 
 
 # ---------------------------------------------------------------------------
@@ -313,8 +313,7 @@ class SaveConfirmDialog(ModalScreen):
             errors: list[str] = []
             if save_editor and not self._editor_has_file:
                 errors.append(
-                    "Editor .asm file has no save path.\n"
-                    "First save with: save <name>"
+                    "Editor .asm file has no save path.\nFirst save with: save <name>"
                 )
             if save_disk and not self._disk_has_file:
                 errors.append(
@@ -2651,9 +2650,7 @@ class KCPU16TUI(App[None], TUIRenderMixin, TUICommandsMixin):
         line_no = self.addr_to_line.get(pc)
         if line_no:
             line_info = f" [dim](line {line_no})[/dim]"
-        self._log(
-            f"[dim]IC={ic}[/dim] PC=0x{pc:04X}: " f"[bold]{instr}[/bold]{line_info}"
-        )
+        self._log(f"[dim]IC={ic}[/dim] PC=0x{pc:04X}: [bold]{instr}[/bold]{line_info}")
         if self.machine.cpu.halted:
             self._log("[bold red]CPU halted (HALT).[/bold red]")
         elif self.machine.process_exited:

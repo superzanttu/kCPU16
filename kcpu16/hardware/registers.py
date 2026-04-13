@@ -37,12 +37,8 @@ from ..constants import (
     DEFAULT_TIMER_INTERVAL,
     KERNEL_STACK_END,
     MODE_KERNEL,
-    SR_FLAG_C,
     SR_FLAG_I,
-    SR_FLAG_N,
     SR_FLAG_P,
-    SR_FLAG_V,
-    SR_FLAG_Z,
     WORD_MASK,
     WORD_SIGN_BIT,
 )

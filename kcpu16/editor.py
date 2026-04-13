@@ -58,13 +58,44 @@ class AssemblySyntaxHighlighter:
     """
 
     MNEMONICS = {
-        "LOAD", "CPY", "READ", "STORE", "READ_IND", "STORE_IND",
-        "ADD", "SUB", "MUL", "DIV", "CMP",
-        "AND", "OR", "XOR", "NOT", "SHL", "SHR",
-        "PUSH", "POP",
-        "JUMP", "CALL", "RET", "JZ", "JNZ", "JLT", "JGT", "JLE", "JGE",
-        "INT", "IRET", "STI", "CLI", "HALT",
-        "EXIT", "DREAD", "DWRITE", "SMPR", "STMR",
+        "LOAD",
+        "CPY",
+        "READ",
+        "STORE",
+        "READ_IND",
+        "STORE_IND",
+        "ADD",
+        "SUB",
+        "MUL",
+        "DIV",
+        "CMP",
+        "AND",
+        "OR",
+        "XOR",
+        "NOT",
+        "SHL",
+        "SHR",
+        "PUSH",
+        "POP",
+        "JUMP",
+        "CALL",
+        "RET",
+        "JZ",
+        "JNZ",
+        "JLT",
+        "JGT",
+        "JLE",
+        "JGE",
+        "INT",
+        "IRET",
+        "STI",
+        "CLI",
+        "HALT",
+        "EXIT",
+        "DREAD",
+        "DWRITE",
+        "SMPR",
+        "STMR",
     }
 
     REGISTERS = {"R0", "R1", "R2", "R3", "FP", "SP"}
@@ -130,7 +161,7 @@ class AssemblySyntaxHighlighter:
         stripped = code.strip()
         if stripped.endswith(":"):
             label = stripped[:-1]
-            indent = code[:len(code) - len(code.lstrip())]
+            indent = code[: len(code) - len(code.lstrip())]
             return f"{indent}[bold white]{label}[/bold white]:" + comment
 
         # Mnemonicit
@@ -255,7 +286,9 @@ class SimpleEditor:
         for i, line in enumerate(lines[:max_lines], 1):
             colored = AssemblySyntaxHighlighter.highlight_line(line)
             if i == highlight_line:
-                output.append(f"[on dark_green][bold]>{i:4d}[/bold] {colored}[/on dark_green]")
+                output.append(
+                    f"[on dark_green][bold]>{i:4d}[/bold] {colored}[/on dark_green]"
+                )
             else:
                 output.append(f"[dim]{i:4d}[/dim] {colored}")
         return "\n".join(output)

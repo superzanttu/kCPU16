@@ -35,7 +35,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from ..constants import BOOT_RAM_START, BOOT_RAM_END, VRAM_END, VRAM_START, WORD_MASK
+from ..constants import BOOT_RAM_START, VRAM_END, VRAM_START, WORD_MASK
 from .cpu import CPU
 from .devices import BlockStorageDevice, KeyboardDevice, ScreenDevice
 from .memory import Memory

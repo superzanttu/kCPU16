@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from ..constants import (
     INT_PROCESS_EXIT,
-    MODE_KERNEL,
     SR_FLAG_C,
     SR_FLAG_I,
     SR_FLAG_N,

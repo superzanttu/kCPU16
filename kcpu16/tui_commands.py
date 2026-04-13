@@ -40,20 +40,16 @@ Komennot:
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .assembler import Assembler
 from .constants import BOOT_RAM_START, WORD_MASK
-from .devices.storage import BlockStorageDevice
-from .instruction import OPCODE_TABLE
 from .specs import format_arch_spec_report
 from . import __version__
 
 if TYPE_CHECKING:
-    from textual.app import App
+    pass
 
 
 # ---------------------------------------------------------------------------

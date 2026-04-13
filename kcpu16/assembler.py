@@ -411,8 +411,7 @@ class Assembler:
             for token in normalized.split():
                 if "=" not in token:
                     raise ValueError(
-                        ".bootblock: options must use key=value syntax "
-                        f"(got {token!r})"
+                        f".bootblock: options must use key=value syntax (got {token!r})"
                     )
                 key, value = token.split("=", 1)
                 key = key.strip().lower()
@@ -782,8 +781,7 @@ class Assembler:
                 )
             if name in reserved_reg:
                 raise ValueError(
-                    f".const '{name}': nimi on rekisterin nimi — "
-                    f"valitse toinen nimi"
+                    f".const '{name}': nimi on rekisterin nimi — valitse toinen nimi"
                 )
 
         # Rakennetaan yhteinen symbolitaulukko: arch_sym + user_constants
@@ -875,7 +873,7 @@ class Assembler:
                 )
             if mnemonic == "STORE" and len(parts) >= 2 and not parts[1].startswith("["):
                 raise ValueError(
-                    f"STORE vaatii [..] osoitussyntaksin: STORE [osoite], reg/arvo"
+                    "STORE vaatii [..] osoitussyntaksin: STORE [osoite], reg/arvo"
                 )
 
             # Hae opcode ja operandien maara
@@ -1078,7 +1076,7 @@ class Assembler:
                 )
             if mnemonic == "STORE" and len(parts) >= 2 and not parts[1].startswith("["):
                 raise ValueError(
-                    f"STORE vaatii [..] osoitussyntaksin: STORE [osoite], reg/arvo"
+                    "STORE vaatii [..] osoitussyntaksin: STORE [osoite], reg/arvo"
                 )
 
             # Hae opcode
@@ -1196,7 +1194,7 @@ class Assembler:
             return int(upper, 0)
         except ValueError:
             raise ValueError(
-                f"Tuntematon operandi: '{token}' " f"(ei rekisteri, label eikä luku)"
+                f"Tuntematon operandi: '{token}' (ei rekisteri, label eikä luku)"
             )
 
     def _parse_dw_values(self, line: str) -> list[int]:

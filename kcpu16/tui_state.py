@@ -34,9 +34,7 @@ from .instruction import OPCODE_TABLE
 from .devices.storage import BlockStorageDevice
 
 if TYPE_CHECKING:
-    from .machine import KCPU16Machine
     from .assembler import Assembler
-    from .debugger import DebugState
     from textual.app import App
 
 
