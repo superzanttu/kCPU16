@@ -225,10 +225,11 @@ Huomioita:
 
 Kylmäkäynnistys:
 1. CPU aloittaa kernel-tilassa (P=1, I=0)
-2. Yleisrekisterit nollataan, SP asetetaan arvoon 0xFFFF ja PC arvoon 0x0100
-3. Tallennuslaitteen `0x0000–0x00FF` luetaan
-4. Data kopioidaan RAMiin `0x0100–0x01FF`
-5. Suoritus alkaa osoitteesta `0x0100`
+2. Yleisrekisterit nollataan
+3. SP asetetaan arvoon `0xFFFF`
+4. PC asetetaan arvoon `0x0100`
+5. Tallennuslaitteen `0x0000–0x00FF` luetaan
+6. Data kopioidaan RAMiin `0x0100–0x01FF` ja suoritus jatkuu osoitteesta `0x0100`
 
 Tämä tekee sektorista 0 boot-sektorin.
 
@@ -247,7 +248,7 @@ Tyypillisiä syklejä:
 - `DIV` 8
 - `DREAD/DWRITE` 10
 - `INT/IRET/EXIT` 4
-- `FILL` = `1 + N` (N täytettävien sanojen määrä)
+- `FILL` 1 + N sykliä, missä N on täytettävien sanojen määrä
 
 ---
 
