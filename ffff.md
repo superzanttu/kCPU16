@@ -30,6 +30,10 @@ Tama suunnitelma kuvaa hallitun refaktoroinnin, jolla parannetaan koodirakennett
 - [x] Vaihe 3, askel 2: Komentokasittelyt eroteltu `tui_commands.py` (TUICommandsMixin): 14 metodia (_execute_*, _handle_*), CommandResult dataclass.
 - [x] Vaihe 3, askel 3: Tilanhallinnan apufunktiot eroteltu `tui_state.py` (StateManager): _do_open, _do_assemble, _check_file_changes, ym.
 - [x] Vaihe 3, askel 4: KCPU16TUI integroitu mixin-rakenteella: `class KCPU16TUI(App[None], TUIRenderMixin, TUICommandsMixin)`.
+- [x] Vaihe 4, askel 1: Memory API selkeytetty (`kcpu16/hardware/memory.py`): MMIO-alueiden kyselymetodit (`is_mmio_address`, `ranges_overlap_mmio`).
+- [x] Vaihe 4, askel 2: COPY/FILL-fastpathit turvattu MMIO-alueilla (`kcpu16/hardware/cpu_exec.py`): automaattinen fallback MMIO-aware read/write -polkuun.
+- [x] Vaihe 4, askel 3: Luettu/kirjoitettu muistipolku eroteltu nimettyihin metodeihin (`kcpu16/hardware/cpu_mmio.py`): `_read_word_ram`, `_write_word_ram`, `_read_word`, `_write_word`.
+- [x] Vaihe 4, askel 4: MMIO-fallback regressiotestit lisatty (`test_fill_rand_mmio.asm`, `test_copy_rand_mmio.asm`) ja koko suite vihreana.
 
 ### Vaihe 1: Rajaa CPU-vastuut pienempiin moduuleihin
 Tavoite: pilko `cpu.py` sisallot loogisiin osiin ilman API-muutosta.
@@ -96,14 +100,24 @@ Validointi:
 ### Vaihe 4: Muistinkasittelyn apikerros
 Tavoite: selkea rajapinta memory-operaatioille, joissa on MMIO-sivuvaikutuksia.
 
+Toteutusstatus: **VALMIS**
+
 Toimenpiteet:
-- Dokumentoi ja mahdollisesti erottele read/write paths:
-  - pure RAM read/write
-  - MMIO-aware read/write
-- Varmista etta COPY/FILL/nopeat viipalepolut kayttavat turvallista fallbackia MMIO-alueilla.
+- Eroteltu read/write paths CPU-tasolla:
+  - pure RAM read/write: `_read_word_ram`, `_write_word_ram`
+  - MMIO-aware read/write: `_read_word`, `_write_word`
+- Lisatty Memory API -kyselymetodit MMIO-alueiden tunnistukseen:
+  - `is_mmio_address(addr)`
+  - `ranges_overlap_mmio(ranges)`
+- COPY/FILL nopeat viipalepolut ohjataan automaattisesti fallback-polkuun,
+  jos lahto- tai kohdealue osuu MMIO-osoitteisiin.
 
 Validointi:
-- Muistisuojatesti + MMIO-sivuvaikutustestit.
+- Muistisuojatesti + MMIO-sivuvaikutustestit: PASS
+- Uudet regressiotestit:
+  - `test_fill_rand_mmio.asm`: PASS
+  - `test_copy_rand_mmio.asm`: PASS
+- Koko testisuite: PASS (`main.py --test-all`)
 
 ### Vaihe 5: Teknisen velan siivous
 Tavoite: poistaa koodista vanhat/paallekkaiset polut.

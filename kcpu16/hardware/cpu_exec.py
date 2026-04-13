@@ -3,15 +3,8 @@
 from __future__ import annotations
 
 from ..constants import (
-    CLOCK_INT_INTERVAL,
-    CLOCK_MMIO_END,
-    CLOCK_MMIO_START,
-    GFX_FLIP_REG,
     INT_PROCESS_EXIT,
-    KBD_MMIO_END,
-    KBD_MMIO_START,
     MODE_KERNEL,
-    RAND_MMIO,
     SR_FLAG_C,
     SR_FLAG_I,
     SR_FLAG_N,
@@ -91,19 +84,7 @@ class CPUEXecMixin:
         val = self._get_reg(reg_value) & WORD_MASK
         ranges = self._iter_fill_ranges(start, end)
 
-        has_mmio_side_effect = False
-        for seg_start, seg_end in ranges:
-            if seg_start <= CLOCK_INT_INTERVAL <= seg_end:
-                has_mmio_side_effect = True
-                break
-            if seg_start <= RAND_MMIO <= seg_end:
-                has_mmio_side_effect = True
-                break
-            if seg_start <= GFX_FLIP_REG <= seg_end:
-                has_mmio_side_effect = True
-                break
-
-        if not has_mmio_side_effect:
+        if not self.memory.ranges_overlap_mmio(ranges):
             words = self.memory.words
             for seg_start, seg_end in ranges:
                 words[seg_start : seg_end + 1] = [val] * (seg_end - seg_start + 1)
@@ -135,30 +116,10 @@ class CPUEXecMixin:
         length = ((end - start) & WORD_MASK) + 1
         dst_ranges = self._iter_copy_dest_ranges(dst, length)
 
-        src_has_mmio = False
-        dst_has_mmio_side_effect = False
-        for seg_start, seg_end in src_ranges:
-            if seg_start <= CLOCK_MMIO_END and seg_end >= CLOCK_MMIO_START:
-                src_has_mmio = True
-                break
-            if seg_start <= KBD_MMIO_END and seg_end >= KBD_MMIO_START:
-                src_has_mmio = True
-                break
-            if seg_start <= RAND_MMIO <= seg_end:
-                src_has_mmio = True
-                break
-        for seg_start, seg_end in dst_ranges:
-            if seg_start <= CLOCK_INT_INTERVAL <= seg_end:
-                dst_has_mmio_side_effect = True
-                break
-            if seg_start <= RAND_MMIO <= seg_end:
-                dst_has_mmio_side_effect = True
-                break
-            if seg_start <= GFX_FLIP_REG <= seg_end:
-                dst_has_mmio_side_effect = True
-                break
+        src_has_mmio = self.memory.ranges_overlap_mmio(src_ranges)
+        dst_has_mmio = self.memory.ranges_overlap_mmio(dst_ranges)
 
-        if not src_has_mmio and not dst_has_mmio_side_effect:
+        if not src_has_mmio and not dst_has_mmio:
             words = self.memory.words
             src_data: list[int] = []
             for seg_start, seg_end in src_ranges:

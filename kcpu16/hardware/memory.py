@@ -52,9 +52,11 @@ from ..constants import (
     CLOCK_INT_INTERVAL,
     CLOCK_MMIO_END,
     CLOCK_MMIO_START,
+    GFX_FLIP_REG,
     KBD_MMIO_END,
     KBD_MMIO_START,
     MEMORY_WORDS,
+    RAND_MMIO,
     VRAM_END,
     VRAM_START,
     WORD_MASK,
@@ -105,6 +107,16 @@ class Memory:
         repr=False,
         compare=False,
         default_factory=lambda: bytearray(MEMORY_WORDS),
+    )
+
+    # MMIO-alueet, joiden yli bulk-optimoinnit eivät saa kirjoittaa/lukea
+    # suoraan self.words-taulukosta, koska semantiikka kulkee CPU._read/_write_word
+    # kautta (sivuvaikutukset tai laitepohjainen arvo).
+    _mmio_regions: tuple[tuple[int, int], ...] = field(
+        init=False,
+        repr=False,
+        compare=False,
+        default=((CLOCK_MMIO_START, CLOCK_MMIO_END), (KBD_MMIO_START, KBD_MMIO_END)),
     )
 
     def __post_init__(self) -> None:
@@ -257,3 +269,37 @@ class Memory:
         for word in data:
             self.write(addr, word)
             addr = (addr + 1) & WORD_MASK  # Kierratetaan osoite
+
+    # ------------------------------------------------------------------
+    # MMIO-aware aluekyselyt (Vaihe 4 memory API clarity layer)
+    # ------------------------------------------------------------------
+
+    def is_mmio_address(self, addr: int) -> bool:
+        """Tarkista kuuluuko osoite MMIO-semanttiseen alueeseen.
+
+        Huomaa: `RAND_MMIO` ja `GFX_FLIP_REG` ovat yksittäisosoitteita,
+        jotka käsitellään myös MMIO-semanttisina osoitteina.
+        """
+        masked = addr & WORD_MASK
+        if masked == RAND_MMIO or masked == GFX_FLIP_REG:
+            return True
+        for start, end in self._mmio_regions:
+            if start <= masked <= end:
+                return True
+        return False
+
+    def ranges_overlap_mmio(self, ranges: tuple[tuple[int, int], ...]) -> bool:
+        """Tarkista leikkaako jokin lineaarinen [start,end]-jakso MMIO-osoitteita.
+
+        Tämä on tarkoitettu COPY/FILL-fastpathien suojaksi: jos alue osuu MMIO:hon,
+        pitää käyttää MMIO-aware luku/kirjoituspolkua eikä suoraa words-sliceä.
+        """
+        for seg_start, seg_end in ranges:
+            for mmio_start, mmio_end in self._mmio_regions:
+                if seg_start <= mmio_end and seg_end >= mmio_start:
+                    return True
+            if seg_start <= RAND_MMIO <= seg_end:
+                return True
+            if seg_start <= GFX_FLIP_REG <= seg_end:
+                return True
+        return False

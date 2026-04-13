@@ -38,6 +38,17 @@ _TMR_DISABLED_MMIO = 0x7FFFFFFFFFFFFFFF
 class CPUMMIOMixin:
     """Shared MMIO read/write helpers extracted from the CPU core class."""
 
+    def _read_word_ram(self, addr: int) -> int:
+        """Read one word from plain RAM/storage array without MMIO semantics."""
+        return self.memory.read(addr & WORD_MASK)
+
+    def _write_word_ram(self, addr: int, value: int) -> None:
+        """Write one word to plain RAM/storage array without MMIO side effects."""
+        masked_addr = addr & WORD_MASK
+        self.memory.write(masked_addr, value & WORD_MASK)
+        if VRAM_START <= masked_addr <= VRAM_END and self.screen is not None:
+            self.screen.mark_vram_dirty(masked_addr)
+
     def _read_word(self, addr: int) -> int:
         """Read one word, including MMIO-backed registers."""
         addr &= WORD_MASK
@@ -49,7 +60,7 @@ class CPUMMIOMixin:
             lsb = self._lfsr & 1
             self._lfsr = (self._lfsr >> 1) ^ ((-lsb) & RAND_LFSR_MASK)
             return self._lfsr
-        return self.memory.read(addr)
+        return self._read_word_ram(addr)
 
     def _write_word(self, addr: int, value: int) -> None:
         """Write one word, applying MMIO side effects when needed."""
@@ -74,9 +85,7 @@ class CPUMMIOMixin:
             if value != 0 and self.flip_callback is not None:
                 self.flip_callback()  # type: ignore[operator]
             return
-        self.memory.write(addr, value)
-        if VRAM_START <= addr <= VRAM_END and self.screen is not None:
-            self.screen.mark_vram_dirty(addr)
+        self._write_word_ram(addr, value)
 
     def _read_clock_mmio(self, addr: int) -> int:
         """Return real-time or uptime-backed clock MMIO values."""
