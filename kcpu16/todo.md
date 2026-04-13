@@ -167,4 +167,4 @@ Tehtävät on merkitty hakasulkeilla, ja niiden tilaa voidaan päivittää seura
 
 
 ### Ryhmä Ö: Viimeiset tehtävät
-- [ ] Tee suunnitelma refaktiroinnista. Tallenna suunnitelma tiedostoon ffff.md, joka sisältää ehdotuksia koodirakenteen parantamiseksi, modulaarisuuden lisäämiseksi ja mahdollisten teknisten velkojen korjaamiseksi. Tämä auttaa varmistamaan että projekti pysyy hallittavana ja laajennettavana pitkällä aikavälillä, vaikka nopeusoptimoinnit tuovatkin väliaikaisia monimutkaisuuksia.
+- [X] Tee suunnitelma refaktiroinnista. Tallenna suunnitelma tiedostoon ffff.md, joka sisältää ehdotuksia koodirakenteen parantamiseksi, modulaarisuuden lisäämiseksi ja mahdollisten teknisten velkojen korjaamiseksi. Tämä auttaa varmistamaan että projekti pysyy hallittavana ja laajennettavana pitkällä aikavälillä, vaikka nopeusoptimoinnit tuovatkin väliaikaisia monimutkaisuuksia.

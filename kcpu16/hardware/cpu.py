@@ -97,6 +97,8 @@ from ..instruction import (
     EXEC_CYCLES,
     _op,
 )
+from .cpu_memcheck import CPUMemCheckMixin
+from .cpu_mmio import CPUMMIOMixin
 from .memory import Memory
 
 
@@ -139,7 +141,7 @@ if TYPE_CHECKING:
 
 
 @dataclass
-class CPU:
+class CPU(CPUMemCheckMixin, CPUMMIOMixin):
     """
     kCPU16-prosessorin ydin.
 
@@ -672,33 +674,6 @@ class CPU:
     # Privilege-tarkistus tehdään step():ssä opcode-bitin perusteella.
     # ==========================================================================
 
-    def _mcheck_direct(self, ins: _Ins) -> None:
-        """READ, STORE, STOREI, TSL — operands[1] on muistiosoite."""
-        if not self.regs.in_kernel_mode:
-            self.memory.check_user_access(ins.operands[1], self.regs.mpr)
-
-    def _mcheck_ind_src(self, ins: _Ins) -> None:
-        """READ_IND — osoite tulee _get_reg(operands[1]):stä."""
-        if not self.regs.in_kernel_mode:
-            self.memory.check_user_access(self._get_reg(ins.operands[1]), self.regs.mpr)
-
-    def _mcheck_ind_dst(self, ins: _Ins) -> None:
-        """STORE_IND, STOREI_IND — osoite tulee _get_reg(operands[0]):sta."""
-        if not self.regs.in_kernel_mode:
-            self.memory.check_user_access(self._get_reg(ins.operands[0]), self.regs.mpr)
-
-    def _mcheck_rel_src(self, ins: _Ins) -> None:
-        """READ_REL — osoite = FP + operands[1]."""
-        if not self.regs.in_kernel_mode:
-            addr = (self.regs.fp + ins.operands[1]) & WORD_MASK
-            self.memory.check_user_access(addr, self.regs.mpr)
-
-    def _mcheck_rel_dst(self, ins: _Ins) -> None:
-        """STORE_REL, STOREI_REL — osoite = FP + operands[1]."""
-        if not self.regs.in_kernel_mode:
-            addr = (self.regs.fp + ins.operands[1]) & WORD_MASK
-            self.memory.check_user_access(addr, self.regs.mpr)
-
     @staticmethod
     def _iter_fill_ranges(start: int, end: int) -> tuple[tuple[int, int], ...]:
         """Palauta FILL-alue 1-2 lineaarisena [start,end]-jaksona (sis. rajat)."""
@@ -719,64 +694,6 @@ class CPU:
         if dst_start <= dst_end:
             return ((dst_start, dst_end),)
         return ((dst_start, WORD_MASK), (0, dst_end))
-
-    def _mcheck_fill(self, ins: _Ins) -> None:
-        """FILL — kirjoitussuojaustarkistus aina; käyttäjäalueen tarkistus user-tilassa."""
-        start = self._get_reg(ins.operands[0]) & WORD_MASK
-        end = self._get_reg(ins.operands[1]) & WORD_MASK
-        ranges = self._iter_fill_ranges(start, end)
-
-        # Fast path: tarkista koko alue bytearray-maskista. Jos osuma löytyy,
-        # palaa tarkkaan tarkistukseen virheviestin oikeaa osoitetta varten.
-        write_mask = self.memory._write_mask
-        for seg_start, seg_end in ranges:
-            hit = write_mask.find(1, seg_start, seg_end + 1)
-            while hit != -1:
-                self.memory.check_write_protected(hit)
-                hit = write_mask.find(1, hit + 1, seg_end + 1)
-
-        if not self.regs.in_kernel_mode:
-            mpr = self.regs.mpr & WORD_MASK
-            for seg_start, seg_end in ranges:
-                # Koko segmentti VRAMissa -> aina sallittu.
-                if VRAM_START <= seg_start and seg_end <= VRAM_END:
-                    continue
-                # Koko segmentti MPR-rajan yläpuolella -> sallittu.
-                if seg_start >= mpr:
-                    continue
-                # Segmentissä on ainakin yksi osoite MPR:n alapuolella.
-                self.memory.check_user_access(seg_start, mpr)
-
-    def _mcheck_copy(self, ins: _Ins) -> None:
-        """COPY — lähdealue luettavissa ja kohdealue kirjoitettavissa kokonaan."""
-        start = self._get_reg(ins.operands[0]) & WORD_MASK
-        end = self._get_reg(ins.operands[1]) & WORD_MASK
-        dst = self._get_reg(ins.operands[2]) & WORD_MASK
-        src_ranges = self._iter_fill_ranges(start, end)
-        length = ((end - start) & WORD_MASK) + 1
-        dst_ranges = self._iter_copy_dest_ranges(dst, length)
-
-        write_mask = self.memory._write_mask
-        for seg_start, seg_end in dst_ranges:
-            hit = write_mask.find(1, seg_start, seg_end + 1)
-            while hit != -1:
-                self.memory.check_write_protected(hit)
-                hit = write_mask.find(1, hit + 1, seg_end + 1)
-
-        if not self.regs.in_kernel_mode:
-            mpr = self.regs.mpr & WORD_MASK
-            for seg_start, seg_end in src_ranges:
-                if VRAM_START <= seg_start and seg_end <= VRAM_END:
-                    continue
-                if seg_start >= mpr:
-                    continue
-                self.memory.check_user_access(seg_start, mpr)
-            for seg_start, seg_end in dst_ranges:
-                if VRAM_START <= seg_start and seg_end <= VRAM_END:
-                    continue
-                if seg_start >= mpr:
-                    continue
-                self.memory.check_user_access(seg_start, mpr)
 
     # ==========================================================================
     # KÄSITTELYMETODIT: yksi metodi per käsky (opcode-handler-taulukko)
@@ -1327,119 +1244,6 @@ class CPU:
             # Etene tarkasti CTMR ms eteenpain (ei ajaudu hyvan)
             self._next_ctmr_time_us += self.regs.ctmr * 1000
             self._trigger_interrupt(INT_CLOCK)
-
-    # ==========================================================================
-    # MMIO-APUMETODIT: lue/kirjoita sana joka osaa hakea kellorekisterit
-    # ==========================================================================
-
-    def _read_word(self, addr: int) -> int:
-        """Lue sana muistista; palauttaa MMIO-arvon jos osoite on kellolohkossa tai nappaimistolohkossa."""
-        addr &= WORD_MASK
-        if CLOCK_MMIO_START <= addr <= CLOCK_MMIO_END:
-            return self._read_clock_mmio(addr)
-        if KBD_MMIO_START <= addr <= KBD_MMIO_END:
-            return self._read_kbd_mmio(addr)
-        if addr == RAND_MMIO:
-            # Galois LFSR: jos alin bitti on 1, shift right ja XOR maskilla
-            lsb = self._lfsr & 1
-            self._lfsr = (self._lfsr >> 1) ^ ((-lsb) & RAND_LFSR_MASK)
-            return self._lfsr
-        return self.memory.read(addr)
-
-    def _write_word(self, addr: int, value: int) -> None:
-        """Kirjoita sana muistiin; CLOCK_INT_INTERVAL-kirjoitus asettaa CTMR:n."""
-        addr &= WORD_MASK
-        value &= WORD_MASK
-        if addr == CLOCK_INT_INTERVAL:
-            self.regs.ctmr = value
-            self._next_ctmr_time_us = (
-                _TMR_DISABLED if value == 0 else self._simulated_time_us + value * 1000
-            )
-            return
-        # Muut kellolohkon osoitteet ovat vain luettavia — ohita hiljainen kirjoitus
-        if CLOCK_MMIO_START <= addr <= CLOCK_MMIO_END:
-            return
-        # Nappaimisto-MMIO on vain luettava — ohita hiljainen kirjoitus
-        if KBD_MMIO_START <= addr <= KBD_MMIO_END:
-            return
-        # Satunnaislukugeneraattori: kirjoitus asettaa LFSR-siemenen (0 -> 1)
-        if addr == RAND_MMIO:
-            self._lfsr = value if value != 0 else 1
-            return
-        # GFX_FLIP_REG (0xFF81): kirjoitus value!=0 laukaisee kaksoisbufferoinnin flipin.
-        # Kutsuu flip_callback:in välittömästi (ennen kuin CPU jatkaa ja tyhjentää VRAMin),
-        # jolloin callback renderoi täysin piirretyn kehyksen etupuskuriin atomisesti.
-        # Rekisteria ei kirjoiteta muistiin — se on puhdas MMIO-osoite.
-        if addr == GFX_FLIP_REG:
-            if value != 0 and self.flip_callback is not None:
-                self.flip_callback()  # type: ignore[operator]
-            return
-        self.memory.write(addr, value)
-        # Merkitse VRAM muuttuneeksi dirty-flag-optimointia varten (TUI:n näyttöpäivitys)
-        if VRAM_START <= addr <= VRAM_END and self.screen is not None:
-            self.screen.mark_vram_dirty(addr)
-
-    def _read_clock_mmio(self, addr: int) -> int:
-        """Palauttaa reaaliaikaisen kellonarvon MMIO-osoitteen mukaan."""
-        if (
-            self._clock_snapshot is None
-            or self._clock_snapshot_sim_us != self._simulated_time_us
-        ):
-            self._clock_snapshot = datetime.now()
-            self._clock_snapshot_sim_us = self._simulated_time_us
-        now = self._clock_snapshot
-        if addr == CLOCK_YEAR:
-            return now.year & WORD_MASK
-        if addr == CLOCK_MONTH:
-            return now.month
-        if addr == CLOCK_DAY:
-            return now.day
-        if addr == CLOCK_HOUR:
-            return now.hour
-        if addr == CLOCK_MINUTE:
-            return now.minute
-        if addr == CLOCK_SECOND:
-            return now.second
-        if addr == CLOCK_MILLIS:
-            return now.microsecond // 1000
-        # Uptime-laskuri: paivita ensin
-        self._update_uptime_if_needed()
-        if addr == UPTIME_W3:
-            return 0  # 32-bit uptime: upper 32 bits always 0
-        if addr == UPTIME_W2:
-            return 0  # 32-bit uptime: upper 32 bits always 0
-        if addr == UPTIME_W1:
-            return (self._uptime_counter >> 16) & WORD_MASK
-        if addr == UPTIME_W0:
-            return self._uptime_counter & WORD_MASK
-        if addr == CLOCK_INT_INTERVAL:
-            return self.regs.ctmr & WORD_MASK
-        return 0  # varattu osoite
-
-    def _read_kbd_mmio(self, addr: int) -> int:
-        """
-        Lue nappaimisto-MMIO-rekisteri.
-
-        KBD_DATA ($0020):   Pops ja palauttaa seuraavan nappaintapahtuman puskurista.
-                            Bitti 7 = 0: painallus, bitti 7 = 1: vapautus.
-                            Bitit 6-0: nappainkoodi.
-                            Palauttaa 0 jos puskuri on tyhja.
-        KBD_STATUS ($0021): Palauttaa puskurissa olevien tapahtumien maaran.
-                            0 = tyhja.
-
-        Args:
-            addr: MMIO-osoite (KBD_DATA tai KBD_STATUS)
-
-        Returns:
-            MMIO-rekisterin arvo
-        """
-        if self.keyboard is None:
-            return 0
-        if addr == KBD_DATA:
-            return self.keyboard.read_data()
-        if addr == KBD_STATUS:
-            return self.keyboard.read_status()
-        return 0  # varattu osoite
 
     # ==========================================================================
     # PINOOPERAATIOT
