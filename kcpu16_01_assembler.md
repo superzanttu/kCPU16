@@ -16,8 +16,8 @@ Lyhyt perusrakenne:
 .origin 0x0100
 
 START:
-    READ R0, 10
-    READ R1, 32
+    LOAD R0, 10
+    LOAD R1, 32
     ADD R0, R1
     HALT
 ```
@@ -37,7 +37,7 @@ START:
 - oktaali: `0o52`
 
 ### Osoitusmuodot
-- suora arvo: `READ R0, 123`
+- suora arvo: `LOAD R0, 123`
 - absoluuttinen muistiosoite: `READ R0, [0x3000]`
 - epäsuora rekisterin kautta: `READ R0, [R1]`
 - FP-suhteinen: `READ R0, [FP+2]`
@@ -88,7 +88,7 @@ Alla on koko käskykanta ryhmittäin.
 - `LOAD reg, imm` — lataa välitön arvo rekisteriin
 - `CPY regD, regS` — kopioi rekisteristä toiseen
 - `READ reg, addr` — lue absoluuttisesta muistiosoitteesta
-- `STORE reg, addr` — kirjoita rekisteriarvo absoluuttiseen osoitteeseen
+- `STORE reg, addr` — kirjoita rekisteriarvo absoluuttiseen osoitteeseen (**sisäinen opcode-muoto; lähdekoodissa käytä muotoa `STORE [osoite], src`**)
 - `READ_IND regD, regPtr` — lue muistista osoitteesta `[regPtr]`
 - `STORE_IND regPtr, regS` — kirjoita muistiosoitteeseen `[regPtr]`
 - `READ_REL reg, offset` — lue osoitteesta `[FP+offset]`
@@ -167,8 +167,8 @@ Alla on koko käskykanta ryhmittäin.
 
 ### Laskenta
 ```asm
-READ R0, 6
-READ R1, 7
+LOAD R0, 6
+LOAD R1, 7
 MUL R0, R1
 ```
 
@@ -215,7 +215,7 @@ Missä:
 .const SCALE, 256
 .const COS_A, 181      ; ~cos(45°)*256
 .const SIN_A, 181      ; ~sin(45°)*256
-.const FOCAL, 64
+.const POLTTOVALI, 64
 .const CAM_D, 128
 .const CX, 40
 .const CY, 12
@@ -227,44 +227,44 @@ Missä:
 
 START:
     ; x' = (x*cos + z*sin)/SCALE
-    READ R0, PX
-    READ R1, COS_A
+    LOAD R0, PX
+    LOAD R1, COS_A
     MUL R0, R1
-    READ R2, PZ
-    READ R3, SIN_A
+    LOAD R2, PZ
+    LOAD R3, SIN_A
     MUL R2, R3
     ADD R0, R2
-    READ R4, SCALE
+    LOAD R4, SCALE
     DIV R0, R4          ; R0 = x'
 
     ; z' = (-x*sin + z*cos)/SCALE
-    READ R1, PX
-    READ R2, SIN_A
+    LOAD R1, PX
+    LOAD R2, SIN_A
     MUL R1, R2
-    READ R2, 0
+    LOAD R2, 0
     SUB R2, R1          ; R2 = -x*sin
-    READ R3, PZ
-    READ R5, COS_A
+    LOAD R3, PZ
+    LOAD R5, COS_A
     MUL R3, R5
     ADD R2, R3
     DIV R2, R4          ; R2 = z'
 
     ; denom = z' + CAM_D
-    READ R3, CAM_D
+    LOAD R3, CAM_D
     ADD R3, R2
 
-    ; screen_x = CX + (x' * FOCAL) / denom
-    READ R5, FOCAL
+    ; screen_x = CX + (x' * POLTTOVALI) / denom
+    LOAD R5, POLTTOVALI
     MUL R0, R5
     DIV R0, R3
-    READ R6, CX
+    LOAD R6, CX
     ADD R0, R6          ; R0 = screen_x
 
-    ; screen_y = CY + (y * FOCAL) / denom
-    READ R1, PY
+    ; screen_y = CY + (y * POLTTOVALI) / denom
+    LOAD R1, PY
     MUL R1, R5
     DIV R1, R3
-    READ R6, CY
+    LOAD R6, CY
     ADD R1, R6          ; R1 = screen_y
 
     ; tässä R0,R1 ovat 2D-koordinaatit
