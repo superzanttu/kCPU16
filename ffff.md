@@ -34,6 +34,8 @@ Tama suunnitelma kuvaa hallitun refaktoroinnin, jolla parannetaan koodirakennett
 - [x] Vaihe 4, askel 2: COPY/FILL-fastpathit turvattu MMIO-alueilla (`kcpu16/hardware/cpu_exec.py`): automaattinen fallback MMIO-aware read/write -polkuun.
 - [x] Vaihe 4, askel 3: Luettu/kirjoitettu muistipolku eroteltu nimettyihin metodeihin (`kcpu16/hardware/cpu_mmio.py`): `_read_word_ram`, `_write_word_ram`, `_read_word`, `_write_word`.
 - [x] Vaihe 4, askel 4: MMIO-fallback regressiotestit lisatty (`test_fill_rand_mmio.asm`, `test_copy_rand_mmio.asm`) ja koko suite vihreana.
+- [x] Vaihe 5, askel 1: TUI-paallekkaispolkuja siivottu (`kcpu16/tui.py`): duplikaatti-`CommandResult` poistettu, kaytto yhtenaistetty `tui_commands.py`:n malliin.
+- [x] Vaihe 5, askel 2: TUI helperien duplikaattitoteutus poistettu (`kcpu16/tui.py`): `_build_addr_to_line` ja `_find_bootblock_jump_target` ohjattu `tui_state.py`:n keskitettyihin toteutuksiin.
 
 ### Vaihe 1: Rajaa CPU-vastuut pienempiin moduuleihin
 Tavoite: pilko `cpu.py` sisallot loogisiin osiin ilman API-muutosta.

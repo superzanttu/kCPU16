@@ -50,7 +50,6 @@ from __future__ import annotations
 
 import re
 import time
-from dataclasses import dataclass
 from pathlib import Path
 from rich.text import Text
 
@@ -78,7 +77,7 @@ from textual.widgets import (
     TabPane,
 )
 
-from .assembler import Assembler, MNEMONIC_TO_OPCODE
+from .assembler import Assembler
 from .constants import (
     ARCH_SYMBOLS,
     BOOT_RAM_START,
@@ -107,7 +106,11 @@ from . import __version__
 # Phase 3 Refactoring: Import mixins for modular TUI
 from .tui_render import TUIRenderMixin
 from .tui_commands import TUICommandsMixin, CommandResult
-from .tui_state import StateManager
+from .tui_state import (
+    StateManager,
+    build_addr_to_line as _build_addr_to_line,
+    find_bootblock_jump_target as _find_bootblock_jump_target,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -141,32 +144,6 @@ REG_NAMES = {
     16: "FP",
     17: "SP",
 }
-
-
-def _find_bootblock_jump_target(words: list[int]) -> tuple[str, int, int] | None:
-    """Etsi bootblockin ensimmäinen eksplisiittinen hyppykohde konekielestä.
-
-    Palauttaa ensimmäisen tavallisen ohjausrakennekäskyn, jolla on välitön
-    kohdeosoite. Tämä auttaa näyttämään TUI-lokissa mihin bootloader yrittää
-    siirtyä boot=1-polussa.
-    """
-    branch_mnemonics: frozenset[str] = frozenset(
-        {"JUMP", "CALL", "JZ", "JNZ", "JLT", "JGT", "JLE", "JGE"}
-    )
-    i = 0
-    pc = BOOT_RAM_START
-    while i < len(words):
-        opcode = words[i] & WORD_MASK
-        meta = REVERSE_TABLE.get(opcode)
-        op_count = meta[1] if meta is not None else 0
-        mnemonic = meta[0] if meta is not None else None
-        if mnemonic in branch_mnemonics and op_count >= 1 and i + op_count < len(words):
-            target = words[i + op_count] & WORD_MASK
-            return mnemonic, pc, target
-        i += 1 + op_count
-        pc += 1 + op_count
-    return None
-
 
 # Käskyt joissa 1. operandi on rekisteri-indeksi (esim. LOAD R0, ...)
 _REG_FIRST = {
@@ -217,131 +194,6 @@ _REG_SECOND = {
 _BRANCH_MNEMONICS: frozenset[str] = frozenset(
     {"JUMP", "CALL", "JZ", "JNZ", "JLT", "JGT", "JLE", "JGE"}
 )
-
-
-@dataclass
-class CommandResult:
-    """Komentotulkin (_execute_command) paluuarvo.
-
-    Kapseloi komennon onnistumisen ja käyttäjälle näytettävän viestin.
-    Viesti voi sisältää Rich-markupia (esim. [red]virhe[/red]).
-
-    Attribuutit:
-        ok:      True = komento onnistui, False = virhe.
-        message: Käyttäjälle näytettävä teksti (Rich-markup sallittu).
-                 Tyhjä merkkijono = ei näytetä mitään.
-    """
-
-    ok: bool
-    message: str
-
-
-# ---------------------------------------------------------------------------
-# Lähdekoodi -> osoite -kartoitus (makrotuki)
-# ---------------------------------------------------------------------------
-
-
-def _build_addr_to_line(source: str, assembler: Assembler) -> dict[int, int]:
-    """Rakenna osoite → lähdekoodirivi -mappi assembloidusta koodista.
-
-    Tarkoitus: Kun käyttäjä steppaa koodia (F7), editorin kursori siirtyy
-    automaattisesti sille riville, joka vastaa nykyistä PC-osoitetta.
-    Tämä funktio rakentaa mapin joka mahdollistaa tuon yhteyden.
-
-    Makrotuki - miksi kaksi vaihetta:
-        1. Pass 0 (expand macros): Assemblerin makrot laajennetaan, jolloin
-           yksi lähdekoodirivi voi tuottaa useita expanded-rivejä.
-           Expanded-koodin rivinumerot EI vastaa alkuperäisiä.
-        2. exp_to_orig -mappi: Yhdistää jokaisen expanded-rivin takaisin
-           alkuperäiseen lähdekoodirivinumeroon vertaamalla rivien sisältöä.
-           Jos vastaavuutta ei löydy (makroista syntyneet rivit), käytetään
-           edellisen vastanneen rivin numeroa.
-
-    Osoite→rivi -mapin rakentaminen:
-        - Käy expanded-koodin läpi rivi kerrallaan
-        - Ohittaa tyhjät rivit ja labelit (eivät tuota konekieltä)
-        - Tunnistaa mnemoniikin ja hakee sen opcode-taulusta
-        - Laskee osoitteen: addr += 1 + operandien_määrä (käskysana + operandit)
-        - Tallentaa result[addr] = alkuperäinen rivinumero
-
-    Parametrit:
-        source:    Alkuperäinen lähdekoodi (editorin sisältö).
-        assembler: Assembler-instanssi (tarvitaan makrolaajennukseen).
-
-    Palauttaa:
-        dict[int, int]: Mappi {konekieliosoite: lähdekoodirivinumero (1-pohjainen)}.
-        Tyhjä dict jos makrolaajennus epäonnistuu.
-    """
-    try:
-        expanded, start_addr = assembler._pass0_expand_macros_and_origin(
-            source, BOOT_RAM_START
-        )
-    except Exception:
-        return {}
-
-    original_lines = source.splitlines()
-    expanded_lines = expanded.splitlines()
-
-    # Yhdistä expanded-rivit alkuperäisiin
-    exp_to_orig: dict[int, int] = {}
-    orig_idx = 0
-    for exp_idx, exp_line in enumerate(expanded_lines, 1):
-        exp_stripped = exp_line.strip()
-        found = False
-        for oi in range(orig_idx, len(original_lines)):
-            orig_stripped = original_lines[oi].split(";", 1)[0].strip()
-            if orig_stripped == exp_stripped and exp_stripped:
-                exp_to_orig[exp_idx] = oi + 1
-                orig_idx = oi + 1
-                found = True
-                break
-        if not found:
-            if exp_to_orig:
-                exp_to_orig[exp_idx] = max(exp_to_orig.values())
-            else:
-                exp_to_orig[exp_idx] = 1
-
-    addr = start_addr
-    result: dict[int, int] = {}
-    exp_line_no = 0
-    for raw in expanded_lines:
-        exp_line_no += 1
-        line = raw.split(";", 1)[0].strip()
-        if not line or line.endswith(":"):
-            continue
-        # .at direktiivi: paivita osoitelaskuri uuteen muistiosoitteeseen
-        if line.lower().startswith(".at ") or line.lower() == ".at":
-            parts_at = line.split()
-            if len(parts_at) >= 2:
-                try:
-                    addr = int(parts_at[1], 0) & 0xFFFF
-                except ValueError:
-                    pass
-            continue
-        # .db: edista osoitetta (ei suoritettavaa koodia)
-        if line.lower().startswith(".db"):
-            try:
-                addr += len(assembler._parse_db_values(line))
-            except Exception:
-                pass
-            continue
-        # .dstr: edista osoitetta (ei suoritettavaa koodia)
-        if line.lower().startswith(".dstr"):
-            try:
-                addr += len(assembler._parse_dstr_values(line))
-            except Exception:
-                pass
-            continue
-        mnemonic = line.replace(",", " ").split()[0].upper()
-        opcode = MNEMONIC_TO_OPCODE.get(mnemonic)
-        if opcode is None:
-            continue
-        _, operand_count, _ = OPCODE_TABLE[opcode]
-        result[addr] = exp_to_orig.get(exp_line_no, exp_line_no)
-        addr += 1 + operand_count
-
-    return result
-
 
 # ===========================================================================
 # Tallentamattomien muutosten vahvistusikkuna
