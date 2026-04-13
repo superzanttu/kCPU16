@@ -1905,17 +1905,6 @@ class KCPU16TUI(App[None]):
     def _run_with_breakpoints(self, max_cycles: int) -> str:
         """Suorita ohjelmaa kunnes breakpoint, HALT, EXIT tai sykliraja.
 
-        Ero machine.run()-metodiin: tämä steppaa yhden käskyn kerrallaan
-        ja tarkistaa breakpointit JOKAISEN käskyn jälkeen. machine.run()
-        ajaisi kaikki kerralla ilman breakpoint-tukea.
-
-        Suoritussilmukka:
-            1. machine.step() - suorita yksi käsky
-            2. Tarkista: halted? → palauta "HALTED"
-            3. Tarkista: process_exit? → palauta "EXITED"
-            4. Tarkista: onko uusi PC breakpointattu? → palauta "Breakpoint at..."
-            5. Toista kunnes max_cycles saavutettu
-
         Parametrit:
             max_cycles: Suurin sallittu syklimäärä (oletus 10000 F5:lle).
 
@@ -1926,23 +1915,26 @@ class KCPU16TUI(App[None]):
         if cpu.halted or cpu.process_exit_requested:
             return "[yellow]CPU stopped. Reset to continue.[/yellow]"
 
-        cycles = 0
-        while cycles < max_cycles:
-            try:
-                self.machine.step()
-            except Exception as exc:
-                self._show_cpu_crash(exc)
-                return "[bold red]CPU kaatui — ks. Output-paneeli.[/bold red]"
-            cycles += 1
-            if cpu.halted:
-                return f"[red]HALTED after {cycles} cycles.[/red]"
-            if cpu.process_exit_requested:
-                return f"[yellow]EXIT after {cycles} cycles.[/yellow]"
-            if self.dbg.has_breakpoint(self.machine.regs.pc):
-                return (
-                    f"[red]Breakpoint at 0x{self.machine.regs.pc:04X} "
-                    f"after {cycles} cycles.[/red]"
-                )
+        bps = self.dbg.breakpoints or None
+
+        try:
+            cycles, stop_reason = cpu.run_until_breakpoint_or_cycles(
+                max_cycles=max_cycles,
+                breakpoints=bps,
+            )
+        except Exception as exc:
+            self._show_cpu_crash(exc)
+            return "[bold red]CPU kaatui — ks. Output-paneeli.[/bold red]"
+
+        if stop_reason == "halted":
+            return f"[red]HALTED after {cycles} cycles.[/red]"
+        if stop_reason == "exited":
+            return f"[yellow]EXIT after {cycles} cycles.[/yellow]"
+        if stop_reason == "breakpoint":
+            return (
+                f"[red]Breakpoint at 0x{self.machine.regs.pc:04X} "
+                f"after {cycles} cycles.[/red]"
+            )
         return f"Ran {cycles} cycles. PC=0x{self.machine.regs.pc:04X}"
 
     def _update_run_mode_ui(self) -> None:
@@ -2096,22 +2088,37 @@ class KCPU16TUI(App[None]):
             REFRESH_INTERVAL = 0.2  # sekuntia
             last_refresh = time.monotonic()
             while not worker.is_cancelled:
-                for _ in range(BATCH):
-                    if cpu.halted or cpu.process_exit_requested:
-                        break
+                if cpu.halted or cpu.process_exit_requested:
+                    break
+
+                if self.dbg.breakpoints:
                     try:
-                        self.machine.step()
+                        batch_cycles, stop_reason = cpu.run_until_breakpoint_or_cycles(
+                            max_cycles=BATCH,
+                            breakpoints=self.dbg.breakpoints,
+                        )
                     except Exception as exc:
                         self.call_from_thread(self._show_cpu_crash, exc)
                         return
-                    total_cycles += 1
-                    if self.dbg.has_breakpoint(self.machine.regs.pc):
+                    total_cycles += batch_cycles
+                    if stop_reason == "breakpoint":
                         addr = self.machine.regs.pc
                         self.call_from_thread(
                             _done,
                             f"[red]Breakpoint at 0x{addr:04X} after {total_cycles} cycles.[/red]",
                         )
                         return
+                else:
+                    try:
+                        batch_cycles, _stop_reason = cpu.run_until_breakpoint_or_cycles(
+                            max_cycles=BATCH,
+                            breakpoints=None,
+                        )
+                    except Exception as exc:
+                        self.call_from_thread(self._show_cpu_crash, exc)
+                        return
+                    total_cycles += batch_cycles
+
                 # Päivitä UI ~200ms välein
                 now = time.monotonic()
                 if now - last_refresh >= REFRESH_INTERVAL:

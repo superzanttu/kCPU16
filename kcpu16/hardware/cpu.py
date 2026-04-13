@@ -111,7 +111,7 @@ class _Ins:
 
     __slots__ = ("opcode", "operands", "size_words")
 
-    def __init__(self, opcode: int, operands: list, size_words: int) -> None:
+    def __init__(self, opcode: int, operands: tuple[int, ...], size_words: int) -> None:
         self.opcode = opcode
         self.operands = operands
         self.size_words = size_words
@@ -121,6 +121,10 @@ class _Ins:
 _OPCODE_JMPI: int = _op(0, 5, 9, 0)  # Indeksoitu hyppy (muuttuvanmittainen)
 _OPCODE_CALLI: int = _op(0, 5, 10, 0)  # Indeksoitu kutsu (muuttuvanmittainen)
 _OPCODE_FILL: int = _op(0, 1, 11, 3)  # Täyttökäsky (dynaaminen syklilasku)
+_RUN_STOP_CYCLES = "cycles"
+_RUN_STOP_BREAKPOINT = "breakpoint"
+_RUN_STOP_HALTED = "halted"
+_RUN_STOP_EXITED = "exited"
 
 # Sentinel-arvo: disabled ajastimelle niin suuri, että se ei koskaan laukea
 _TMR_DISABLED: int = 0x7FFF_FFFF_FFFF_FFFF
@@ -426,6 +430,26 @@ class CPU:
         Note:
             step()-metodi sailytetaan debuggausta ja yksittaista askellusta varten.
         """
+        self._run_core(max_cycles=max_cycles)
+
+    def run_until_breakpoint_or_cycles(
+        self, max_cycles: int, breakpoints: set[int] | None
+    ) -> tuple[int, str]:
+        """Aja kunnes breakpoint, HALT, EXIT tai sykliraja.
+
+        Returns:
+            tuple[int, str]:
+            - suoritettujen käskyjen määrä tässä ajossa
+            - pysähtymissyy ("cycles", "breakpoint", "halted" tai "exited")
+        """
+        if max_cycles <= 0:
+            return 0, _RUN_STOP_CYCLES
+        return self._run_core(max_cycles=max_cycles, breakpoints=breakpoints)
+
+    def _run_core(
+        self, max_cycles: int | None = None, breakpoints: set[int] | None = None
+    ) -> tuple[int, str]:
+        """CPU:n fast-path suoritussilmukka run()- ja breakpoint-ajolle."""
         # --- Paikalliset viittaukset hot-loop-muuttujiin ---
         # Python LOAD_FAST (lokaalit) on nopeampi kuin LOAD_ATTR (self.xxx).
         regs = self.regs
@@ -441,11 +465,12 @@ class CPU:
         opcode_calli = _OPCODE_CALLI
         opcode_fill = _OPCODE_FILL
         opcode_table = OPCODE_TABLE
+        bp_contains = breakpoints.__contains__ if breakpoints is not None else None
 
         cycles = 0
         while not self.halted and not self.process_exit_requested:
             if max_cycles is not None and cycles >= max_cycles:
-                break
+                return cycles, _RUN_STOP_CYCLES
 
             # ---- NORMAALI SUORITUSPOLKU (fast path) ----
             try:
@@ -468,20 +493,20 @@ class CPU:
                         raise InvalidOpcodeError(f"Unknown opcode: 0x{opcode:04X}")
                     nops = (opcode >> nops_shift) & nops_mask_val
                     if nops == 0:
-                        operands: list[int] = []
+                        operands: tuple[int, ...] = ()
                     elif nops == 1:
-                        operands = [mem_words[(pc + 1) & word_mask]]
+                        operands = (mem_words[(pc + 1) & word_mask],)
                     elif nops == 2:
-                        operands = [
+                        operands = (
                             mem_words[(pc + 1) & word_mask],
                             mem_words[(pc + 2) & word_mask],
-                        ]
+                        )
                     else:  # nops == 3
-                        operands = [
+                        operands = (
                             mem_words[(pc + 1) & word_mask],
                             mem_words[(pc + 2) & word_mask],
                             mem_words[(pc + 3) & word_mask],
-                        ]
+                        )
                     ins = _Ins(opcode, operands, 1 + nops)
 
                 # MEMORY CHECK
@@ -553,6 +578,18 @@ class CPU:
                     raise
 
             cycles += 1
+            if self.halted:
+                return cycles, _RUN_STOP_HALTED
+            if self.process_exit_requested:
+                return cycles, _RUN_STOP_EXITED
+            if bp_contains is not None and bp_contains(regs.pc):
+                return cycles, _RUN_STOP_BREAKPOINT
+
+        if self.halted:
+            return cycles, _RUN_STOP_HALTED
+        if self.process_exit_requested:
+            return cycles, _RUN_STOP_EXITED
+        return cycles, _RUN_STOP_CYCLES
 
     # ==========================================================================
     # SISAISET METODIT: FETCH, DECODE, MUISTITARKISTUKSET, KÄSITTELIJÄT
@@ -588,10 +625,10 @@ class CPU:
         if opcode == _OPCODE_JMPI or opcode == _OPCODE_CALLI:
             reg_id = self.memory.read(pc + 1)
             count = self.memory.read(pc + 2)
-            targets = [self.memory.read(pc + 3 + i) for i in range(count)]
+            targets = tuple(self.memory.read(pc + 3 + i) for i in range(count))
             return _Ins(
                 opcode=opcode,
-                operands=[reg_id, count] + targets,
+                operands=(reg_id, count, *targets),
                 size_words=3 + count,
             )
 
@@ -599,9 +636,7 @@ class CPU:
         operand_count = (opcode >> OPCODE_NOPS_SHIFT) & OPCODE_NOPS_MASK
 
         # Lue operandit perakkaisista muistiosoitteista
-        operands: list[int] = [
-            self.memory.read(pc + 1 + i) for i in range(operand_count)
-        ]
+        operands = tuple(self.memory.read(pc + 1 + i) for i in range(operand_count))
 
         return _Ins(
             opcode=opcode,
@@ -966,23 +1001,25 @@ class CPU:
             self.regs.pc = (addr - ins.size_words) & WORD_MASK
 
     def _exec_jmpi(self, ins: _Ins) -> None:
-        reg_id, count, *targets = ins.operands
+        reg_id = ins.operands[0]
+        count = ins.operands[1]
         index = self._get_reg(reg_id)
         if index >= count:
             raise InvalidOpcodeError(
                 f"JMPI: indeksi {index} sallitun alueen ulkopuolella (määrä={count})"
             )
-        self.regs.pc = (targets[index] - ins.size_words) & WORD_MASK
+        self.regs.pc = (ins.operands[2 + index] - ins.size_words) & WORD_MASK
 
     def _exec_calli(self, ins: _Ins) -> None:
-        reg_id, count, *targets = ins.operands
+        reg_id = ins.operands[0]
+        count = ins.operands[1]
         index = self._get_reg(reg_id)
         if index >= count:
             raise InvalidOpcodeError(
                 f"CALLI: indeksi {index} sallitun alueen ulkopuolella (määrä={count})"
             )
         self._push((self.regs.pc + ins.size_words) & WORD_MASK)
-        self.regs.pc = (targets[index] - ins.size_words) & WORD_MASK
+        self.regs.pc = (ins.operands[2 + index] - ins.size_words) & WORD_MASK
 
     # --- Keskeytykset ---
 
