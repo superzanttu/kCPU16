@@ -2107,13 +2107,15 @@ class KCPU16TUI(App[None]):
                         )
                         return
                 else:
-                    before_ic = cpu.instruction_counter
                     try:
-                        cpu.run(max_cycles=BATCH)
+                        batch_cycles, _stop_reason = cpu.run_until_breakpoint_or_cycles(
+                            max_cycles=BATCH,
+                            breakpoints=None,
+                        )
                     except Exception as exc:
                         self.call_from_thread(self._show_cpu_crash, exc)
                         return
-                    total_cycles += cpu.instruction_counter - before_ic
+                    total_cycles += batch_cycles
 
                 # Päivitä UI ~200ms välein
                 now = time.monotonic()
