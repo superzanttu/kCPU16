@@ -1915,10 +1915,12 @@ class KCPU16TUI(App[None]):
         if cpu.halted or cpu.process_exit_requested:
             return "[yellow]CPU stopped. Reset to continue.[/yellow]"
 
+        bps = self.dbg.breakpoints or None
+
         try:
             cycles, stop_reason = cpu.run_until_breakpoint_or_cycles(
                 max_cycles=max_cycles,
-                breakpoints=self.dbg.breakpoints,
+                breakpoints=bps,
             )
         except Exception as exc:
             self._show_cpu_crash(exc)
