@@ -120,6 +120,7 @@ class Memory:
     )
 
     def __post_init__(self) -> None:
+        """Initialize derived write-protection mask from configured regions."""
         self.rebuild_write_mask()
 
     def rebuild_write_mask(self) -> None:

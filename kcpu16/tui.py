@@ -258,6 +258,7 @@ class SaveConfirmDialog(ModalScreen):
         editor_has_file: bool,
         disk_has_file: bool,
     ) -> None:
+        """Store dirty-state inputs used by the save confirmation dialog."""
         super().__init__()
         self._editor_dirty = editor_dirty
         self._disk_dirty = disk_dirty
@@ -265,6 +266,7 @@ class SaveConfirmDialog(ModalScreen):
         self._disk_has_file = disk_has_file
 
     def compose(self) -> ComposeResult:
+        """Compose save-confirm modal widgets and action buttons."""
         with Vertical(id="save-dialog"):
             yield Static("Unsaved Changes", id="save-dialog-title")
             yield Static("Save changes before closing?", id="save-dialog-question")
@@ -280,6 +282,7 @@ class SaveConfirmDialog(ModalScreen):
                 yield Button("Cancel", id="btn-save-cancel", variant="warning")
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
+        """Handle Yes/No/Cancel and validate required save targets."""
         btn_id = event.button.id
 
         if btn_id == "btn-save-cancel":
@@ -326,6 +329,7 @@ class SaveConfirmDialog(ModalScreen):
             self.dismiss(("yes", save_editor, save_disk))
 
     def on_key(self, event) -> None:
+        """Close the dialog on Escape."""
         if event.key == "escape":
             self.dismiss(("cancel", False, False))
 
@@ -360,10 +364,12 @@ class SpeedSlider(Widget):
         """Lähetetään kun liukusäätimen arvo muuttuu."""
 
         def __init__(self, value: int) -> None:
+            """Create change message with new slider value."""
             super().__init__()
             self.value = value
 
     def __init__(self, value: int = 10, *, id: str | None = None) -> None:
+        """Initialize slider value and drag state."""
         super().__init__(id=id)
         self._value: int = max(1, min(_SLIDER_MAX_IPS, value))
         self._multiplier: int = 1
@@ -371,10 +377,12 @@ class SpeedSlider(Widget):
 
     @property
     def value(self) -> int:
+        """Return current IPS value."""
         return self._value
 
     @value.setter
     def value(self, val: int) -> None:
+        """Clamp and apply IPS value, then emit Changed message."""
         val = max(1, min(_SLIDER_MAX_IPS, val))
         if val != self._value:
             self._value = val
@@ -382,6 +390,7 @@ class SpeedSlider(Widget):
             self.post_message(self.Changed(self._value))
 
     def render(self) -> str:
+        """Render slider label and logarithmic track with current knob position."""
         import math
 
         # Logaritminen skala: pienet arvot saavat enemmän tilaa
@@ -394,6 +403,7 @@ class SpeedSlider(Widget):
         return f"IPS:{effective:5d} [{track}]"
 
     def _x_to_value(self, x: int) -> int:
+        """Convert horizontal mouse coordinate to logarithmic IPS value."""
         import math
 
         # padding(1) + "IPS:NNNN ["(10) = offset 11
@@ -405,6 +415,7 @@ class SpeedSlider(Widget):
         return max(1, min(_SLIDER_MAX_IPS, val))
 
     def on_mouse_down(self, event: events.MouseDown) -> None:
+        """Start dragging and update value from click position."""
         self._dragging = True
         self.capture_mouse()
         new_val = self._x_to_value(event.x)
@@ -414,6 +425,7 @@ class SpeedSlider(Widget):
             self.post_message(self.Changed(self._value))
 
     def on_mouse_move(self, event: events.MouseMove) -> None:
+        """Update slider value while dragging."""
         if self._dragging:
             new_val = self._x_to_value(event.x)
             if new_val != self._value:
@@ -422,16 +434,19 @@ class SpeedSlider(Widget):
                 self.post_message(self.Changed(self._value))
 
     def on_mouse_up(self, event: events.MouseUp) -> None:
+        """Stop drag tracking and release mouse capture."""
         if self._dragging:
             self._dragging = False
             self.release_mouse()
 
     def on_mouse_scroll_up(self, event: events.MouseScrollUp) -> None:
+        """Increase slider value with logarithmic wheel step."""
         # Logaritminen askel: +10% tai vähintään +1
         step = max(1, round(self._value * 0.1))
         self.value = self._value + step
 
     def on_mouse_scroll_down(self, event: events.MouseScrollDown) -> None:
+        """Decrease slider value with logarithmic wheel step."""
         # Logaritminen askel: -10% tai vähintään -1
         step = max(1, round(self._value * 0.1))
         self.value = self._value - step
@@ -507,6 +522,7 @@ class FilePickerDialog(ModalScreen):
         title: str = "Load Program",
         confirm_label: str = "Load",
     ) -> None:
+        """Initialize picker with list entries and labels."""
         super().__init__()
         self._files = files
         self._title = title
@@ -514,6 +530,7 @@ class FilePickerDialog(ModalScreen):
         self._selected: str | None = files[0] if files else None
 
     def compose(self) -> ComposeResult:
+        """Compose file picker list and action buttons."""
         with Vertical(id="file-picker-dialog"):
             yield Static(self._title, id="file-picker-title")
             with VerticalScroll(id="file-picker-list"):
@@ -525,12 +542,14 @@ class FilePickerDialog(ModalScreen):
                 yield Button("Cancel", id="btn-picker-cancel")
 
     def on_mount(self) -> None:
+        """Focus list view on mount for immediate keyboard navigation."""
         try:
             self.query_one("#file-picker-listview", ListView).focus()
         except Exception:
             pass
 
     def on_list_view_highlighted(self, event: ListView.Highlighted) -> None:
+        """Track current highlighted filename in list view."""
         idx = event.list_view.index
         if idx is not None and 0 <= idx < len(self._files):
             self._selected = self._files[idx]
@@ -543,12 +562,14 @@ class FilePickerDialog(ModalScreen):
         self.dismiss(self._selected)
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
+        """Dismiss dialog with cancel or currently selected filename."""
         if event.button.id == "btn-picker-cancel":
             self.dismiss(None)
         elif event.button.id == "btn-picker-load":
             self.dismiss(self._selected)
 
     def on_key(self, event) -> None:
+        """Cancel picker dialog with Escape."""
         if event.key == "escape":
             self.dismiss(None)
 
@@ -832,7 +853,9 @@ class KCPU16TUI(App[None], TUIRenderMixin, TUICommandsMixin):
         )
         self._slow_ips: int = 10  # käskyä/sekuntti SLOW-tilassa (1–1000)
         self._slow_multiplier: int = 1  # kerroin: 1, 10 tai 100
-        self._game_input_mode: bool = False  # True = emulator gets keyboard; False = TUI gets shortcuts
+        self._game_input_mode: bool = (
+            False  # True = emulator gets keyboard; False = TUI gets shortcuts
+        )
         # --asm listing caches (rebuilt each assemble)
         self._asm_addr_to_src: dict[int, str] = {}  # addr → raw source line
         self._asm_addr_to_label: dict[int, str] = {}  # addr → label name
@@ -1274,6 +1297,7 @@ class KCPU16TUI(App[None], TUIRenderMixin, TUICommandsMixin):
             return
 
         def _on_picked(filename: str | None) -> None:
+            """Load picked asm file and refresh views."""
             if filename is not None:
                 self._do_open(self.code_dir / filename)
                 self._refresh_all()
@@ -1297,6 +1321,7 @@ class KCPU16TUI(App[None], TUIRenderMixin, TUICommandsMixin):
             return
 
         def _on_picked(filename: str | None) -> None:
+            """Boot from selected disk image and log outcome."""
             if filename is None:
                 return
             result = self._boot_from_disk_image(self.storage_dir / filename)
@@ -1339,6 +1364,7 @@ class KCPU16TUI(App[None], TUIRenderMixin, TUICommandsMixin):
             return
 
         def _on_confirm(result: tuple) -> None:
+            """Handle save confirmation result before exiting application."""
             choice, _save_editor, save_disk = result
 
             if choice == "cancel":
@@ -1457,8 +1483,8 @@ class KCPU16TUI(App[None], TUIRenderMixin, TUICommandsMixin):
     def on_key(self, event) -> None:
         """Välitä näppäinpainallukset emulaattorille tai TUI:lle.
 
-        Kutsutaan jokaisesta näppäinpainalluksesta. 
-        - Ctrl+Space toggles between game input mode (keyboard → emulator) 
+        Kutsutaan jokaisesta näppäinpainalluksesta.
+        - Ctrl+Space toggles between game input mode (keyboard → emulator)
           and TUI mode (keyboard → TUI shortcuts).
         - Game input mode: tulostettavat ASCII-merkit (32–126) ja Enter
           välitetään emulaattorin KeyboardDevice-jonoon. Toimii kaikissa
@@ -1471,10 +1497,14 @@ class KCPU16TUI(App[None], TUIRenderMixin, TUICommandsMixin):
         # Toggle game input mode with Ctrl+Space
         if event.key == "ctrl+space":
             self._game_input_mode = not self._game_input_mode
-            mode_text = "ENABLED (keyboard → emulator)" if self._game_input_mode else "DISABLED (keyboard → TUI)"
+            mode_text = (
+                "ENABLED (keyboard → emulator)"
+                if self._game_input_mode
+                else "DISABLED (keyboard → TUI)"
+            )
             self._log(f"[cyan]Game Input Mode: {mode_text}[/cyan]")
             return
-        
+
         # Älä välitä jos käyttäjä kirjoittaa komentokenttään
         cmd_input = self.query_one("#cmd-input", Input)
         if cmd_input is self.focused:
@@ -1482,19 +1512,28 @@ class KCPU16TUI(App[None], TUIRenderMixin, TUICommandsMixin):
 
         # In game input mode, forward keyboard to emulator
         if self._game_input_mode and self.machine.keyboard is not None:
-            char = event.character
-            if char is None or len(char) != 1:
-                return
-            code = ord(char)
-            # Forward printable ASCII (32–126) including special chars like Enter
-            if 32 <= code <= 126:  # tulostettava ASCII
+            special_ascii = {
+                "enter": 13,  # CR
+                "backspace": 8,  # BS
+                "tab": 9,  # HT
+            }
+
+            key_name = event.key.lower()
+            if key_name in special_ascii:
+                code = special_ascii[key_name]
                 self.machine.keyboard.push_key(code)
                 self.machine.keyboard.push_key_release(code)
-            # Handle Enter key specially (code 13 in some terminals, but event.key is "enter")
-            elif event.key == "enter":
-                self.machine.keyboard.push_key(13)  # ASCII 13 = CR
-                self.machine.keyboard.push_key_release(13)
-            return
+                event.stop()
+                return
+
+            char = event.character
+            if char is not None and len(char) == 1:
+                code = ord(char)
+                if 32 <= code <= 126:  # printable ASCII
+                    self.machine.keyboard.push_key(code)
+                    self.machine.keyboard.push_key_release(code)
+                    event.stop()
+                    return
 
     # ------------------------------------------------------------------
     # Perusoperaatiot
@@ -2294,6 +2333,7 @@ class KCPU16TUI(App[None], TUIRenderMixin, TUICommandsMixin):
         half = (len(names) + 1) // 2
 
         def fmt_cell(name: str) -> str:
+            """Format one register entry with changed-state highlighting."""
             value = regs[name]
             h = f"0x{value:04X}"
             d = f"{value:>5}"

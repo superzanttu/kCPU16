@@ -33,6 +33,7 @@ class _Ins:
     __slots__ = ("opcode", "operands", "size_words")
 
     def __init__(self, opcode: int, operands: tuple[int, ...], size_words: int) -> None:
+        """Store decoded opcode, operands and encoded instruction size."""
         self.opcode = opcode
         self.operands = operands
         self.size_words = size_words
@@ -55,6 +56,7 @@ class CPUCoreMixin:
     """Core methods: dispatch tables, step/run loop and decode."""
 
     def __post_init__(self) -> None:
+        """Initialize dispatch/cache tables used by the hot execution path."""
         self._exec_table: dict[int, object] = {}
         self._mem_check_table: dict[int, object] = {}
         self._cycles_table: dict[int, int] = {}
@@ -65,6 +67,7 @@ class CPUCoreMixin:
         self._build_dispatch_table()
 
     def _build_dispatch_table(self) -> None:
+        """Build opcode-to-handler, memory-check and cycle lookup tables."""
         handler_map = {
             "LOAD": self._exec_load,
             "CPY": self._exec_cpy,
@@ -277,6 +280,7 @@ class CPUCoreMixin:
     def _run_core(
         self, max_cycles: int | None = None, breakpoints: set[int] | None = None
     ) -> tuple[int, str]:
+        """Execute tight run loop with optional cycle limit and breakpoints."""
         regs = self.regs
         mem_words = self.memory.words
         exec_list = self._exec_list
@@ -410,6 +414,7 @@ class CPUCoreMixin:
         return cycles, _RUN_STOP_CYCLES
 
     def _fetch_decode(self, pc: int) -> _Ins:
+        """Decode one instruction at PC into a compact internal tuple object."""
         opcode = self.memory.read(pc)
 
         if opcode not in OPCODE_TABLE:

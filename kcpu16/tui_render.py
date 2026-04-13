@@ -333,6 +333,7 @@ class TUIRenderMixin:
         half = (len(names) + 1) // 2
 
         def fmt_cell(name: str) -> str:
+            """Format one register cell with change highlighting."""
             value = regs[name]
             h = f"0x{value:04X}"
             d = f"{value:>5}"

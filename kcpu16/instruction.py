@@ -532,6 +532,7 @@ def format_disasm_memory_syntax(
     """Muotoile muistioperaatiot [..]-syntaksilla disassemblerin kayttoon."""
 
     def r(idx: int) -> str:
+        """Return readable register name for operand index."""
         return reg_name_lookup.get(idx, f"?{idx}")
 
     key = mnemonic.upper()
