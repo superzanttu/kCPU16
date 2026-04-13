@@ -142,6 +142,24 @@ Tehtävät on merkitty hakasulkeilla, ja niiden tilaa voidaan päivittää seura
 ## Ryhmä G: Sekalaista
 
 
+### Optimointi: Simulaationopeus
+
+#### P1 — Suurin vaikutus
+- [X] Muuta TUI:n fast/max-ajotapa käyttämään `CPU.run(max_cycles=batch)` eikä sisäistä `step()`-for-silmukkaa.
+- [X] Lisää breakpoint-rajattu ajotapa CPU-tasolle (esim. "run until breakpoint or cycles"), jotta TUI voi käyttää fast-pathia myös breakpointeilla.
+- [X] Vähennä hot-loopin allokaatioita (operandit kiinteänä tuple-rakenteena tai erilliset 0/1/2/3 operandin kevyet polut ilman listaluontia).
+
+#### P2 — Keskisuuri vaikutus
+- [ ] Korvaa opcode-dict-haut nopeammalla rakenteella (esim. taulukko/lista opcode-indeksillä, `None` tuntemattomille).
+- [ ] Inline-optimoi yleisimpien käskyjen lippupäivitykset (välttää useita `set_flag`-kutsuja per käsky).
+- [ ] Lisää "interrupt fast gate": jos I=0 ja ajastimet pois eikä keyboard pending, ohita keskeytyscheckit yhdellä ehdolla.
+
+#### P3 — Täydentävät optimoinnit
+- [ ] Optimoi FILL-muistitarkistus ilman suuria viipalekopioita.
+- [ ] Tee renderöintiin kevyt "text-only fast mode" ja aggressiivisempi dirty-region-päivitys.
+- [ ] Vähennä `datetime.now()`-kutsuja kellon MMIO-luvuissa (snapshot per käsky tai per lukujakso).
+
+
 ### Ryhmä Ö: Viimeiset tehtävät
 - [ ] Muuta projektin hakemistorakennetta, niin että se vastaa fyysisen tietokoneen komponentteja ja rakennetta. Varmista että kaikki tiedostopolut ja importit päivitetään, eikä mitään hajoa.
 	- Epäselvyys: kohdehakemistorakennetta (lopullinen puu ja nimeämissäännöt) ei ole määritelty, joten turvallinen refaktorointi ilman rikkomisriskiä ei ole yksiselitteinen.
