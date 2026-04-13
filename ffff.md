@@ -20,7 +20,7 @@ Tama suunnitelma kuvaa hallitun refaktoroinnin, jolla parannetaan koodirakennett
 ## Toteutusstatus
 - [x] Vaihe 1, askel 1: MMIO-metodit eroteltu tiedostoon `kcpu16/hardware/cpu_mmio.py` mixin-rakenteella.
 - [x] Vaihe 1, askel 2: Muistitarkistusmetodit eroteltu tiedostoon `kcpu16/hardware/cpu_memcheck.py` mixin-rakenteella.
-- [ ] Vaihe 1, askel 3: Exec-handlerien erotus tiedostoon `kcpu16/hardware/cpu_exec.py`.
+- [x] Vaihe 1, askel 3: Exec-handlerien erotus tiedostoon `kcpu16/hardware/cpu_exec.py`.
 - [ ] Vaihe 1, askel 4: Run-loop/decode/facade-siivous (`cpu_core.py` + `cpu.py`).
 
 ### Vaihe 1: Rajaa CPU-vastuut pienempiin moduuleihin
