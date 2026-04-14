@@ -7,6 +7,8 @@
 
 .const CH_SLASH, 47
 .const CH_BSLASH, 92
+.const MORE_BUF_WORDS, 512
+.const MORE_PAGE_LINES, 20
 
 ; -----------------------------------------------------------------------------
 ; Data
@@ -46,6 +48,42 @@ io_read_buf:
         .dw  0,0,0,0,0,0,0,0
 io_demo_buf:
         .dw  75,68,79,83,33      ; "KDOS!"
+more_buf:
+        .dw  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+        .dw  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+        .dw  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+        .dw  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+        .dw  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+        .dw  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+        .dw  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+        .dw  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+        .dw  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+        .dw  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+        .dw  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+        .dw  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+        .dw  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+        .dw  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+        .dw  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+        .dw  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+        .dw  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+        .dw  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+        .dw  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+        .dw  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+        .dw  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+        .dw  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+        .dw  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+        .dw  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+        .dw  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+        .dw  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+        .dw  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+        .dw  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+        .dw  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+        .dw  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+        .dw  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+more_read_words:
+        .dw  0
+more_truncated:
+        .dw  0
 
 ; constants as data words
 char_space:
@@ -125,6 +163,12 @@ str_read_match:
         .dstr "READ OK (matches demo data)\n"
 str_read_diff:
         .dstr "READ OK (content differs from demo data)\n"
+str_more_prompt:
+        .dstr "\n-- More -- (Enter)"
+str_more_empty:
+        .dstr "(empty file)\n"
+str_more_truncated:
+        .dstr "[output truncated]\n"
 
 cmd_help:
         .dstr "help"
@@ -160,31 +204,15 @@ cmd_write:
         .dstr "write"
 cmd_read:
         .dstr "read"
+cmd_more:
+        .dstr "more"
 cmd_run:
         .dstr "run"
 cmd_dotdot:
         .dstr ".."
 
 str_help:
-        .dstr "Commands:\n"
-        .dstr "  help\n"
-        .dstr "  fdisk\n"
-        .dstr "  format\n"
-        .dstr "  check\n"
-        .dstr "  sync\n"
-        .dstr "  ls\n"
-        .dstr "  dir\n"
-        .dstr "  find <name>\n"
-        .dstr "  stat <name>\n"
-        .dstr "  mkdir <name>\n"
-        .dstr "  cd <name|..>\n"
-        .dstr "  rmdir <name>\n"
-        .dstr "  touch <name>\n"
-        .dstr "  rm <name>\n"
-        .dstr "  del <name>\n"
-        .dstr "  write <name>\n"
-        .dstr "  read <name>\n"
-        .dstr "  run <name>\n"
+        .dstr "Commands:\n  help                 Show this help list.\n  fdisk                Init partition table metadata.\n  format               Create empty filesystem.\n  check                Verify filesystem integrity.\n  sync                 Flush/verify storage state.\n  ls                   List current directory.\n  dir                  Alias for ls.\n  find <name>          Find file by exact name.\n  stat <name>          Read metadata for file.\n  mkdir <name>         Create directory.\n  cd <name|..>         Change directory.\n  rmdir <name>         Remove empty directory.\n  touch <name>         Create empty file.\n  rm <name>            Delete file.\n  del <name>           Alias for rm.\n  write <name>         Write demo payload to file.\n  read <name>          Read+verify demo payload.\n  more <name>          Page file content (text).\n  run <name>           Demo execute file stub.\n"
 
 ; -----------------------------------------------------------------------------
 ; Utility: print string
@@ -271,6 +299,34 @@ str_eq2_b:
         .dw 0
 str_eq2:
         PUSH  R2
+        PUSH  R3
+        PUSH  R4
+        STORE [str_eq2_a], R0
+        STORE [str_eq2_b], R1
+        READ  R4, 1
+        READ  R3, 0
+_seq2_loop:
+        READ  R0, [str_eq2_a]
+        READ  R1, [str_eq2_b]
+        READ  R2, [R0]
+        READ  R1, [R1]
+        CMP   R2, R1
+        JNZ   _seq2_no
+        CMP   R2, R3
+        JZ    _seq2_yes
+        READ  R0, [str_eq2_a]
+        ADD   R0, R4
+        STORE [str_eq2_a], R0
+        READ  R0, [str_eq2_b]
+        ADD   R0, R4
+        STORE [str_eq2_b], R0
+        JUMP  _seq2_loop
+_seq2_yes:
+        READ  R0, 1
+        POP   R4
+        POP   R3
+        POP   R2
+        RET
 
 ; -----------------------------------------------------------------------------
 ; Utility: compare word buffers
@@ -308,30 +364,62 @@ _cw_no:
         POP   R4
         POP   R3
         RET
+
+; -----------------------------------------------------------------------------
+; Utility: paged text output for "more"
+; In: R0=buffer ptr, R1=word count
+; -----------------------------------------------------------------------------
+
+more_print_paged:
+        PUSH  R2
         PUSH  R3
         PUSH  R4
-        STORE [str_eq2_a], R0
-        STORE [str_eq2_b], R1
-        READ  R4, 1
-        READ  R3, 0
-_seq2_loop:
-        READ  R0, [str_eq2_a]
-        READ  R1, [str_eq2_b]
-        READ  R2, [R0]
-        READ  R1, [R1]
-        CMP   R2, R1
-        JNZ   _seq2_no
-        CMP   R2, R3
-        JZ    _seq2_yes
-        READ  R0, [str_eq2_a]
-        ADD   R0, R4
-        STORE [str_eq2_a], R0
-        READ  R0, [str_eq2_b]
-        ADD   R0, R4
-        STORE [str_eq2_b], R0
-        JUMP  _seq2_loop
-_seq2_yes:
-        READ  R0, 1
+        PUSH  R5
+        PUSH  R6
+        PUSH  R7
+        CPY   R6, R0
+        CPY   R7, R1
+        READ  R5, 0                 ; lines in current page
+        READ  R4, MORE_PAGE_LINES
+        READ  R3, 1
+        READ  R2, 0
+_mpp_loop:
+        CMP   R7, R2
+        JZ    _mpp_done
+        READ  R1, [R6]
+        CMP   R1, R2                ; null ends content
+        JZ    _mpp_done
+        READ  R0, prompt_char_buf
+        STORE [R0], R1
+        ADD   R0, R3
+        STORE [R0], R2
+        READ  R0, prompt_char_buf
+        CALL  print_str
+
+        READ  R0, 10                ; '\n'
+        CMP   R1, R0
+        JNZ   _mpp_next_char
+        ADD   R5, R3
+        CMP   R5, R4
+        JLT   _mpp_next_char
+
+        READ  R0, str_more_prompt
+        CALL  print_str
+        READ  R0, str_empty_prompt
+        READ  R1, input_buf
+        READ  R2, 2
+        CALL  scr_input
+        READ  R5, 0
+
+_mpp_next_char:
+        ADD   R6, R3
+        SUB   R7, R3
+        READ  R2, 0
+        JUMP  _mpp_loop
+_mpp_done:
+        POP   R7
+        POP   R6
+        POP   R5
         POP   R4
         POP   R3
         POP   R2
@@ -1560,7 +1648,7 @@ _cmd_read:
         CALL  str_eq2
         READ  R1, 1
         CMP   R0, R1
-        JNZ   _cmd_run
+        JNZ   _cmd_more
         CALL  ensure_storage_ready
         READ  R1, 0
         CMP   R0, R1
@@ -1605,6 +1693,86 @@ _read_cmp:
 _read_match:
         READ  R0, str_read_match
         CALL  print_str
+        JUMP  main_loop
+
+_cmd_more:
+        READ  R0, cmd_buf
+        READ  R1, cmd_more
+        CALL  str_eq2
+        READ  R1, 1
+        CMP   R0, R1
+        JNZ   _cmd_run
+        CALL  ensure_storage_ready
+        READ  R1, 0
+        CMP   R0, R1
+        JZ    main_loop
+        READ  R0, [arg_buf]
+        READ  R1, 0
+        CMP   R0, R1
+        JNZ   _more_go
+        READ  R0, str_need_arg
+        CALL  print_str
+        JUMP  main_loop
+_more_go:
+        READ  R0, arg_buf
+        CALL  build_scoped_name
+        READ  R1, 1
+        CMP   R0, R1
+        JZ    _more_stat
+        READ  R0, str_name_long
+        CALL  print_str
+        JUMP  main_loop
+_more_stat:
+        READ  R0, scoped_name_buf
+        READ  R1, io_stat_buf
+        CALL  disk_stat
+        READ  R1, DISK_OK
+        CMP   R0, R1
+        JZ    _more_size
+        CALL  print_disk_error
+        JUMP  main_loop
+_more_size:
+        READ  R0, io_stat_buf
+        READ  R0, [R0]            ; file size words
+        READ  R1, 0
+        CMP   R0, R1
+        JNZ   _more_limit
+        READ  R0, str_more_empty
+        CALL  print_str
+        JUMP  main_loop
+_more_limit:
+        READ  R1, MORE_BUF_WORDS
+        CMP   R0, R1
+        JLE   _more_use_full
+        STORE [more_read_words], R1
+        READ  R0, 1
+        STORE [more_truncated], R0
+        JUMP  _more_read
+_more_use_full:
+        STORE [more_read_words], R0
+        READ  R0, 0
+        STORE [more_truncated], R0
+_more_read:
+        READ  R0, scoped_name_buf
+        READ  R1, more_buf
+        READ  R2, [more_read_words]
+        CALL  disk_read
+        READ  R1, DISK_OK
+        CMP   R0, R1
+        JZ    _more_print
+        CALL  print_disk_error
+        JUMP  main_loop
+_more_print:
+        READ  R0, more_buf
+        READ  R1, [more_read_words]
+        CALL  more_print_paged
+        READ  R0, [more_truncated]
+        READ  R1, 0
+        CMP   R0, R1
+        JZ    _more_done
+        READ  R0, str_more_truncated
+        CALL  print_str
+_more_done:
         JUMP  main_loop
 
 _cmd_run:
