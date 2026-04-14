@@ -181,3 +181,4 @@ Tehtävät on merkitty hakasulkeilla, ja niiden tilaa voidaan päivittää seura
 
 
 ### Uudet tehtävät
+- [ ] Lisää lib-disk.asm:iin toiminto jolla kirjasto varmistaa että tallennuslaiteelle on kirjoitettu kaikki, jotta emulaattorin voi sammuttaa tai käynnistää uudeleen turvalliseti.
