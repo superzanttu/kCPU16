@@ -2597,12 +2597,10 @@ class KCPU16TUI(App[None], TUIRenderMixin, TUICommandsMixin):
             memory = self.machine.memory
             mode = memory.read(GFX_MODE_REG)
             vram_version = screen.get_vram_version()
-            use_text_fast = (
-                self._text_fast_mode
-                and not force
-                and mode == 0
-                and self._exec_mode in {"fast", "max", "slow"}
-            )
+            # NOTE: Text-only fast path drops VRAM color attributes (FG/BG),
+            # so C64-style colored backgrounds become black in FAST/MAX/SLOW.
+            # Keep colors correct by always using color-aware rendering in mode A.
+            use_text_fast = False
 
             # Dirty-check: Jos VRAM ei ole muuttunut ja GFX_MODE ei muuttunut (paitsi force)
             # Tekstitilassa voidaan ohittaa suoraan viime renderiin.
@@ -2628,32 +2626,8 @@ class KCPU16TUI(App[None], TUIRenderMixin, TUICommandsMixin):
                     # Näytä viimeisin atomiesti flipattu kehys
                     rendered = screen.get_front_buffer()
             else:
-                # Tekstitila A: fast-tiloissa käytä kevyttä text-only renderiä,
-                # ja päivitä dirty-spanin mukaan vain muuttuneet rivit.
-                if use_text_fast and self._last_screen_lines is not None:
-                    span = screen.consume_dirty_span()
-                    if span is not None:
-                        first_row = span[0] // screen.cols
-                        last_row = span[1] // screen.cols
-                        lines = self._last_screen_lines[:]
-                        row_base = VRAM_START + (first_row * screen.cols)
-                        for row in range(first_row, last_row + 1):
-                            chars: list[str] = []
-                            addr = row_base
-                            for _ in range(screen.cols):
-                                word = memory.read(addr)
-                                ch = chr(word & 0xFF)
-                                chars.append(ch if 32 <= ord(ch) < 127 else " ")
-                                addr += 1
-                            lines[row] = "".join(chars)
-                            row_base += screen.cols
-                        rendered = "\n".join(lines)
-                    else:
-                        rendered = screen.render_text(memory)
-                elif use_text_fast:
-                    rendered = screen.render_text(memory)
-                else:
-                    rendered = screen.render_auto(memory)
+                # Tekstitila A: renderöi aina värit säilyttävällä polulla.
+                rendered = screen.render_auto(memory)
 
             # Päivitä tracked versiot (dirty-checkia varten seuraavaa kutsua)
             self._last_vram_version = vram_version
