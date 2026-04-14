@@ -2,8 +2,8 @@
 
         JUMP  main
 
-        .include "lib-screen.asm"
-        .include "lib-disk.asm"
+        .include "../lib/lib-screen.asm"
+        .include "../lib/lib-disk.asm"
 
 .const CH_SLASH, 47
 

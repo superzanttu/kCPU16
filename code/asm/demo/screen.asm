@@ -37,7 +37,7 @@
 ; Kirjasto — tekstiterminalitoiminnot
 ; =============================================================================
 
-        .include "lib-screen.asm"
+        .include "../lib/lib-screen.asm"
 
 ; =============================================================================
 ; Merkkijonodata (null-terminoituja .dstr-merkkijonoja)

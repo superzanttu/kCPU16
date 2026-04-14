@@ -57,13 +57,13 @@
 ; Kirjasto (gfx_clear, gfx_pixel, gfx_line)
 ; =============================================================================
 
-        .include "lib-gfx.asm"
+        .include "../lib/lib-gfx.asm"
 
 ; =============================================================================
 ; Objektidata (sin_table, cube, letter_L, letter_J)
 ; =============================================================================
 
-        .include "lib_3dobjects.asm"
+        .include "../lib/lib-3dobjects.asm"
 
 ; =============================================================================
 ; Projisoidut näyttökoordinaatit — tila 12 kärkipisteelle (L ja J = 12)

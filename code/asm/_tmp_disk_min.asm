@@ -1,6 +1,6 @@
         .origin 0x0200
         JUMP  main
-        .include "lib-disk.asm"
+        .include "lib/lib-disk.asm"
 test_filename:
         .dstr "TESTFILE"
 test_data:
