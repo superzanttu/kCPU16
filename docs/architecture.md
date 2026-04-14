@@ -858,8 +858,8 @@ Kukin sana FAT:ssa kuvaa yhden blokin tilan:
 
 ### Hakemistomerkintä (blokki 2, 32 sanaa/merkintä)
 
-| Offset | Kuvaus                                              |
-| ------ | --------------------------------------------------- |
+| Offset | Kuvaus                                             |
+| ------ | -------------------------------------------------- |
 | 0      | Status: 0 = vapaa, 1 = tiedosto, 2 = hakemisto     |
 | 1–16   | Tiedostonimi (null-terminoitu, max 16 sanaa)       |
 | 17     | Tiedoston koko sanoina                             |
@@ -982,6 +982,18 @@ Sisään: (ei parametreja)
 Ulos:   R0 = DISK_OK              eheä tiedostojärjestelmä
         R0 = DISK_ERR_RANGE       havaittu epäjohdonmukaisuus
 ```
+
+### disk_sync — Synkronoi levykirjoitukset
+
+```
+Sisään: (ei parametreja)
+Ulos:   R0 = DISK_OK              levy valmis turvalliseen sammutukseen/resettiin
+        R0 = DISK_ERR_RANGE       eheystarkistus epäonnistui
+```
+
+Nykyisessä emulaattorissa kirjoitukset ovat synkronisia, joten `disk_sync`
+toimii eksplisiittisenä synkronointipisteenä ja suorittaa samalla
+`disk_check`-eheystarkistuksen.
 
 ### disk_find — Etsi tiedosto nimellä
 

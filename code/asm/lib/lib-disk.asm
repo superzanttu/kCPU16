@@ -50,6 +50,7 @@
 ;   disk_stat          — Lue tiedoston metatiedot
 ;   disk_list          — Listaa kaikki tiedostot ja hakemistot
 ;   disk_check         — Tarkista tiedostojärjestelmän eheys
+;   disk_sync          — Varmista, että levylle kirjoitukset ovat valmiit
 ;
 ; REKISTERIKONVENTIO (kutsuvilla aliohjelmilla):
 ;   Sisään: R0–R3 (käyttö vaihtelee, ks. kukin aliohjelma)
@@ -1596,6 +1597,23 @@ _dchk_fail:
         READ  R0, DISK_ERR_RANGE
         POP   R9
         POP   R8
+        RET
+
+; =============================================================================
+; disk_sync — Varmista levykirjoitusten valmistuminen ennen sammutusta/resettiä
+;
+; Nykyisessä emulaattorissa DWRITE on synkroninen (kirjoitus tapahtuu heti),
+; joten varsinainen "flush" on no-op. Tämä funktio tarjoaa silti
+; eksplisiittisen synkronointipisteen ohjelmille ja tarkistaa samalla, että
+; tiedostojärjestelmä on eheä ennen sammutusta tai uudelleenkäynnistystä.
+;
+; Sisään:  (ei parametreja)
+; Ulos:    R0 = DISK_OK jos levy eheä
+;          R0 = DISK_ERR_RANGE jos eheystarkistus epäonnistuu
+; Clobbers: R0–R9
+; =============================================================================
+disk_sync:
+        CALL  disk_check
         RET
 
 ; --- disk_list apumuuttujat ---
