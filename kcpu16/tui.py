@@ -50,12 +50,8 @@ from __future__ import annotations
 
 import re
 import time
-from dataclasses import dataclass
 from pathlib import Path
 from rich.text import Text
-
-# Poistaa Rich-markup-tagit (esim. [bold], [/red], [dim]) pelkään tekstiksi
-_RICH_MARKUP_RE = re.compile(r"\[/?[^\[\]]+?\]")
 
 from textual.app import App, ComposeResult
 from textual.binding import Binding
@@ -78,11 +74,10 @@ from textual.widgets import (
     TabPane,
 )
 
-from .assembler import Assembler, MNEMONIC_TO_OPCODE
+from .assembler import Assembler
 from .constants import (
     ARCH_SYMBOLS,
     BOOT_RAM_START,
-    GFX_FLIP_REG,
     GFX_MODE_REG,
     GFX_MODE_B,
     GFX_MODE_C,
@@ -92,6 +87,7 @@ from .constants import (
     SR_FLAG_P,
     SR_FLAG_V,
     SR_FLAG_Z,
+    VRAM_START,
     WORD_MASK,
 )
 from .devices.storage import BlockStorageDevice
@@ -102,6 +98,17 @@ from .instruction import OPCODE_TABLE
 from .machine import KCPU16Machine
 from .specs import format_arch_spec_report
 from . import __version__
+
+# Phase 3 Refactoring: Import mixins for modular TUI
+from .tui_render import TUIRenderMixin
+from .tui_commands import TUICommandsMixin, CommandResult
+from .tui_state import (
+    build_addr_to_line as _build_addr_to_line,
+    find_bootblock_jump_target as _find_bootblock_jump_target,
+)
+
+# Poistaa Rich-markup-tagit (esim. [bold], [/red], [dim]) pelkään tekstiksi
+_RICH_MARKUP_RE = re.compile(r"\[/?[^\[\]]+?\]")
 
 
 # ---------------------------------------------------------------------------
@@ -135,32 +142,6 @@ REG_NAMES = {
     16: "FP",
     17: "SP",
 }
-
-
-def _find_bootblock_jump_target(words: list[int]) -> tuple[str, int, int] | None:
-    """Etsi bootblockin ensimmäinen eksplisiittinen hyppykohde konekielestä.
-
-    Palauttaa ensimmäisen tavallisen ohjausrakennekäskyn, jolla on välitön
-    kohdeosoite. Tämä auttaa näyttämään TUI-lokissa mihin bootloader yrittää
-    siirtyä boot=1-polussa.
-    """
-    branch_mnemonics: frozenset[str] = frozenset(
-        {"JUMP", "CALL", "JZ", "JNZ", "JLT", "JGT", "JLE", "JGE"}
-    )
-    i = 0
-    pc = BOOT_RAM_START
-    while i < len(words):
-        opcode = words[i] & WORD_MASK
-        meta = REVERSE_TABLE.get(opcode)
-        op_count = meta[1] if meta is not None else 0
-        mnemonic = meta[0] if meta is not None else None
-        if mnemonic in branch_mnemonics and op_count >= 1 and i + op_count < len(words):
-            target = words[i + op_count] & WORD_MASK
-            return mnemonic, pc, target
-        i += 1 + op_count
-        pc += 1 + op_count
-    return None
-
 
 # Käskyt joissa 1. operandi on rekisteri-indeksi (esim. LOAD R0, ...)
 _REG_FIRST = {
@@ -211,131 +192,6 @@ _REG_SECOND = {
 _BRANCH_MNEMONICS: frozenset[str] = frozenset(
     {"JUMP", "CALL", "JZ", "JNZ", "JLT", "JGT", "JLE", "JGE"}
 )
-
-
-@dataclass
-class CommandResult:
-    """Komentotulkin (_execute_command) paluuarvo.
-
-    Kapseloi komennon onnistumisen ja käyttäjälle näytettävän viestin.
-    Viesti voi sisältää Rich-markupia (esim. [red]virhe[/red]).
-
-    Attribuutit:
-        ok:      True = komento onnistui, False = virhe.
-        message: Käyttäjälle näytettävä teksti (Rich-markup sallittu).
-                 Tyhjä merkkijono = ei näytetä mitään.
-    """
-
-    ok: bool
-    message: str
-
-
-# ---------------------------------------------------------------------------
-# Lähdekoodi -> osoite -kartoitus (makrotuki)
-# ---------------------------------------------------------------------------
-
-
-def _build_addr_to_line(source: str, assembler: Assembler) -> dict[int, int]:
-    """Rakenna osoite → lähdekoodirivi -mappi assembloidusta koodista.
-
-    Tarkoitus: Kun käyttäjä steppaa koodia (F7), editorin kursori siirtyy
-    automaattisesti sille riville, joka vastaa nykyistä PC-osoitetta.
-    Tämä funktio rakentaa mapin joka mahdollistaa tuon yhteyden.
-
-    Makrotuki - miksi kaksi vaihetta:
-        1. Pass 0 (expand macros): Assemblerin makrot laajennetaan, jolloin
-           yksi lähdekoodirivi voi tuottaa useita expanded-rivejä.
-           Expanded-koodin rivinumerot EI vastaa alkuperäisiä.
-        2. exp_to_orig -mappi: Yhdistää jokaisen expanded-rivin takaisin
-           alkuperäiseen lähdekoodirivinumeroon vertaamalla rivien sisältöä.
-           Jos vastaavuutta ei löydy (makroista syntyneet rivit), käytetään
-           edellisen vastanneen rivin numeroa.
-
-    Osoite→rivi -mapin rakentaminen:
-        - Käy expanded-koodin läpi rivi kerrallaan
-        - Ohittaa tyhjät rivit ja labelit (eivät tuota konekieltä)
-        - Tunnistaa mnemoniikin ja hakee sen opcode-taulusta
-        - Laskee osoitteen: addr += 1 + operandien_määrä (käskysana + operandit)
-        - Tallentaa result[addr] = alkuperäinen rivinumero
-
-    Parametrit:
-        source:    Alkuperäinen lähdekoodi (editorin sisältö).
-        assembler: Assembler-instanssi (tarvitaan makrolaajennukseen).
-
-    Palauttaa:
-        dict[int, int]: Mappi {konekieliosoite: lähdekoodirivinumero (1-pohjainen)}.
-        Tyhjä dict jos makrolaajennus epäonnistuu.
-    """
-    try:
-        expanded, start_addr = assembler._pass0_expand_macros_and_origin(
-            source, BOOT_RAM_START
-        )
-    except Exception:
-        return {}
-
-    original_lines = source.splitlines()
-    expanded_lines = expanded.splitlines()
-
-    # Yhdistä expanded-rivit alkuperäisiin
-    exp_to_orig: dict[int, int] = {}
-    orig_idx = 0
-    for exp_idx, exp_line in enumerate(expanded_lines, 1):
-        exp_stripped = exp_line.strip()
-        found = False
-        for oi in range(orig_idx, len(original_lines)):
-            orig_stripped = original_lines[oi].split(";", 1)[0].strip()
-            if orig_stripped == exp_stripped and exp_stripped:
-                exp_to_orig[exp_idx] = oi + 1
-                orig_idx = oi + 1
-                found = True
-                break
-        if not found:
-            if exp_to_orig:
-                exp_to_orig[exp_idx] = max(exp_to_orig.values())
-            else:
-                exp_to_orig[exp_idx] = 1
-
-    addr = start_addr
-    result: dict[int, int] = {}
-    exp_line_no = 0
-    for raw in expanded_lines:
-        exp_line_no += 1
-        line = raw.split(";", 1)[0].strip()
-        if not line or line.endswith(":"):
-            continue
-        # .at direktiivi: paivita osoitelaskuri uuteen muistiosoitteeseen
-        if line.lower().startswith(".at ") or line.lower() == ".at":
-            parts_at = line.split()
-            if len(parts_at) >= 2:
-                try:
-                    addr = int(parts_at[1], 0) & 0xFFFF
-                except ValueError:
-                    pass
-            continue
-        # .db: edista osoitetta (ei suoritettavaa koodia)
-        if line.lower().startswith(".db"):
-            try:
-                addr += len(assembler._parse_db_values(line))
-            except Exception:
-                pass
-            continue
-        # .dstr: edista osoitetta (ei suoritettavaa koodia)
-        if line.lower().startswith(".dstr"):
-            try:
-                addr += len(assembler._parse_dstr_values(line))
-            except Exception:
-                pass
-            continue
-        mnemonic = line.replace(",", " ").split()[0].upper()
-        opcode = MNEMONIC_TO_OPCODE.get(mnemonic)
-        if opcode is None:
-            continue
-        _, operand_count, _ = OPCODE_TABLE[opcode]
-        result[addr] = exp_to_orig.get(exp_line_no, exp_line_no)
-        addr += 1 + operand_count
-
-    return result
-
 
 # ===========================================================================
 # Tallentamattomien muutosten vahvistusikkuna
@@ -402,6 +258,7 @@ class SaveConfirmDialog(ModalScreen):
         editor_has_file: bool,
         disk_has_file: bool,
     ) -> None:
+        """Store dirty-state inputs used by the save confirmation dialog."""
         super().__init__()
         self._editor_dirty = editor_dirty
         self._disk_dirty = disk_dirty
@@ -409,6 +266,7 @@ class SaveConfirmDialog(ModalScreen):
         self._disk_has_file = disk_has_file
 
     def compose(self) -> ComposeResult:
+        """Compose save-confirm modal widgets and action buttons."""
         with Vertical(id="save-dialog"):
             yield Static("Unsaved Changes", id="save-dialog-title")
             yield Static("Save changes before closing?", id="save-dialog-question")
@@ -424,6 +282,7 @@ class SaveConfirmDialog(ModalScreen):
                 yield Button("Cancel", id="btn-save-cancel", variant="warning")
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
+        """Handle Yes/No/Cancel and validate required save targets."""
         btn_id = event.button.id
 
         if btn_id == "btn-save-cancel":
@@ -454,8 +313,7 @@ class SaveConfirmDialog(ModalScreen):
             errors: list[str] = []
             if save_editor and not self._editor_has_file:
                 errors.append(
-                    "Editor .asm file has no save path.\n"
-                    "First save with: save <name>"
+                    "Editor .asm file has no save path.\nFirst save with: save <name>"
                 )
             if save_disk and not self._disk_has_file:
                 errors.append(
@@ -470,6 +328,7 @@ class SaveConfirmDialog(ModalScreen):
             self.dismiss(("yes", save_editor, save_disk))
 
     def on_key(self, event) -> None:
+        """Close the dialog on Escape."""
         if event.key == "escape":
             self.dismiss(("cancel", False, False))
 
@@ -504,10 +363,12 @@ class SpeedSlider(Widget):
         """Lähetetään kun liukusäätimen arvo muuttuu."""
 
         def __init__(self, value: int) -> None:
+            """Create change message with new slider value."""
             super().__init__()
             self.value = value
 
     def __init__(self, value: int = 10, *, id: str | None = None) -> None:
+        """Initialize slider value and drag state."""
         super().__init__(id=id)
         self._value: int = max(1, min(_SLIDER_MAX_IPS, value))
         self._multiplier: int = 1
@@ -515,10 +376,12 @@ class SpeedSlider(Widget):
 
     @property
     def value(self) -> int:
+        """Return current IPS value."""
         return self._value
 
     @value.setter
     def value(self, val: int) -> None:
+        """Clamp and apply IPS value, then emit Changed message."""
         val = max(1, min(_SLIDER_MAX_IPS, val))
         if val != self._value:
             self._value = val
@@ -526,6 +389,7 @@ class SpeedSlider(Widget):
             self.post_message(self.Changed(self._value))
 
     def render(self) -> str:
+        """Render slider label and logarithmic track with current knob position."""
         import math
 
         # Logaritminen skala: pienet arvot saavat enemmän tilaa
@@ -538,6 +402,7 @@ class SpeedSlider(Widget):
         return f"IPS:{effective:5d} [{track}]"
 
     def _x_to_value(self, x: int) -> int:
+        """Convert horizontal mouse coordinate to logarithmic IPS value."""
         import math
 
         # padding(1) + "IPS:NNNN ["(10) = offset 11
@@ -549,6 +414,7 @@ class SpeedSlider(Widget):
         return max(1, min(_SLIDER_MAX_IPS, val))
 
     def on_mouse_down(self, event: events.MouseDown) -> None:
+        """Start dragging and update value from click position."""
         self._dragging = True
         self.capture_mouse()
         new_val = self._x_to_value(event.x)
@@ -558,6 +424,7 @@ class SpeedSlider(Widget):
             self.post_message(self.Changed(self._value))
 
     def on_mouse_move(self, event: events.MouseMove) -> None:
+        """Update slider value while dragging."""
         if self._dragging:
             new_val = self._x_to_value(event.x)
             if new_val != self._value:
@@ -566,16 +433,19 @@ class SpeedSlider(Widget):
                 self.post_message(self.Changed(self._value))
 
     def on_mouse_up(self, event: events.MouseUp) -> None:
+        """Stop drag tracking and release mouse capture."""
         if self._dragging:
             self._dragging = False
             self.release_mouse()
 
     def on_mouse_scroll_up(self, event: events.MouseScrollUp) -> None:
+        """Increase slider value with logarithmic wheel step."""
         # Logaritminen askel: +10% tai vähintään +1
         step = max(1, round(self._value * 0.1))
         self.value = self._value + step
 
     def on_mouse_scroll_down(self, event: events.MouseScrollDown) -> None:
+        """Decrease slider value with logarithmic wheel step."""
         # Logaritminen askel: -10% tai vähintään -1
         step = max(1, round(self._value * 0.1))
         self.value = self._value - step
@@ -651,6 +521,7 @@ class FilePickerDialog(ModalScreen):
         title: str = "Load Program",
         confirm_label: str = "Load",
     ) -> None:
+        """Initialize picker with list entries and labels."""
         super().__init__()
         self._files = files
         self._title = title
@@ -658,6 +529,7 @@ class FilePickerDialog(ModalScreen):
         self._selected: str | None = files[0] if files else None
 
     def compose(self) -> ComposeResult:
+        """Compose file picker list and action buttons."""
         with Vertical(id="file-picker-dialog"):
             yield Static(self._title, id="file-picker-title")
             with VerticalScroll(id="file-picker-list"):
@@ -669,12 +541,14 @@ class FilePickerDialog(ModalScreen):
                 yield Button("Cancel", id="btn-picker-cancel")
 
     def on_mount(self) -> None:
+        """Focus list view on mount for immediate keyboard navigation."""
         try:
             self.query_one("#file-picker-listview", ListView).focus()
         except Exception:
             pass
 
     def on_list_view_highlighted(self, event: ListView.Highlighted) -> None:
+        """Track current highlighted filename in list view."""
         idx = event.list_view.index
         if idx is not None and 0 <= idx < len(self._files):
             self._selected = self._files[idx]
@@ -687,12 +561,14 @@ class FilePickerDialog(ModalScreen):
         self.dismiss(self._selected)
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
+        """Dismiss dialog with cancel or currently selected filename."""
         if event.button.id == "btn-picker-cancel":
             self.dismiss(None)
         elif event.button.id == "btn-picker-load":
             self.dismiss(self._selected)
 
     def on_key(self, event) -> None:
+        """Cancel picker dialog with Escape."""
         if event.key == "escape":
             self.dismiss(None)
 
@@ -702,7 +578,7 @@ class FilePickerDialog(ModalScreen):
 # ===========================================================================
 
 
-class KCPU16TUI(App[None]):
+class KCPU16TUI(App[None], TUIRenderMixin, TUICommandsMixin):
     """Päätason Textual-sovellus: kCPU16 emulaattori-debuggeri.
 
     Tämä on koko TUI:n juuriluokka. Se luo kaikki widgetit (disassembly,
@@ -865,6 +741,18 @@ class KCPU16TUI(App[None]):
         height: 1fr;
     }
 
+    #game-input-indicator {
+        width: 30;
+        height: 1;
+        content-align: center middle;
+        color: #a0a0a0;
+    }
+    #game-input-indicator.game-input-on {
+        color: #101010;
+        background: #ffd75f;
+        text-style: bold;
+    }
+
     /* ---- cmd-input inside output-pane ---- */
     #cmd-input {
         dock: bottom;
@@ -904,10 +792,11 @@ class KCPU16TUI(App[None]):
     # priority=True tarkoittaa, että nämä toimivat aina (myös syötekentän ollessa aktiivinen).
     # Sidonnaisuudet näkyvät myös Footerissa automaattisesti.
     BINDINGS = [
+        Binding("ctrl+space", "toggle_game_input", "Game Input", priority=True),
         Binding("ctrl+q", "quit", "Quit", priority=True),
         Binding("f2", "toggle_breakpoint", "BP F2", priority=True),
         Binding("f4", "run_max_speed", "Max F4", priority=True),
-        Binding("f5", "run_full_speed", "Fast F5", priority=True),
+        Binding("f5", "run_fast_speed", "Fast F5", priority=True),
         Binding("f6", "run_slow_speed", "Slow F6", priority=True),
         Binding("f8", "stop_program", "Stop F8", priority=True),
         Binding("f7", "step_once", "Step F7", priority=True),
@@ -952,8 +841,10 @@ class KCPU16TUI(App[None]):
         self.addr_to_line: dict[int, int] = {}
         self.is_assembled: bool = False
         self._last_screen_render: str = ""
+        self._last_screen_lines: list[str] | None = None
         self._last_vram_version: int = -1  # Käytetään VRAM dirty-check-optimointiin
         self._last_gfx_mode: int = -1  # Käytetään GFX_MODE muutoksen detektointiin
+        self._text_fast_mode: bool = True
         self._disasm_cache: dict[tuple[int, tuple[int, ...]], str] = (
             {}
         )  # (addr, words) → disasm_tail
@@ -964,6 +855,7 @@ class KCPU16TUI(App[None]):
         self._w_screen_view: Static | None = None
         self._w_memory_view: Static | None = None
         self._w_stack_view: Static | None = None
+        self._w_game_input_indicator: Static | None = None
         self._output_buffer: list[str] = []
         self._boot_status_text: str | None = None
         self._disk_dirty: bool = False
@@ -974,6 +866,9 @@ class KCPU16TUI(App[None]):
         )
         self._slow_ips: int = 10  # käskyä/sekuntti SLOW-tilassa (1–1000)
         self._slow_multiplier: int = 1  # kerroin: 1, 10 tai 100
+        self._game_input_mode: bool = (
+            False  # True = emulator gets keyboard; False = TUI gets shortcuts
+        )
         # --asm listing caches (rebuilt each assemble)
         self._asm_addr_to_src: dict[int, str] = {}  # addr → raw source line
         self._asm_addr_to_label: dict[int, str] = {}  # addr → label name
@@ -1007,7 +902,7 @@ class KCPU16TUI(App[None]):
             yield Button("Assemble ^B", id="btn-asm", variant="primary")
             yield Static(" ", classes="sep")
             yield Button("Step F7", id="btn-step", variant="primary")
-            yield Button("Fast F5", id="btn-run-full", variant="success")
+            yield Button("Fast F5", id="btn-run-fast", variant="success")
             yield Button("Max F4", id="btn-run-max", variant="success")
             yield Button("Slow F6", id="btn-run-slow", variant="success")
             yield Button("Stop F8", id="btn-stop", variant="default")
@@ -1016,6 +911,8 @@ class KCPU16TUI(App[None]):
             yield Button("BP F2", id="btn-bp", variant="default")
             yield Button("Clear F9", id="btn-clear", variant="default")
             yield Button("Help F1", id="btn-help", variant="default")
+            yield Static(" ", classes="sep")
+            yield Static("kbd OFF (TUI)", id="game-input-indicator")
             yield Static(" ", classes="sep")
             with Horizontal(id="speed-control-group"):
                 yield SpeedSlider(value=10, id="speed-slider")
@@ -1088,6 +985,7 @@ class KCPU16TUI(App[None]):
         self._w_screen_view = self.query_one("#screen-view-solo", Static)
         self._w_memory_view = self.query_one("#memory-view", Static)
         self._w_stack_view = self.query_one("#stack-view", Static)
+        self._w_game_input_indicator = self.query_one("#game-input-indicator", Static)
 
         self.machine.cold_reset()
         self.dbg.snapshot_registers(self.machine.dump_registers())
@@ -1116,9 +1014,23 @@ class KCPU16TUI(App[None]):
             self._do_open(startup_asm)
 
         self._refresh_all()
+        self._update_game_input_indicator()
         self.set_interval(1.0, self._refresh_screen_tab)
         self.set_interval(1.0, self._check_file_changes)
         self.query_one("#cmd-input", Input).focus()
+
+    def _update_game_input_indicator(self) -> None:
+        """Päivitä toolbarin game input -tilailmaisin."""
+        widget = self._w_game_input_indicator
+        if widget is None:
+            return
+
+        if self._game_input_mode:
+            widget.update("GAME INPUT ON (kbd -> emulator)")
+            widget.add_class("game-input-on")
+        else:
+            widget.update("kbd OFF (TUI)")
+            widget.remove_class("game-input-on")
 
     # ------------------------------------------------------------------
     # Painikkeet
@@ -1136,7 +1048,7 @@ class KCPU16TUI(App[None]):
             "btn-boot": self.action_boot_disk,
             "btn-asm": self.action_assemble_code,
             "btn-step": self.action_step_once,
-            "btn-run-full": self.action_run_full_speed,
+            "btn-run-fast": self.action_run_fast_speed,
             "btn-run-max": self.action_run_max_speed,
             "btn-run-slow": self.action_run_slow_speed,
             "btn-stop": self.action_stop_program,
@@ -1276,11 +1188,11 @@ class KCPU16TUI(App[None]):
         self._update_run_mode_ui()
         self._refresh_all(include_screen=True, force_screen=True)
 
-    def action_run_full_speed(self) -> None:
-        """Käynnistä CPU täydellä nopeudella (F5). Toinen painalus pysäyttää.
+    def action_run_fast_speed(self) -> None:
+        """Käynnistä CPU FAST-nopeudella (F5). Toinen painalus pysäyttää.
 
         Jos CPU on pysähtynyt (HALT/EXIT), ladataan ohjelma uudelleen ja
-        käynnistetään täydellä nopeudella.
+        käynnistetään FAST-tilassa.
         """
         if self._exec_mode == "fast":
             self.action_stop_program()
@@ -1415,6 +1327,7 @@ class KCPU16TUI(App[None]):
             return
 
         def _on_picked(filename: str | None) -> None:
+            """Load picked asm file and refresh views."""
             if filename is not None:
                 self._do_open(self.code_dir / filename)
                 self._refresh_all()
@@ -1438,6 +1351,7 @@ class KCPU16TUI(App[None]):
             return
 
         def _on_picked(filename: str | None) -> None:
+            """Boot from selected disk image and log outcome."""
             if filename is None:
                 return
             result = self._boot_from_disk_image(self.storage_dir / filename)
@@ -1480,6 +1394,7 @@ class KCPU16TUI(App[None]):
             return
 
         def _on_confirm(result: tuple) -> None:
+            """Handle save confirmation result before exiting application."""
             choice, _save_editor, save_disk = result
 
             if choice == "cancel":
@@ -1525,6 +1440,7 @@ class KCPU16TUI(App[None]):
         self._log("  Ctrl+R  Reset machine   F9      Clear VRAM")
         self._log("  F2      Toggle BP       F1      This help")
         self._log("  Ctrl+Q  Quit")
+        self._log("  Ctrl+Space  Toggle game input mode (keyboard → emulator|TUI)")
         self._log("")
         self._log("[bold]File & Assembly:[/bold]")
         self._log(
@@ -1569,6 +1485,9 @@ class KCPU16TUI(App[None]):
         self._log("  reset deep                   Memory + CPU + storage")
         self._log("  reset cpu                    CPU only (memory intact)")
         self._log("[bold]Other:[/bold]")
+        self._log(
+            "  gameinput [on|off|toggle]      Toggle game input mode from command line"
+        )
         self._log("  cls                          Clear VRAM")
         self._log("  spec                         Show architecture spec")
         self._log("  help                         This help")
@@ -1594,32 +1513,66 @@ class KCPU16TUI(App[None]):
     # Näppäimistönvälitys emulaattorille
     # ------------------------------------------------------------------
 
-    def on_key(self, event) -> None:
-        """Välitä tulostettavat merkit emulaattorin näppäimistölaitteelle.
+    def action_toggle_game_input(self) -> None:
+        """Vaihda game input -tila päälle/pois (Ctrl+Space)."""
+        self._game_input_mode = not self._game_input_mode
+        mode_text = (
+            "ENABLED (keyboard → emulator)"
+            if self._game_input_mode
+            else "DISABLED (keyboard → TUI)"
+        )
+        self._log(f"[cyan]Game Input Mode: {mode_text}[/cyan]")
+        self._update_game_input_indicator()
+        self._refresh_flags()
 
-        Kutsutaan jokaisesta näppäinpainalluksesta. Kun CPU on käynnissä ja
-        näppäimistölaite on olemassa, tulostettavat ASCII-merkit (32–126)
-        välitetään emulaattorin KeyboardDevice-jonoon – ellei käyttäjä
-        kirjoita komentokenttään (#cmd-input).
+    def on_key(self, event) -> None:
+        """Välitä näppäinpainallukset emulaattorille tai TUI:lle.
+
+        Kutsutaan jokaisesta näppäinpainalluksesta.
+        - Ctrl+Space toggles between game input mode (keyboard → emulator)
+          and TUI mode (keyboard → TUI shortcuts).
+        - Game input mode: tulostettavat ASCII-merkit (32–126) ja Enter
+          välitetään emulaattorin KeyboardDevice-jonoon. Toimii kaikissa
+          ajomoodeissa (fast, max, slow, step) kun _game_input_mode=True.
+        - TUI mode: näppäinpainallukset käytetään TUI:n pikakomentoihin.
 
         Terminaali ei tue näppäimennostotapahtumia, joten painallus ja
         vapautus lähetetään peräkkäin samasta tapahtumasta.
         """
-        if self._exec_mode not in ("fast", "max", "slow"):
+        # Toggle game input mode with Ctrl+Space
+        if event.key == "ctrl+space":
+            self.action_toggle_game_input()
             return
-        if self.machine.keyboard is None:
-            return
+
         # Älä välitä jos käyttäjä kirjoittaa komentokenttään
         cmd_input = self.query_one("#cmd-input", Input)
         if cmd_input is self.focused:
             return
-        char = event.character
-        if char is None or len(char) != 1:
-            return
-        code = ord(char)
-        if 32 <= code <= 126:  # tulostettava ASCII
-            self.machine.keyboard.push_key(code)
-            self.machine.keyboard.push_key_release(code)
+
+        # In game input mode, forward keyboard to emulator
+        if self._game_input_mode and self.machine.keyboard is not None:
+            special_ascii = {
+                "enter": 13,  # CR
+                "backspace": 8,  # BS
+                "tab": 9,  # HT
+            }
+
+            key_name = event.key.lower()
+            if key_name in special_ascii:
+                code = special_ascii[key_name]
+                self.machine.keyboard.push_key(code)
+                self.machine.keyboard.push_key_release(code)
+                event.stop()
+                return
+
+            char = event.character
+            if char is not None and len(char) == 1:
+                code = ord(char)
+                if 32 <= code <= 126:  # printable ASCII
+                    self.machine.keyboard.push_key(code)
+                    self.machine.keyboard.push_key_release(code)
+                    event.stop()
+                    return
 
     # ------------------------------------------------------------------
     # Perusoperaatiot
@@ -1905,17 +1858,6 @@ class KCPU16TUI(App[None]):
     def _run_with_breakpoints(self, max_cycles: int) -> str:
         """Suorita ohjelmaa kunnes breakpoint, HALT, EXIT tai sykliraja.
 
-        Ero machine.run()-metodiin: tämä steppaa yhden käskyn kerrallaan
-        ja tarkistaa breakpointit JOKAISEN käskyn jälkeen. machine.run()
-        ajaisi kaikki kerralla ilman breakpoint-tukea.
-
-        Suoritussilmukka:
-            1. machine.step() - suorita yksi käsky
-            2. Tarkista: halted? → palauta "HALTED"
-            3. Tarkista: process_exit? → palauta "EXITED"
-            4. Tarkista: onko uusi PC breakpointattu? → palauta "Breakpoint at..."
-            5. Toista kunnes max_cycles saavutettu
-
         Parametrit:
             max_cycles: Suurin sallittu syklimäärä (oletus 10000 F5:lle).
 
@@ -1926,23 +1868,26 @@ class KCPU16TUI(App[None]):
         if cpu.halted or cpu.process_exit_requested:
             return "[yellow]CPU stopped. Reset to continue.[/yellow]"
 
-        cycles = 0
-        while cycles < max_cycles:
-            try:
-                self.machine.step()
-            except Exception as exc:
-                self._show_cpu_crash(exc)
-                return "[bold red]CPU kaatui — ks. Output-paneeli.[/bold red]"
-            cycles += 1
-            if cpu.halted:
-                return f"[red]HALTED after {cycles} cycles.[/red]"
-            if cpu.process_exit_requested:
-                return f"[yellow]EXIT after {cycles} cycles.[/yellow]"
-            if self.dbg.has_breakpoint(self.machine.regs.pc):
-                return (
-                    f"[red]Breakpoint at 0x{self.machine.regs.pc:04X} "
-                    f"after {cycles} cycles.[/red]"
-                )
+        bps = self.dbg.breakpoints or None
+
+        try:
+            cycles, stop_reason = cpu.run_until_breakpoint_or_cycles(
+                max_cycles=max_cycles,
+                breakpoints=bps,
+            )
+        except Exception as exc:
+            self._show_cpu_crash(exc)
+            return "[bold red]CPU kaatui — ks. Output-paneeli.[/bold red]"
+
+        if stop_reason == "halted":
+            return f"[red]HALTED after {cycles} cycles.[/red]"
+        if stop_reason == "exited":
+            return f"[yellow]EXIT after {cycles} cycles.[/yellow]"
+        if stop_reason == "breakpoint":
+            return (
+                f"[red]Breakpoint at 0x{self.machine.regs.pc:04X} "
+                f"after {cycles} cycles.[/red]"
+            )
         return f"Ran {cycles} cycles. PC=0x{self.machine.regs.pc:04X}"
 
     def _update_run_mode_ui(self) -> None:
@@ -1952,27 +1897,27 @@ class KCPU16TUI(App[None]):
         Turvallinen kutsua pääsäikeessä tai call_from_thread():n kautta.
         """
         try:
-            btn_full = self.query_one("#btn-run-full", Button)
+            btn_fast = self.query_one("#btn-run-fast", Button)
             btn_max = self.query_one("#btn-run-max", Button)
             btn_slow = self.query_one("#btn-run-slow", Button)
             btn_stop = self.query_one("#btn-stop", Button)
             if self._exec_mode == "fast":
-                btn_full.variant = "warning"
+                btn_fast.variant = "warning"
                 btn_max.variant = "default"
                 btn_slow.variant = "default"
                 btn_stop.variant = "error"
             elif self._exec_mode == "max":
-                btn_full.variant = "default"
+                btn_fast.variant = "default"
                 btn_max.variant = "warning"
                 btn_slow.variant = "default"
                 btn_stop.variant = "error"
             elif self._exec_mode == "slow":
-                btn_full.variant = "default"
+                btn_fast.variant = "default"
                 btn_max.variant = "default"
                 btn_slow.variant = "warning"
                 btn_stop.variant = "error"
             else:  # stopped, step, reset
-                btn_full.variant = "success"
+                btn_fast.variant = "success"
                 btn_max.variant = "success"
                 btn_slow.variant = "success"
                 btn_stop.variant = "default"
@@ -2096,22 +2041,37 @@ class KCPU16TUI(App[None]):
             REFRESH_INTERVAL = 0.2  # sekuntia
             last_refresh = time.monotonic()
             while not worker.is_cancelled:
-                for _ in range(BATCH):
-                    if cpu.halted or cpu.process_exit_requested:
-                        break
+                if cpu.halted or cpu.process_exit_requested:
+                    break
+
+                if self.dbg.breakpoints:
                     try:
-                        self.machine.step()
+                        batch_cycles, stop_reason = cpu.run_until_breakpoint_or_cycles(
+                            max_cycles=BATCH,
+                            breakpoints=self.dbg.breakpoints,
+                        )
                     except Exception as exc:
                         self.call_from_thread(self._show_cpu_crash, exc)
                         return
-                    total_cycles += 1
-                    if self.dbg.has_breakpoint(self.machine.regs.pc):
+                    total_cycles += batch_cycles
+                    if stop_reason == "breakpoint":
                         addr = self.machine.regs.pc
                         self.call_from_thread(
                             _done,
                             f"[red]Breakpoint at 0x{addr:04X} after {total_cycles} cycles.[/red]",
                         )
                         return
+                else:
+                    try:
+                        batch_cycles, _stop_reason = cpu.run_until_breakpoint_or_cycles(
+                            max_cycles=BATCH,
+                            breakpoints=None,
+                        )
+                    except Exception as exc:
+                        self.call_from_thread(self._show_cpu_crash, exc)
+                        return
+                    total_cycles += batch_cycles
+
                 # Päivitä UI ~200ms välein
                 now = time.monotonic()
                 if now - last_refresh >= REFRESH_INTERVAL:
@@ -2412,6 +2372,7 @@ class KCPU16TUI(App[None]):
         half = (len(names) + 1) // 2
 
         def fmt_cell(name: str) -> str:
+            """Format one register entry with changed-state highlighting."""
             value = regs[name]
             h = f"0x{value:04X}"
             d = f"{value:>5}"
@@ -2493,6 +2454,12 @@ class KCPU16TUI(App[None]):
         else:
             gfx_str = f"[yellow]{gfx_val}[/]"
 
+        game_input_str = (
+            "[bold green]ON[/] [dim](keyboard → emulator)[/]"
+            if self._game_input_mode
+            else "[dim]OFF[/] [dim](keyboard → TUI)[/]"
+        )
+
         content = (
             f"{' '.join(parts)}\n"
             f"Mode: {mode}\n"
@@ -2500,6 +2467,7 @@ class KCPU16TUI(App[None]):
             f"TMR:  {tmr_str}\n"
             f"CTMR: {ctmr_str}\n"
             f"GFX:  {gfx_str}\n"
+            f"Game Input: {game_input_str}\n"
             f"Boot: {self._boot_status_text or '[dim]n/a[/]'}"
         )
         if self._w_flags_content:
@@ -2570,17 +2538,25 @@ class KCPU16TUI(App[None]):
             memory = self.machine.memory
             mode = memory.read(GFX_MODE_REG)
             vram_version = screen.get_vram_version()
+            use_text_fast = (
+                self._text_fast_mode
+                and not force
+                and mode == 0
+                and self._exec_mode in {"fast", "max", "slow"}
+            )
 
             # Dirty-check: Jos VRAM ei ole muuttunut ja GFX_MODE ei muuttunut (paitsi force)
-            # ja etupuskuri on olemassa, voi hyppää renderöinnin yli.
+            # Tekstitilassa voidaan ohittaa suoraan viime renderiin.
             if (
                 not force
                 and vram_version == self._last_vram_version
                 and mode == self._last_gfx_mode
-                and screen.has_front_buffer
+                and (mode == 0 or screen.has_front_buffer)
             ):
-                # VRAM ei muuttunut, käytä etupuskuria
-                rendered = screen.get_front_buffer()
+                if mode == 0:
+                    rendered = self._last_screen_render
+                else:
+                    rendered = screen.get_front_buffer()
             elif mode in (GFX_MODE_B, GFX_MODE_C):
                 # Grafiikkatilat B/C: kaksoisbufferointi käytössä.
                 # Etupuskuri renderöidään atomisesti CPU._write_word():ssä kun
@@ -2593,8 +2569,32 @@ class KCPU16TUI(App[None]):
                     # Näytä viimeisin atomiesti flipattu kehys
                     rendered = screen.get_front_buffer()
             else:
-                # Tekstitila A: ei kaksoisbufferointia, renderöi aina suoraan VRAMista
-                rendered = screen.render_auto(memory)
+                # Tekstitila A: fast-tiloissa käytä kevyttä text-only renderiä,
+                # ja päivitä dirty-spanin mukaan vain muuttuneet rivit.
+                if use_text_fast and self._last_screen_lines is not None:
+                    span = screen.consume_dirty_span()
+                    if span is not None:
+                        first_row = span[0] // screen.cols
+                        last_row = span[1] // screen.cols
+                        lines = self._last_screen_lines[:]
+                        row_base = VRAM_START + (first_row * screen.cols)
+                        for row in range(first_row, last_row + 1):
+                            chars: list[str] = []
+                            addr = row_base
+                            for _ in range(screen.cols):
+                                word = memory.read(addr)
+                                ch = chr(word & 0xFF)
+                                chars.append(ch if 32 <= ord(ch) < 127 else " ")
+                                addr += 1
+                            lines[row] = "".join(chars)
+                            row_base += screen.cols
+                        rendered = "\n".join(lines)
+                    else:
+                        rendered = screen.render_text(memory)
+                elif use_text_fast:
+                    rendered = screen.render_text(memory)
+                else:
+                    rendered = screen.render_auto(memory)
 
             # Päivitä tracked versiot (dirty-checkia varten seuraavaa kutsua)
             self._last_vram_version = vram_version
@@ -2602,6 +2602,10 @@ class KCPU16TUI(App[None]):
 
             if rendered != self._last_screen_render:
                 self._last_screen_render = rendered
+                if mode == 0:
+                    self._last_screen_lines = rendered.split("\n")
+                else:
+                    self._last_screen_lines = None
                 if self._w_screen_view:
                     self._w_screen_view.update(rendered)
         except Exception:
@@ -2693,9 +2697,7 @@ class KCPU16TUI(App[None]):
         line_no = self.addr_to_line.get(pc)
         if line_no:
             line_info = f" [dim](line {line_no})[/dim]"
-        self._log(
-            f"[dim]IC={ic}[/dim] PC=0x{pc:04X}: " f"[bold]{instr}[/bold]{line_info}"
-        )
+        self._log(f"[dim]IC={ic}[/dim] PC=0x{pc:04X}: [bold]{instr}[/bold]{line_info}")
         if self.machine.cpu.halted:
             self._log("[bold red]CPU halted (HALT).[/bold red]")
         elif self.machine.process_exited:

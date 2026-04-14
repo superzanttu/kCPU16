@@ -55,20 +55,21 @@ Sisältö skrollautuu pystysuunnassa. Alareunassa komentorivisyöte (`>`).
 
 # 3. Näppäinsidonnaisuudet
 
-| Näppäin  | Toiminto                             |
-| -------- | ------------------------------------ |
-| F1       | Ohje                                 |
-| F2       | Vaihda breakpoint nykyisellä rivillä |
-| F4       | Aja MAX-nopeudella (MAX)             |
-| F5       | Aja nopeasti (FAST)                  |
-| F6       | Aja hitaasti (SLOW)                  |
-| F7 / F10 | Step (1 käsky kerrallaan)            |
-| F8       | Pysäytä ajo                          |
-| F9       | Tyhjennä VRAM                        |
-| Ctrl+B   | Assembloi koodi                      |
-| Ctrl+O   | Avaa tiedosto                        |
-| Ctrl+R   | Reset kone                           |
-| Ctrl+Q   | Lopeta                               |
+| Näppäin    | Toiminto                             |
+| ---------- | ------------------------------------ |
+| F1         | Ohje                                 |
+| F2         | Vaihda breakpoint nykyisellä rivillä |
+| F4         | Aja MAX-nopeudella (MAX)             |
+| F5         | Aja nopeasti (FAST)                  |
+| F6         | Aja hitaasti (SLOW)                  |
+| F7 / F10   | Step (1 käsky kerrallaan)            |
+| F8         | Pysäytä ajo                          |
+| F9         | Tyhjennä VRAM                        |
+| Ctrl+B     | Assembloi koodi                      |
+| Ctrl+O     | Avaa tiedosto                        |
+| Ctrl+Space | Vaihda Game Input ON/OFF             |
+| Ctrl+R     | Reset kone                           |
+| Ctrl+Q     | Lopeta                               |
 
 ---
 
@@ -201,30 +202,41 @@ Valittu nappi korostuu. Oletuksena `x1` on valittuna.
 ## Huomioita
 
 - Nopeuden muutos vaikuttaa **heti** jos CPU on käynnissä SLOW-tilassa — uudelleenkäynnistystä ei tarvita.
-- Very suuria kerroimen arvoja (x100 + säädin max) käyttäessä suoritusnopeus voi ylittää FULL-tilan nopeuden — tässä tilanteessa suoritus on silti yksikäskyinen eikä yhtä tehokas kuin FULL-tila (erä-suoritus).
+- Erittäin suuria kerroimen arvoja (x100 + säädin max) käyttäessä suoritusnopeus voi ylittää FAST-tilan nopeuden — tässä tilanteessa suoritus on silti yksikäskyinen eikä yhtä tehokas kuin FAST-tila (erä-suoritus).
 - Liukusäädin käyttää **logaritmista asteikkoa**, joten se antaa enemmän tarkkuutta pienillä nopeuksilla (esim. 1–10 IPS) ja suuremmilla harppauksin suurilla nopeuksilla.
 
 ---
 
 # 8. Näppäimenpainallukset ja emulaattori
 
-TUI välittää näppäimenpainallukset emulaattorin näppäimistölaitteelle (KeyboardDevice) tietyissä olosuhteissa.
+TUI välittää näppäimenpainallukset emulaattorin näppäimistölaitteelle (KeyboardDevice), kun Game Input -tila on päällä.
+
+## Game Input -tilan kytkentä
+
+- Pikanäppäin: `Ctrl+Space` (toggle ON/OFF)
+- Komentovaihtoehto: `gameinput on`, `gameinput off`, `gameinput toggle`
+- Visuaalinen tila näkyy toolbarissa:
+  - `GAME INPUT ON (kbd -> emulator)` (korostettu)
+  - `kbd OFF (TUI)`
 
 ## Milloin näppäimet välitetään
 
-Näppäimenpainallus välitetään emulaattorille **vain** kun kaikki seuraavat ehdot täyttyyvät:
+Näppäin välitetään emulaattorille, kun kaikki seuraavat ehdot täyttyvät:
 
-1. Suoritustila on **FAST**, **MAX** tai **SLOW** — CPU on siis käynnissä
-2. Emulaattorissa on näppäimistölaite (`keyboard`-laite määritelty)
-3. Käyttäjä ei kirjoita komentokenttään (`>`) — komentokenttä on aktiivinen
-4. Painettu merkki on tulostettava ASCII-merkki (kooditävälitä 32–126)
+1. Game Input -tila on päällä
+2. Emulaattorissa on näppäimistölaite (`keyboard` käytössä)
+3. Käyttäjä ei kirjoita komentokenttään (`>`)
+4. Näppäin on jokin näistä:
+   - tulostettava ASCII (32–126)
+   - Enter (CR, 13)
+   - Backspace (BS, 8)
+   - Tab (HT, 9)
 
 ## Mitä ei välitetä
 
-- Funktionaäppäimet (F1–F10), nuolinäppäimet, Ctrl-yhdistelmät — nämä ovat TUI:n omia pikavalin-
-  toja eivätkä kulje emulaattorille
-- Näppäimet **STOPPED**-, **STEP**- tai **RESET**-tiloissa — CPU ei ole käynnissä
-- Komentokenttään kirjoitettavat merkit — komento syöte käsitellään TUI:ssa
+- Funktionäppäimet (F1–F10), nuolinäppäimet ja muut TUI:n pikakomennot
+- Komentokenttään kirjoitetut merkit
+- Näppäimet silloin, kun Game Input -tila on pois päältä
 
 ## Toteutuksen rajoitteet
 
@@ -234,14 +246,14 @@ Terminaali ei tue **näppäimennostoihin** (key release) perustuvia tapahtumia. 
 
 ## Yhteenveto eri suoritustiloissa
 
-| Tila      | Näppäimet emulaattorille |
-| --------- | ------------------------ |
-| `STOPPED` | Ei                       |
-| `STEP`    | Ei                       |
-| `FAST`    | Kyllä (ASCII 32–126)     |
-| `MAX`     | Kyllä (ASCII 32–126)     |
-| `SLOW`    | Kyllä (ASCII 32–126)     |
-| `RESET`   | Ei                       |
+| Tila      | Näppäimet emulaattorille (Game Input ON) |
+| --------- | ---------------------------------------- |
+| `STOPPED` | Kyllä                                    |
+| `STEP`    | Kyllä                                    |
+| `FAST`    | Kyllä                                    |
+| `MAX`     | Kyllä                                    |
+| `SLOW`    | Kyllä                                    |
+| `RESET`   | Kyllä                                    |
 
 ---
 

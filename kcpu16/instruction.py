@@ -206,6 +206,11 @@ OPCODE_TABLE: dict[int, tuple[str, int, bool]] = {
         3,
         False,
     ),  # FILL regStart, regEnd, regVal  Täytä muistialue [regStart..regEnd] arvolla regVal
+    _op(0, 1, 12, 3): (
+        "COPY",
+        3,
+        False,
+    ),  # COPY regStart, regEnd, regDst  Kopioi muistialue [regStart..regEnd] osoitteeseen regDst
     # -------------------------------------------------------------------------
     # GRP 2: ARITMEETTISET KASKYT (Arithmetic)
     #   Opcoodet: 0x2080-0x2580  (P=0, GRP=2, OPS=2)
@@ -341,73 +346,212 @@ EXEC_CYCLES: dict[str, int] = {
     # -------------------------------------------------------------------------
     # GRP 1: TIEDONSIIRTOKASKYT
     # -------------------------------------------------------------------------
-    "LOAD":       1,  # Vakion lataus rekisteriin
-    "CPY":        1,  # Rekisteri -> rekisteri
-    "READ":       1,  # Muistiosoiteluku
-    "STORE":      1,  # Muistiosoitekirjoitus
-    "READ_IND":   1,  # Epäsuora luku [reg]
-    "STORE_IND":  1,  # Epäsuora kirjoitus [reg]
-    "READ_REL":   1,  # Suhteellinen luku [FP+imm]
-    "STORE_REL":  1,  # Suhteellinen kirjoitus [FP+imm]
-    "STOREI":     1,  # Välitön kirjoitus muistiin
+    "LOAD": 1,  # Vakion lataus rekisteriin
+    "CPY": 1,  # Rekisteri -> rekisteri
+    "READ": 1,  # Muistiosoiteluku
+    "STORE": 1,  # Muistiosoitekirjoitus
+    "READ_IND": 1,  # Epäsuora luku [reg]
+    "STORE_IND": 1,  # Epäsuora kirjoitus [reg]
+    "READ_REL": 1,  # Suhteellinen luku [FP+imm]
+    "STORE_REL": 1,  # Suhteellinen kirjoitus [FP+imm]
+    "STOREI": 1,  # Välitön kirjoitus muistiin
     "STOREI_IND": 1,  # Välitön kirjoitus [reg]
     "STOREI_REL": 1,  # Välitön kirjoitus [FP+imm]
-    "FILL":       1,  # Perussykli; cpu.py lisää täytettävät sanat dynaamisesti
+    "FILL": 1,  # Perussykli; cpu.py lisää täytettävät sanat dynaamisesti
+    "COPY": 1,  # Perussykli; cpu.py lisää kopioitavien sanojen määrän dynaamisesti
     # -------------------------------------------------------------------------
     # GRP 2: ARITMEETTISET KASKYT
     # -------------------------------------------------------------------------
-    "ADD":        1,  # Yhteenlasku
-    "SUB":        1,  # Vähennyslasku
-    "MUL":        4,  # Kertolasku (monimutkaisempi)
-    "DIV":        8,  # Jakolasku (monimutkaisin)
-    "CMP":        1,  # Vertailu
-    "ADC":        1,  # Yhteenlasku Carry-lipulla
+    "ADD": 1,  # Yhteenlasku
+    "SUB": 1,  # Vähennyslasku
+    "MUL": 4,  # Kertolasku (monimutkaisempi)
+    "DIV": 8,  # Jakolasku (monimutkaisin)
+    "CMP": 1,  # Vertailu
+    "ADC": 1,  # Yhteenlasku Carry-lipulla
     # -------------------------------------------------------------------------
     # GRP 3: LOGIIKKA JA BITTIKASKYT
     # -------------------------------------------------------------------------
-    "AND":        1,
-    "OR":         1,
-    "XOR":        1,
-    "NOT":        1,
-    "SHL":        1,  # Looginen siirto vasemmalle
-    "SHR":        1,  # Looginen siirto oikealle
+    "AND": 1,
+    "OR": 1,
+    "XOR": 1,
+    "NOT": 1,
+    "SHL": 1,  # Looginen siirto vasemmalle
+    "SHR": 1,  # Looginen siirto oikealle
     # -------------------------------------------------------------------------
     # GRP 4: PINOKASKYT
     # -------------------------------------------------------------------------
-    "PUSH":       1,
-    "POP":        1,
-    "SWSP":       1,  # Pino-osoittimen vaihto
+    "PUSH": 1,
+    "POP": 1,
+    "SWSP": 1,  # Pino-osoittimen vaihto
     # -------------------------------------------------------------------------
     # GRP 5: OHJAUSRAKENNEKASKYT
     # -------------------------------------------------------------------------
-    "JUMP":       1,
-    "CALL":       2,  # Push + hyppy
-    "RET":        2,  # Pop
-    "JZ":         1,
-    "JNZ":        1,
-    "JLT":        1,
-    "JGT":        1,
-    "JLE":        1,
-    "JGE":        1,
-    "JMPI":       2,  # Indeksoitu hyppy (perussykli; taulukon koko ignoroitu)
-    "CALLI":      2,  # Indeksoitu kutsu (perussykli)
+    "JUMP": 1,
+    "CALL": 2,  # Push + hyppy
+    "RET": 2,  # Pop
+    "JZ": 1,
+    "JNZ": 1,
+    "JLT": 1,
+    "JGT": 1,
+    "JLE": 1,
+    "JGE": 1,
+    "JMPI": 2,  # Indeksoitu hyppy (perussykli; taulukon koko ignoroitu)
+    "CALLI": 2,  # Indeksoitu kutsu (perussykli)
     # -------------------------------------------------------------------------
     # GRP 6: KESKEYTYKSET
     # -------------------------------------------------------------------------
-    "INT":        4,  # Ohjelmallinen keskeytys (tallentaa tilan)
-    "IRET":       4,  # Paluu keskeytyksestä (palauttaa tilan)
-    "STI":        1,
-    "CLI":        1,
+    "INT": 4,  # Ohjelmallinen keskeytys (tallentaa tilan)
+    "IRET": 4,  # Paluu keskeytyksestä (palauttaa tilan)
+    "STI": 1,
+    "CLI": 1,
     # -------------------------------------------------------------------------
     # GRP 7: JARJESTELMA JA IO
     # -------------------------------------------------------------------------
-    "HALT":       1,
-    "DREAD":     10,  # I/O-operaatio (hidas)
-    "DWRITE":    10,  # I/O-operaatio (hidas)
-    "SMPR":       1,
-    "STMR":       1,
-    "SCTMR":      1,
-    "EXIT":       4,  # Prosessin lopetus (tallentaa tilan)
-    "TSL":        2,  # Lue-muokkaa-kirjoita (atomi)
-    "NOP":        1,
+    "HALT": 1,
+    "DREAD": 10,  # I/O-operaatio (hidas)
+    "DWRITE": 10,  # I/O-operaatio (hidas)
+    "SMPR": 1,
+    "STMR": 1,
+    "SCTMR": 1,
+    "EXIT": 4,  # Prosessin lopetus (tallentaa tilan)
+    "TSL": 2,  # Lue-muokkaa-kirjoita (atomi)
+    "NOP": 1,
 }
+
+
+# =============================================================================
+# YHTENAINEN INSTRUCTION METADATA -KERROS
+# =============================================================================
+
+# Operandityyppien sanasto (lyhyet avaimet):
+#   reg      = rekisteri-indeksi
+#   imm      = valiton arvo
+#   addr     = absoluuttinen osoite
+#   offset   = FP-suhteinen offset
+#   int_no   = keskeytysnumero
+#   target   = hyppyosoite
+#   reg_list = JMPI/CALLI-indeksirekisteri
+#   target_list = JMPI/CALLI-kohdeosoitteet (muuttuva pituus)
+OPERAND_TYPE_TABLE: dict[str, tuple[str, ...]] = {
+    # Transfer
+    "LOAD": ("reg", "imm"),
+    "CPY": ("reg", "reg"),
+    "READ": ("reg", "addr"),
+    "STORE": ("reg", "addr"),
+    "READ_IND": ("reg", "reg"),
+    "STORE_IND": ("reg", "reg"),
+    "READ_REL": ("reg", "offset"),
+    "STORE_REL": ("reg", "offset"),
+    "STOREI": ("imm", "addr"),
+    "STOREI_IND": ("reg", "imm"),
+    "STOREI_REL": ("imm", "offset"),
+    "FILL": ("reg", "reg", "reg"),
+    "COPY": ("reg", "reg", "reg"),
+    # Arithmetic
+    "ADD": ("reg", "reg"),
+    "SUB": ("reg", "reg"),
+    "MUL": ("reg", "reg"),
+    "DIV": ("reg", "reg"),
+    "CMP": ("reg", "reg"),
+    "ADC": ("reg", "reg"),
+    # Logic
+    "AND": ("reg", "reg"),
+    "OR": ("reg", "reg"),
+    "XOR": ("reg", "reg"),
+    "NOT": ("reg",),
+    "SHL": ("reg", "reg"),
+    "SHR": ("reg", "reg"),
+    # Stack
+    "PUSH": ("reg",),
+    "POP": ("reg",),
+    "SWSP": ("reg", "reg"),
+    # Flow
+    "JUMP": ("target",),
+    "CALL": ("target",),
+    "RET": (),
+    "JZ": ("target",),
+    "JNZ": ("target",),
+    "JLT": ("target",),
+    "JGT": ("target",),
+    "JLE": ("target",),
+    "JGE": ("target",),
+    "JMPI": ("reg_list", "target_list"),
+    "CALLI": ("reg_list", "target_list"),
+    # Interrupt
+    "INT": ("int_no",),
+    "IRET": (),
+    "STI": (),
+    "CLI": (),
+    # System
+    "HALT": (),
+    "DREAD": ("reg", "reg"),
+    "DWRITE": ("reg", "reg"),
+    "SMPR": ("reg",),
+    "STMR": ("reg",),
+    "SCTMR": ("reg",),
+    "EXIT": (),
+    "TSL": ("reg", "addr"),
+    "NOP": (),
+}
+
+VARIABLE_LENGTH_MNEMONICS: frozenset[str] = frozenset({"JMPI", "CALLI"})
+
+DEPRECATED_ASSEMBLER_MNEMONICS: frozenset[str] = frozenset(
+    {
+        "READ_IND",
+        "READ_REL",
+        "STORE_IND",
+        "STORE_REL",
+        "STOREI",
+        "STOREI_IND",
+        "STOREI_REL",
+    }
+)
+
+
+def get_operand_types(mnemonic: str) -> tuple[str, ...]:
+    """Palauta mnemoniikan operandityypit tyhjana tuplena jos tuntematon."""
+    return OPERAND_TYPE_TABLE.get(mnemonic.upper(), ())
+
+
+def is_variable_length_mnemonic(mnemonic: str) -> bool:
+    """Palauta True jos mnemoniikka on muuttuvan mittainen (esim. JMPI/CALLI)."""
+    return mnemonic.upper() in VARIABLE_LENGTH_MNEMONICS
+
+
+def is_deprecated_assembler_mnemonic(mnemonic: str) -> bool:
+    """Palauta True jos mnemoniikka kuuluu [..]-syntaksin korvaamiin vanhoihin muotoihin."""
+    return mnemonic.upper() in DEPRECATED_ASSEMBLER_MNEMONICS
+
+
+def format_disasm_memory_syntax(
+    mnemonic: str,
+    operands: list[int],
+    reg_name_lookup: dict[int, str],
+) -> str | None:
+    """Muotoile muistioperaatiot [..]-syntaksilla disassemblerin kayttoon."""
+
+    def r(idx: int) -> str:
+        """Return readable register name for operand index."""
+        return reg_name_lookup.get(idx, f"?{idx}")
+
+    key = mnemonic.upper()
+    if key == "READ" and len(operands) >= 2:
+        return f"LOAD {r(operands[0])}, [0x{operands[1]:04X}]"
+    if key == "READ_IND" and len(operands) >= 2:
+        return f"LOAD {r(operands[0])}, [{r(operands[1])}]"
+    if key == "READ_REL" and len(operands) >= 2:
+        return f"LOAD {r(operands[0])}, [FP+{operands[1]}]"
+    if key == "STORE" and len(operands) >= 2:
+        return f"STORE [0x{operands[1]:04X}], {r(operands[0])}"
+    if key == "STOREI" and len(operands) >= 2:
+        return f"STORE [0x{operands[1]:04X}], {operands[0]}"
+    if key == "STORE_IND" and len(operands) >= 2:
+        return f"STORE [{r(operands[0])}], {r(operands[1])}"
+    if key == "STOREI_IND" and len(operands) >= 2:
+        return f"STORE [{r(operands[0])}], {operands[1]}"
+    if key == "STORE_REL" and len(operands) >= 2:
+        return f"STORE [FP+{operands[1]}], {r(operands[0])}"
+    if key == "STOREI_REL" and len(operands) >= 2:
+        return f"STORE [FP+{operands[1]}], {operands[0]}"
+    return None

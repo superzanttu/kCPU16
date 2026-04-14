@@ -88,7 +88,11 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .constants import ARCH_SYMBOLS, BOOT_RAM_START, STORAGE_BLOCK_SIZE, WORD_MASK
-from .instruction import OPCODE_TABLE
+from .instruction import (
+    OPCODE_TABLE,
+    is_deprecated_assembler_mnemonic,
+    is_variable_length_mnemonic,
+)
 
 
 # =============================================================================
@@ -120,19 +124,6 @@ REGISTER_TO_ID: dict[str, int] = {
 # Kaanteinen hakutaulukko: mnemonic -> opcode
 # Luodaan OPCODE_TABLE:sta kaantamalla avain-arvot
 MNEMONIC_TO_OPCODE: dict[str, int] = {v[0]: k for k, v in OPCODE_TABLE.items()}
-
-# Mnemoniikat jotka on korvattu [..] syntaksilla — suorat viittaukset hylätään
-_DEPRECATED_MNEMONICS: frozenset[str] = frozenset(
-    {
-        "READ_IND",
-        "READ_REL",
-        "STORE_IND",
-        "STORE_REL",
-        "STOREI",
-        "STOREI_IND",
-        "STOREI_REL",
-    }
-)
 
 
 @dataclass(slots=True, frozen=True)
@@ -420,8 +411,7 @@ class Assembler:
             for token in normalized.split():
                 if "=" not in token:
                     raise ValueError(
-                        ".bootblock: options must use key=value syntax "
-                        f"(got {token!r})"
+                        f".bootblock: options must use key=value syntax (got {token!r})"
                     )
                 key, value = token.split("=", 1)
                 key = key.strip().lower()
@@ -791,8 +781,7 @@ class Assembler:
                 )
             if name in reserved_reg:
                 raise ValueError(
-                    f".const '{name}': nimi on rekisterin nimi — "
-                    f"valitse toinen nimi"
+                    f".const '{name}': nimi on rekisterin nimi — valitse toinen nimi"
                 )
 
         # Rakennetaan yhteinen symbolitaulukko: arch_sym + user_constants
@@ -872,7 +861,7 @@ class Assembler:
             parts = line.replace(",", " ").split()
             mnemonic = parts[0].upper()
 
-            if mnemonic in _DEPRECATED_MNEMONICS:
+            if is_deprecated_assembler_mnemonic(mnemonic):
                 raise ValueError(
                     f"Vanhentunut mnemoniikka '{mnemonic}' — käytä [..] syntaksia: "
                     f"READ reg, [osoite]  tai  STORE [osoite], reg/arvo"
@@ -884,7 +873,7 @@ class Assembler:
                 )
             if mnemonic == "STORE" and len(parts) >= 2 and not parts[1].startswith("["):
                 raise ValueError(
-                    f"STORE vaatii [..] osoitussyntaksin: STORE [osoite], reg/arvo"
+                    "STORE vaatii [..] osoitussyntaksin: STORE [osoite], reg/arvo"
                 )
 
             # Hae opcode ja operandien maara
@@ -895,7 +884,7 @@ class Assembler:
             _, operand_count, _ = OPCODE_TABLE[opcode]
             # Erityiskasky: JMPI/CALLI — muuttuvanmittainen
             # Rakenne: opcode + reg + count + kohteet
-            if mnemonic in ("JMPI", "CALLI"):
+            if is_variable_length_mnemonic(mnemonic):
                 n_targets = (
                     len(parts) - 2
                 )  # kaikki osat paitsi mnemoniikka ja rekisteri
@@ -1075,7 +1064,7 @@ class Assembler:
 
             # ---------------------------------------------------------------
 
-            if mnemonic in _DEPRECATED_MNEMONICS:
+            if is_deprecated_assembler_mnemonic(mnemonic):
                 raise ValueError(
                     f"Vanhentunut mnemoniikka '{mnemonic}' — käytä [..] syntaksia: "
                     f"READ reg, [osoite]  tai  STORE [osoite], reg/arvo"
@@ -1087,7 +1076,7 @@ class Assembler:
                 )
             if mnemonic == "STORE" and len(parts) >= 2 and not parts[1].startswith("["):
                 raise ValueError(
-                    f"STORE vaatii [..] osoitussyntaksin: STORE [osoite], reg/arvo"
+                    "STORE vaatii [..] osoitussyntaksin: STORE [osoite], reg/arvo"
                 )
 
             # Hae opcode
@@ -1098,7 +1087,7 @@ class Assembler:
             # Erityiskasky: JMPI/CALLI — muuttuvanmittainen indeksoitu hyppy/kutsu
             # Syntaksi:  JMPI reg, kohde0, kohde1, ...
             # Koodaus:   opcode | reg_id | count | addr[0] | ... | addr[count-1]
-            if mnemonic in ("JMPI", "CALLI"):
+            if is_variable_length_mnemonic(mnemonic):
                 self._source_map.append(
                     (raw_line.strip(), current_start + len(current_words))
                 )
@@ -1205,7 +1194,7 @@ class Assembler:
             return int(upper, 0)
         except ValueError:
             raise ValueError(
-                f"Tuntematon operandi: '{token}' " f"(ei rekisteri, label eikä luku)"
+                f"Tuntematon operandi: '{token}' (ei rekisteri, label eikä luku)"
             )
 
     def _parse_dw_values(self, line: str) -> list[int]:

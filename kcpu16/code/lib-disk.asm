@@ -1108,8 +1108,8 @@ disk_read:
         STORE [_dr_max_words], R2
         CPY   R9, R0
 
-        ; Etsi tiedosto
-        CALL  disk_find
+        ; Etsi tiedosto tai hakemisto
+        CALL  disk_find_any
         READ  R1, DISK_ERR_NOT_FOUND
         CMP   R0, R1
         JZ    _dr_not_found

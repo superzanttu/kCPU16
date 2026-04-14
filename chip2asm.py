@@ -26,6 +26,7 @@ def sanitize_module_name(name: str) -> str:
 
 
 def format_db_rows(data: bytes, bytes_per_line: int) -> list[str]:
+    """Format binary payload as indented .db rows for output asm."""
     rows: list[str] = []
     for index in range(0, len(data), bytes_per_line):
         chunk = data[index : index + bytes_per_line]
@@ -35,6 +36,7 @@ def format_db_rows(data: bytes, bytes_per_line: int) -> list[str]:
 
 
 def format_word(value: int) -> str:
+    """Format an integer as 16-bit uppercase hexadecimal word literal."""
     if value < 0 or value > 0xFFFF:
         raise ValueError(f"value out of 16-bit range: {value}")
     return f"0x{value:04X}"
@@ -67,6 +69,7 @@ def build_output(
     data: bytes,
     bytes_per_line: int,
 ) -> str:
+    """Build the full generated assembly module text."""
     prefix = f"chip8_mod_{sanitize_module_name(module_name)}"
     end_addr_word = compute_module_end_addr_word(load_addr, len(data))
     source_name = source_path.name.replace("\\", "\\\\").replace('"', '\\"')
@@ -117,6 +120,7 @@ def convert_file(
     load_addr: int,
     bytes_per_line: int,
 ) -> None:
+    """Read input binary and write generated include module to output path."""
     if load_addr < 0 or load_addr > 0xFFFF:
         raise ValueError("load address must be in range 0..0xFFFF")
     if bytes_per_line < 1:
@@ -138,6 +142,7 @@ def convert_file(
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
+    """Parse command-line arguments for the converter CLI."""
     parser = argparse.ArgumentParser(
         description=(
             "Convert CHIP-8 .ch8 binary into a kCPU16 .asm include module "
@@ -175,6 +180,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """CLI entry point; return process exit code."""
     args = parse_args(sys.argv[1:] if argv is None else argv)
     input_path: Path = args.input
     output_path: Path = args.output or input_path.with_suffix(".asm")
