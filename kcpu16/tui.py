@@ -741,13 +741,14 @@ class KCPU16TUI(App[None], TUIRenderMixin, TUICommandsMixin):
         height: 1fr;
     }
 
-    #game-input-indicator {
+    #btn-game-input {
         width: 30;
         height: 1;
-        content-align: center middle;
+        min-width: 30;
+        background: transparent;
         color: #a0a0a0;
     }
-    #game-input-indicator.game-input-on {
+    #btn-game-input.game-input-on {
         color: #101010;
         background: #ffd75f;
         text-style: bold;
@@ -856,7 +857,7 @@ class KCPU16TUI(App[None], TUIRenderMixin, TUICommandsMixin):
         self._w_screen_view: Static | None = None
         self._w_memory_view: Static | None = None
         self._w_stack_view: Static | None = None
-        self._w_game_input_indicator: Static | None = None
+        self._w_game_input_indicator: Button | None = None
         self._output_buffer: list[str] = []
         self._boot_status_text: str | None = None
         self._disk_dirty: bool = False
@@ -916,7 +917,7 @@ class KCPU16TUI(App[None], TUIRenderMixin, TUICommandsMixin):
             yield Button("Clear F9", id="btn-clear", variant="default")
             yield Button("Help F1", id="btn-help", variant="default")
             yield Static(" ", classes="sep")
-            yield Static("kbd OFF (TUI)", id="game-input-indicator")
+            yield Button("kbd OFF (TUI)", id="btn-game-input", variant="default")
             yield Static(" ", classes="sep")
             with Horizontal(id="speed-control-group"):
                 yield SpeedSlider(value=10, id="speed-slider")
@@ -989,7 +990,7 @@ class KCPU16TUI(App[None], TUIRenderMixin, TUICommandsMixin):
         self._w_screen_view = self.query_one("#screen-view-solo", Static)
         self._w_memory_view = self.query_one("#memory-view", Static)
         self._w_stack_view = self.query_one("#stack-view", Static)
-        self._w_game_input_indicator = self.query_one("#game-input-indicator", Static)
+        self._w_game_input_indicator = self.query_one("#btn-game-input", Button)
 
         self.machine.cold_reset()
         self.dbg.snapshot_registers(self.machine.dump_registers())
@@ -1030,10 +1031,10 @@ class KCPU16TUI(App[None], TUIRenderMixin, TUICommandsMixin):
             return
 
         if self._game_input_mode:
-            widget.update("GAME INPUT ON (kbd -> emulator)")
+            widget.label = "GAME INPUT ON (kbd -> emulator)"
             widget.add_class("game-input-on")
         else:
-            widget.update("kbd OFF (TUI)")
+            widget.label = "kbd OFF (TUI)"
             widget.remove_class("game-input-on")
 
     # ------------------------------------------------------------------
@@ -1060,6 +1061,7 @@ class KCPU16TUI(App[None], TUIRenderMixin, TUICommandsMixin):
             "btn-bp": self.action_toggle_breakpoint,
             "btn-clear": self.action_clear_screen,
             "btn-help": self.action_show_help,
+            "btn-game-input": self.action_toggle_game_input,
         }
         action = actions.get(event.button.id)
         if action:
