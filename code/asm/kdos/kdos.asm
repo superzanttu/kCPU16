@@ -119,6 +119,8 @@ cmd_format:
         .dstr "format"
 cmd_ls:
         .dstr "ls"
+cmd_dir:
+        .dstr "dir"
 cmd_mkdir:
         .dstr "mkdir"
 cmd_cd:
@@ -129,6 +131,8 @@ cmd_touch:
         .dstr "touch"
 cmd_rm:
         .dstr "rm"
+cmd_del:
+        .dstr "del"
 cmd_run:
         .dstr "run"
 cmd_dotdot:
@@ -951,7 +955,9 @@ main_loop:
         READ  R0, str_empty_prompt
         READ  R1, input_buf
         READ  R2, 64
+        CALL  scr_cursor_blink_on
         CALL  scr_input
+        CALL  scr_cursor_blink_off
 
         READ  R0, input_buf
         CALL  parse_input
@@ -1021,7 +1027,14 @@ _cmd_ls:
         CALL  str_eq2
         READ  R1, 1
         CMP   R0, R1
+        JZ    _cmd_ls_run
+        READ  R0, cmd_buf
+        READ  R1, cmd_dir
+        CALL  str_eq2
+        READ  R1, 1
+        CMP   R0, R1
         JNZ   _cmd_mkdir
+_cmd_ls_run:
         CALL  ensure_storage_ready
         READ  R1, 0
         CMP   R0, R1
@@ -1251,7 +1264,14 @@ _cmd_rm:
         CALL  str_eq2
         READ  R1, 1
         CMP   R0, R1
+        JZ    _cmd_rm_run
+        READ  R0, cmd_buf
+        READ  R1, cmd_del
+        CALL  str_eq2
+        READ  R1, 1
+        CMP   R0, R1
         JNZ   _cmd_run
+_cmd_rm_run:
         CALL  ensure_storage_ready
         READ  R1, 0
         CMP   R0, R1
