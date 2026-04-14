@@ -37,7 +37,11 @@
 ;     Offset 20    : muokkausaika_y (vuosi)
 ;     Offset 21    : muokkausaika_md (kuukausi << 8 | päivä)
 ;     Offset 22    : ensimmäinen_blokki (blokki-indeksi, tai 0 jos koko=0)
-;     Offset 23–31 : varattu (täytetty nollilla)
+;     Offset 23    : luontiaika_hm  (tunti << 8 | minuutti)
+;     Offset 24    : luontiaika_s   (sekunti)
+;     Offset 25    : muokkausaika_hm (tunti << 8 | minuutti)
+;     Offset 26    : muokkausaika_s  (sekunti)
+;     Offset 27–31 : varattu (täytetty nollilla)
 ;
 ; TOIMINNOT:
 ;   disk_format        — Alusta tiedostojärjestelmä (tyhjennä FAT + hakemisto)
@@ -707,6 +711,22 @@ _dc_free_found:
         READ  R1, 0
         STORE [R0], R1
 
+        ; Luonti- ja muokkauskellonaika (hh:mm:ss)
+        READ  R4, [CLOCK_HOUR]
+        READ  R5, 8
+        SHL   R4, R5
+        READ  R5, [CLOCK_MINUTE]
+        OR    R4, R5              ; R4 = tunti<<8 | minuutti
+        READ  R5, [CLOCK_SECOND]  ; R5 = sekunti
+        ADD   R0, R2              ; offset 23: luonti_hm
+        STORE [R0], R4
+        ADD   R0, R2              ; offset 24: luonti_s
+        STORE [R0], R5
+        ADD   R0, R2              ; offset 25: muokkaus_hm
+        STORE [R0], R4
+        ADD   R0, R2              ; offset 26: muokkaus_s
+        STORE [R0], R5
+
         ; Kirjoita hakemisto takaisin levylle
         READ  R0, DISK_DIR_BLOCK
         CALL  _disk_write_block
@@ -822,6 +842,22 @@ _dm_free_found:
         ; Ensimmäinen blokki = 0 (hakemistot eivät käytä datablokkeja tässä toteutuksessa)
         READ  R1, 0
         STORE [R0], R1
+
+        ; Luonti- ja muokkauskellonaika (hh:mm:ss)
+        READ  R4, [CLOCK_HOUR]
+        READ  R5, 8
+        SHL   R4, R5
+        READ  R5, [CLOCK_MINUTE]
+        OR    R4, R5              ; R4 = tunti<<8 | minuutti
+        READ  R5, [CLOCK_SECOND]  ; R5 = sekunti
+        ADD   R0, R2              ; offset 23: luonti_hm
+        STORE [R0], R4
+        ADD   R0, R2              ; offset 24: luonti_s
+        STORE [R0], R5
+        ADD   R0, R2              ; offset 25: muokkaus_hm
+        STORE [R0], R4
+        ADD   R0, R2              ; offset 26: muokkaus_s
+        STORE [R0], R5
 
         ; Kirjoita hakemisto takaisin levylle
         READ  R0, DISK_DIR_BLOCK
@@ -1051,6 +1087,20 @@ _dw_update_dir:
         ; offset 22: ensimmäinen blokki
         READ  R1, [_dw_first_block]
         STORE [R0], R1
+
+        ; offset 25: muokkaus_hm, offset 26: muokkaus_s
+        READ  R1, [CLOCK_HOUR]
+        READ  R3, 8
+        SHL   R1, R3
+        READ  R3, [CLOCK_MINUTE]
+        OR    R1, R3              ; R1 = tunti<<8 | minuutti
+        READ  R3, [CLOCK_SECOND]  ; R3 = sekunti
+        ADD   R0, R2              ; offset 23 (luonti_hm, säilytetään)
+        ADD   R0, R2              ; offset 24 (luonti_s, säilytetään)
+        ADD   R0, R2              ; offset 25
+        STORE [R0], R1
+        ADD   R0, R2              ; offset 26
+        STORE [R0], R3
 
         READ  R0, DISK_DIR_BLOCK
         CALL  _disk_write_block
@@ -1307,13 +1357,17 @@ _dd_entry_idx:
 ; disk_stat — Lue tiedoston metatiedot
 ;
 ; Sisään: R0 = osoitin tiedoston nimeen RAM:ssa
-;         R1 = osoitin tulosrakenteeseen RAM:ssa (9 sanaa):
+;         R1 = osoitin tulosrakenteeseen RAM:ssa (10 sanaa):
 ;              [0] = koko (sanoja)
 ;              [1] = luontivuosi
 ;              [2] = luonti md (kuukausi<<8|päivä)
-;              [3] = muokkausvuosi
-;              [4] = muokkaus md
-;              [5] = ensimmäinen blokki
+;              [3] = luonti hm (tunti<<8|minuutti)
+;              [4] = luonti s
+;              [5] = muokkausvuosi
+;              [6] = muokkaus md
+;              [7] = muokkaus hm (tunti<<8|minuutti)
+;              [8] = muokkaus s
+;              [9] = ensimmäinen blokki
 ; Ulos:   R0 = DISK_OK           jos onnistui
 ;         R0 = DISK_ERR_NOT_FOUND jos ei löydy
 ; Clobbers: R0–R7
@@ -1335,12 +1389,12 @@ disk_stat:
         READ  R1, disk_io_buf
         ADD   R0, R1              ; R0 = &entry
 
-        ; Siirry offset 17:ään
+        ; Siirry offset 17:ään (koko)
         READ  R1, 17
         ADD   R0, R1              ; R0 = &entry.size
 
         READ  R2, 1
-        ; Kopioi 6 kenttää: koko, luontivuosi, luontimd, muokvuosi, muokmd, 1.blokki
+        ; Kopioi koko + luonti/muokkaus päivämäärä + ensimmäinen blokki
         READ  R3, [R0]  ; koko
         STORE [R9], R3
         ADD   R0, R2
@@ -1356,6 +1410,22 @@ disk_stat:
         ADD   R0, R2
         ADD   R9, R2
 
+        ; luonti_hm (offset 23)
+        CPY   R3, R0
+        READ  R1, 3
+        ADD   R3, R1
+        READ  R3, [R3]
+        STORE [R9], R3
+        ADD   R9, R2
+
+        ; luonti_s (offset 24)
+        CPY   R3, R0
+        READ  R1, 4
+        ADD   R3, R1
+        READ  R3, [R3]
+        STORE [R9], R3
+        ADD   R9, R2
+
         READ  R3, [R0]  ; muokkausvuosi
         STORE [R9], R3
         ADD   R0, R2
@@ -1366,7 +1436,25 @@ disk_stat:
         ADD   R0, R2
         ADD   R9, R2
 
-        READ  R3, [R0]  ; ensimmäinen blokki
+        ; muokkaus_hm (offset 25)
+        CPY   R3, R0
+        READ  R1, 3
+        ADD   R3, R1
+        READ  R3, [R3]
+        STORE [R9], R3
+        ADD   R9, R2
+
+        ; muokkaus_s (offset 26)
+        CPY   R3, R0
+        READ  R1, 4
+        ADD   R3, R1
+        READ  R3, [R3]
+        STORE [R9], R3
+        ADD   R9, R2
+
+        ; ensimmäinen blokki (offset 22)
+        CPY   R3, R0
+        READ  R3, [R3]
         STORE [R9], R3
 
         READ  R0, DISK_OK
