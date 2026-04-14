@@ -741,6 +741,18 @@ class KCPU16TUI(App[None], TUIRenderMixin, TUICommandsMixin):
         height: 1fr;
     }
 
+    #game-input-indicator {
+        width: 30;
+        height: 1;
+        content-align: center middle;
+        color: #a0a0a0;
+    }
+    #game-input-indicator.game-input-on {
+        color: #101010;
+        background: #ffd75f;
+        text-style: bold;
+    }
+
     /* ---- cmd-input inside output-pane ---- */
     #cmd-input {
         dock: bottom;
@@ -780,6 +792,7 @@ class KCPU16TUI(App[None], TUIRenderMixin, TUICommandsMixin):
     # priority=True tarkoittaa, että nämä toimivat aina (myös syötekentän ollessa aktiivinen).
     # Sidonnaisuudet näkyvät myös Footerissa automaattisesti.
     BINDINGS = [
+        Binding("ctrl+space", "toggle_game_input", "Game Input", priority=True),
         Binding("ctrl+q", "quit", "Quit", priority=True),
         Binding("f2", "toggle_breakpoint", "BP F2", priority=True),
         Binding("f4", "run_max_speed", "Max F4", priority=True),
@@ -842,6 +855,7 @@ class KCPU16TUI(App[None], TUIRenderMixin, TUICommandsMixin):
         self._w_screen_view: Static | None = None
         self._w_memory_view: Static | None = None
         self._w_stack_view: Static | None = None
+        self._w_game_input_indicator: Static | None = None
         self._output_buffer: list[str] = []
         self._boot_status_text: str | None = None
         self._disk_dirty: bool = False
@@ -897,6 +911,8 @@ class KCPU16TUI(App[None], TUIRenderMixin, TUICommandsMixin):
             yield Button("BP F2", id="btn-bp", variant="default")
             yield Button("Clear F9", id="btn-clear", variant="default")
             yield Button("Help F1", id="btn-help", variant="default")
+            yield Static(" ", classes="sep")
+            yield Static("kbd OFF (TUI)", id="game-input-indicator")
             yield Static(" ", classes="sep")
             with Horizontal(id="speed-control-group"):
                 yield SpeedSlider(value=10, id="speed-slider")
@@ -969,6 +985,7 @@ class KCPU16TUI(App[None], TUIRenderMixin, TUICommandsMixin):
         self._w_screen_view = self.query_one("#screen-view-solo", Static)
         self._w_memory_view = self.query_one("#memory-view", Static)
         self._w_stack_view = self.query_one("#stack-view", Static)
+        self._w_game_input_indicator = self.query_one("#game-input-indicator", Static)
 
         self.machine.cold_reset()
         self.dbg.snapshot_registers(self.machine.dump_registers())
@@ -997,9 +1014,23 @@ class KCPU16TUI(App[None], TUIRenderMixin, TUICommandsMixin):
             self._do_open(startup_asm)
 
         self._refresh_all()
+        self._update_game_input_indicator()
         self.set_interval(1.0, self._refresh_screen_tab)
         self.set_interval(1.0, self._check_file_changes)
         self.query_one("#cmd-input", Input).focus()
+
+    def _update_game_input_indicator(self) -> None:
+        """Päivitä toolbarin game input -tilailmaisin."""
+        widget = self._w_game_input_indicator
+        if widget is None:
+            return
+
+        if self._game_input_mode:
+            widget.update("GAME INPUT ON (kbd -> emulator)")
+            widget.add_class("game-input-on")
+        else:
+            widget.update("kbd OFF (TUI)")
+            widget.remove_class("game-input-on")
 
     # ------------------------------------------------------------------
     # Painikkeet
@@ -1454,6 +1485,9 @@ class KCPU16TUI(App[None], TUIRenderMixin, TUICommandsMixin):
         self._log("  reset deep                   Memory + CPU + storage")
         self._log("  reset cpu                    CPU only (memory intact)")
         self._log("[bold]Other:[/bold]")
+        self._log(
+            "  gameinput [on|off|toggle]      Toggle game input mode from command line"
+        )
         self._log("  cls                          Clear VRAM")
         self._log("  spec                         Show architecture spec")
         self._log("  help                         This help")
@@ -1479,6 +1513,18 @@ class KCPU16TUI(App[None], TUIRenderMixin, TUICommandsMixin):
     # Näppäimistönvälitys emulaattorille
     # ------------------------------------------------------------------
 
+    def action_toggle_game_input(self) -> None:
+        """Vaihda game input -tila päälle/pois (Ctrl+Space)."""
+        self._game_input_mode = not self._game_input_mode
+        mode_text = (
+            "ENABLED (keyboard → emulator)"
+            if self._game_input_mode
+            else "DISABLED (keyboard → TUI)"
+        )
+        self._log(f"[cyan]Game Input Mode: {mode_text}[/cyan]")
+        self._update_game_input_indicator()
+        self._refresh_flags()
+
     def on_key(self, event) -> None:
         """Välitä näppäinpainallukset emulaattorille tai TUI:lle.
 
@@ -1495,14 +1541,7 @@ class KCPU16TUI(App[None], TUIRenderMixin, TUICommandsMixin):
         """
         # Toggle game input mode with Ctrl+Space
         if event.key == "ctrl+space":
-            self._game_input_mode = not self._game_input_mode
-            mode_text = (
-                "ENABLED (keyboard → emulator)"
-                if self._game_input_mode
-                else "DISABLED (keyboard → TUI)"
-            )
-            self._log(f"[cyan]Game Input Mode: {mode_text}[/cyan]")
-            self._refresh_flags()
+            self.action_toggle_game_input()
             return
 
         # Älä välitä jos käyttäjä kirjoittaa komentokenttään

@@ -33,6 +33,7 @@ Komennot:
     reset deep                   -- Muisti + CPU + storage
     reset cpu                    -- Vain CPU (muisti säilyy)
     --- Muut ---
+    gameinput [on|off|toggle]    -- Vaihda game input -tila
     cls                          -- Nollaa VRAM
     help                         -- Näytä ohje
     spec                         -- Arkkitehtuuriraportti
@@ -126,6 +127,7 @@ class TUICommandsMixin:
             reset deep                   -- Muisti + CPU + storage
             reset cpu                    -- Vain CPU (muisti säilyy)
             --- Muut ---
+            gameinput [on|off|toggle]    -- Vaihda game input -tila
             cls                          -- Nollaa VRAM
             help                         -- Näytä ohje
             spec                         -- Arkkitehtuuriraportti
@@ -249,6 +251,26 @@ class TUICommandsMixin:
             # --- Reset ---
             if op == "reset":
                 return self._handle_reset_command(args)
+
+            if op == "gameinput":
+                mode = args[0].lower() if args else "toggle"
+                if mode == "on":
+                    if not self._game_input_mode:
+                        self.action_toggle_game_input()
+                elif mode == "off":
+                    if self._game_input_mode:
+                        self.action_toggle_game_input()
+                elif mode == "toggle":
+                    self.action_toggle_game_input()
+                else:
+                    return CommandResult(False, "Usage: gameinput [on|off|toggle]")
+
+                state = (
+                    "ON (keyboard -> emulator)"
+                    if self._game_input_mode
+                    else "OFF (keyboard -> TUI)"
+                )
+                return CommandResult(True, f"Game input mode: {state}")
 
             # --- Näyttö & muut ---
             if op == "cls":
