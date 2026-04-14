@@ -40,6 +40,13 @@ line_buf:
 list_buf:
         .dw  0,0,0,0,0,0,0,0
 
+io_stat_buf:
+        .dw  0,0,0,0,0,0,0,0,0,0
+io_read_buf:
+        .dw  0,0,0,0,0,0,0,0
+io_demo_buf:
+        .dw  75,68,79,83,33      ; "KDOS!"
+
 ; constants as data words
 char_space:
         .dw  32
@@ -110,6 +117,14 @@ str_cd_now:
         .dstr "Current dir: "
 str_nl:
         .dstr "\n"
+str_found_file:
+        .dstr "File found.\n"
+str_stat_ok:
+        .dstr "STAT OK\n"
+str_read_match:
+        .dstr "READ OK (matches demo data)\n"
+str_read_diff:
+        .dstr "READ OK (content differs from demo data)\n"
 
 cmd_help:
         .dstr "help"
@@ -117,10 +132,18 @@ cmd_fdisk:
         .dstr "fdisk"
 cmd_format:
         .dstr "format"
+cmd_check:
+        .dstr "check"
+cmd_sync:
+        .dstr "sync"
 cmd_ls:
         .dstr "ls"
 cmd_dir:
         .dstr "dir"
+cmd_find:
+        .dstr "find"
+cmd_stat:
+        .dstr "stat"
 cmd_mkdir:
         .dstr "mkdir"
 cmd_cd:
@@ -133,6 +156,10 @@ cmd_rm:
         .dstr "rm"
 cmd_del:
         .dstr "del"
+cmd_write:
+        .dstr "write"
+cmd_read:
+        .dstr "read"
 cmd_run:
         .dstr "run"
 cmd_dotdot:
@@ -143,12 +170,20 @@ str_help:
         .dstr "  help\n"
         .dstr "  fdisk\n"
         .dstr "  format\n"
+        .dstr "  check\n"
+        .dstr "  sync\n"
         .dstr "  ls\n"
+        .dstr "  dir\n"
+        .dstr "  find <name>\n"
+        .dstr "  stat <name>\n"
         .dstr "  mkdir <name>\n"
         .dstr "  cd <name|..>\n"
         .dstr "  rmdir <name>\n"
         .dstr "  touch <name>\n"
         .dstr "  rm <name>\n"
+        .dstr "  del <name>\n"
+        .dstr "  write <name>\n"
+        .dstr "  read <name>\n"
         .dstr "  run <name>\n"
 
 ; -----------------------------------------------------------------------------
@@ -236,6 +271,43 @@ str_eq2_b:
         .dw 0
 str_eq2:
         PUSH  R2
+
+; -----------------------------------------------------------------------------
+; Utility: compare word buffers
+; In: R0=a ptr, R1=b ptr, R2=count
+; Out: R0=1 equal, 0 not equal
+; -----------------------------------------------------------------------------
+
+cmp_words:
+        PUSH  R3
+        PUSH  R4
+        PUSH  R5
+        READ  R5, 1
+        READ  R4, 0
+_cw_loop:
+        CMP   R2, R4
+        JZ    _cw_yes
+        READ  R3, [R0]
+        READ  R4, [R1]
+        CMP   R3, R4
+        JNZ   _cw_no
+        ADD   R0, R5
+        ADD   R1, R5
+        SUB   R2, R5
+        READ  R4, 0
+        JUMP  _cw_loop
+_cw_yes:
+        READ  R0, 1
+        POP   R5
+        POP   R4
+        POP   R3
+        RET
+_cw_no:
+        READ  R0, 0
+        POP   R5
+        POP   R4
+        POP   R3
+        RET
         PUSH  R3
         PUSH  R4
         STORE [str_eq2_a], R0
@@ -1021,6 +1093,42 @@ _fmt_err:
         CALL  print_disk_error
         JUMP  main_loop
 
+_cmd_check:
+        READ  R0, cmd_buf
+        READ  R1, cmd_check
+        CALL  str_eq2
+        READ  R1, 1
+        CMP   R0, R1
+        JNZ   _cmd_sync
+        CALL  disk_check
+        READ  R1, DISK_OK
+        CMP   R0, R1
+        JZ    _check_ok
+        CALL  print_disk_error
+        JUMP  main_loop
+_check_ok:
+        READ  R0, str_ok
+        CALL  print_str
+        JUMP  main_loop
+
+_cmd_sync:
+        READ  R0, cmd_buf
+        READ  R1, cmd_sync
+        CALL  str_eq2
+        READ  R1, 1
+        CMP   R0, R1
+        JNZ   _cmd_ls
+        CALL  disk_sync
+        READ  R1, DISK_OK
+        CMP   R0, R1
+        JZ    _sync_ok
+        CALL  print_disk_error
+        JUMP  main_loop
+_sync_ok:
+        READ  R0, str_ok
+        CALL  print_str
+        JUMP  main_loop
+
 _cmd_ls:
         READ  R0, cmd_buf
         READ  R1, cmd_ls
@@ -1040,6 +1148,88 @@ _cmd_ls_run:
         CMP   R0, R1
         JZ    main_loop
         CALL  ls_print_filtered
+        JUMP  main_loop
+
+_cmd_find:
+        READ  R0, cmd_buf
+        READ  R1, cmd_find
+        CALL  str_eq2
+        READ  R1, 1
+        CMP   R0, R1
+        JNZ   _cmd_stat
+        CALL  ensure_storage_ready
+        READ  R1, 0
+        CMP   R0, R1
+        JZ    main_loop
+        READ  R0, [arg_buf]
+        READ  R1, 0
+        CMP   R0, R1
+        JNZ   _find_go
+        READ  R0, str_need_arg
+        CALL  print_str
+        JUMP  main_loop
+_find_go:
+        READ  R0, arg_buf
+        CALL  build_scoped_name
+        READ  R1, 1
+        CMP   R0, R1
+        JZ    _find_call
+        READ  R0, str_name_long
+        CALL  print_str
+        JUMP  main_loop
+_find_call:
+        READ  R0, scoped_name_buf
+        CALL  disk_find
+        READ  R1, DISK_ERR_NOT_FOUND
+        CMP   R0, R1
+        JNZ   _find_ok
+        READ  R0, str_not_found
+        CALL  print_str
+        JUMP  main_loop
+_find_ok:
+        READ  R0, str_found_file
+        CALL  print_str
+        JUMP  main_loop
+
+_cmd_stat:
+        READ  R0, cmd_buf
+        READ  R1, cmd_stat
+        CALL  str_eq2
+        READ  R1, 1
+        CMP   R0, R1
+        JNZ   _cmd_mkdir
+        CALL  ensure_storage_ready
+        READ  R1, 0
+        CMP   R0, R1
+        JZ    main_loop
+        READ  R0, [arg_buf]
+        READ  R1, 0
+        CMP   R0, R1
+        JNZ   _stat_go
+        READ  R0, str_need_arg
+        CALL  print_str
+        JUMP  main_loop
+_stat_go:
+        READ  R0, arg_buf
+        CALL  build_scoped_name
+        READ  R1, 1
+        CMP   R0, R1
+        JZ    _stat_call
+        READ  R0, str_name_long
+        CALL  print_str
+        JUMP  main_loop
+_stat_call:
+        READ  R0, scoped_name_buf
+        READ  R1, io_stat_buf
+        CALL  disk_stat
+        READ  R1, DISK_OK
+        CMP   R0, R1
+        JZ    _stat_ok
+        CALL  print_disk_error
+        JUMP  main_loop
+_stat_ok:
+        READ  R0, str_stat_ok
+        CALL  print_str
         JUMP  main_loop
 
 _cmd_mkdir:
@@ -1319,6 +1509,101 @@ _rm_delete:
         JUMP  main_loop
 _rm_ok:
         READ  R0, str_ok
+        CALL  print_str
+        JUMP  main_loop
+
+_cmd_write:
+        READ  R0, cmd_buf
+        READ  R1, cmd_write
+        CALL  str_eq2
+        READ  R1, 1
+        CMP   R0, R1
+        JNZ   _cmd_read
+        CALL  ensure_storage_ready
+        READ  R1, 0
+        CMP   R0, R1
+        JZ    main_loop
+        READ  R0, [arg_buf]
+        READ  R1, 0
+        CMP   R0, R1
+        JNZ   _write_go
+        READ  R0, str_need_arg
+        CALL  print_str
+        JUMP  main_loop
+_write_go:
+        READ  R0, arg_buf
+        CALL  build_scoped_name
+        READ  R1, 1
+        CMP   R0, R1
+        JZ    _write_call
+        READ  R0, str_name_long
+        CALL  print_str
+        JUMP  main_loop
+_write_call:
+        READ  R0, scoped_name_buf
+        READ  R1, io_demo_buf
+        READ  R2, 5
+        CALL  disk_write
+        READ  R1, DISK_OK
+        CMP   R0, R1
+        JZ    _write_ok
+        CALL  print_disk_error
+        JUMP  main_loop
+_write_ok:
+        READ  R0, str_ok
+        CALL  print_str
+        JUMP  main_loop
+
+_cmd_read:
+        READ  R0, cmd_buf
+        READ  R1, cmd_read
+        CALL  str_eq2
+        READ  R1, 1
+        CMP   R0, R1
+        JNZ   _cmd_run
+        CALL  ensure_storage_ready
+        READ  R1, 0
+        CMP   R0, R1
+        JZ    main_loop
+        READ  R0, [arg_buf]
+        READ  R1, 0
+        CMP   R0, R1
+        JNZ   _read_go
+        READ  R0, str_need_arg
+        CALL  print_str
+        JUMP  main_loop
+_read_go:
+        READ  R0, arg_buf
+        CALL  build_scoped_name
+        READ  R1, 1
+        CMP   R0, R1
+        JZ    _read_call
+        READ  R0, str_name_long
+        CALL  print_str
+        JUMP  main_loop
+_read_call:
+        READ  R0, scoped_name_buf
+        READ  R1, io_read_buf
+        READ  R2, 5
+        CALL  disk_read
+        READ  R1, DISK_OK
+        CMP   R0, R1
+        JZ    _read_cmp
+        CALL  print_disk_error
+        JUMP  main_loop
+_read_cmp:
+        READ  R0, io_read_buf
+        READ  R1, io_demo_buf
+        READ  R2, 5
+        CALL  cmp_words
+        READ  R1, 1
+        CMP   R0, R1
+        JZ    _read_match
+        READ  R0, str_read_diff
+        CALL  print_str
+        JUMP  main_loop
+_read_match:
+        READ  R0, str_read_match
         CALL  print_str
         JUMP  main_loop
 
