@@ -903,6 +903,9 @@ disk_write:
         STORE [_dw_data_ptr],   R1
         STORE [_dw_data_words], R2
         STORE [_dw_orig_words], R2  ; tallenna alkuperäinen sanamäärä
+        READ  R1, 0
+        STORE [_dw_first_block], R1
+        STORE [_dw_cur_block], R1
         CPY   R9, R0              ; R9 = nimi
 
         ; Etsi tiedosto → R0 = indeksi tai virhe
@@ -1117,6 +1120,37 @@ _dw_not_found:
         RET
 
 _dw_disk_full:
+        ; Jos osa uudesta ketjusta ehdittiin varata, vapauta se.
+        READ  R1, [_dw_first_block]
+        READ  R2, 0
+        CMP   R1, R2
+        JZ    _dw_disk_full_mark_empty
+        CPY   R0, R1
+        CALL  _fat_free_chain
+
+_dw_disk_full_mark_empty:
+        ; Merkitse tiedosto tyhjäksi, jotta osittainen kirjoitus ei jää käyttöön.
+        READ  R0, DISK_DIR_BLOCK
+        CALL  _disk_read_block
+        READ  R0, [_dw_entry_idx]
+        READ  R1, DISK_DIR_ENTRY_SIZE
+        MUL   R0, R1
+        READ  R1, disk_io_buf
+        ADD   R0, R1              ; R0 = &entry
+        READ  R1, 17
+        ADD   R0, R1              ; offset 17: size
+        READ  R2, 0
+        STORE [R0], R2
+        READ  R3, 1
+        ADD   R0, R3              ; 18
+        ADD   R0, R3              ; 19
+        ADD   R0, R3              ; 20
+        ADD   R0, R3              ; 21
+        ADD   R0, R3              ; 22: first block
+        STORE [R0], R2
+        READ  R0, DISK_DIR_BLOCK
+        CALL  _disk_write_block
+
         READ  R0, DISK_ERR_DISK_FULL
         POP   R9
         POP   R8

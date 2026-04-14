@@ -1065,6 +1065,8 @@ class KCPU16TUI(App[None], TUIRenderMixin, TUICommandsMixin):
         }
         action = actions.get(event.button.id)
         if action:
+            if self._game_input_mode and event.button.id != "btn-game-input":
+                return
             action()
 
         # Nopeudenkertoimen valinta
@@ -1591,9 +1593,16 @@ class KCPU16TUI(App[None], TUIRenderMixin, TUICommandsMixin):
         Terminaali ei tue näppäimennostotapahtumia, joten painallus ja
         vapautus lähetetään peräkkäin samasta tapahtumasta.
         """
-        # Toggle game input mode with Ctrl+Space
+        # Ctrl+Space is handled by Textual binding (single source of truth).
         if event.key == "ctrl+space":
-            self.action_toggle_game_input()
+            return
+
+        # Keep quit shortcuts always available (Textual default + app binding).
+        if event.key == "ctrl+c":
+            return
+        if event.key == "ctrl+q":
+            self.action_quit()
+            event.stop()
             return
 
         # In game input mode, forward keyboard to emulator
@@ -1623,8 +1632,22 @@ class KCPU16TUI(App[None], TUIRenderMixin, TUICommandsMixin):
                     event.stop()
                     return
 
+            # Game input -tilassa mikään näppäin ei saa ohjautua TUI:hin.
+            event.stop()
+            return
+
         # TUI mode: anna Input-widgetin käsitellä kirjoitus normaalisti.
         return
+
+    def check_action(self, action: str, parameters: tuple[object, ...]) -> bool | None:
+        """Estä kaikki TUI-näppäintoiminnot game input -tilassa.
+
+        Vain game input -tilan toggle sallitaan, jotta käyttäjä pääsee
+        takaisin TUI-tilaan Ctrl+Space:lla.
+        """
+        if self._game_input_mode and action not in {"toggle_game_input", "quit"}:
+            return False
+        return None
 
     # ------------------------------------------------------------------
     # Perusoperaatiot

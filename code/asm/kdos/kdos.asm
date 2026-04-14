@@ -9,6 +9,7 @@
 .const CH_BSLASH, 92
 .const MORE_BUF_WORDS, 512
 .const MORE_PAGE_LINES, 20
+.const LOREM_RAM_BASE, 0x8000
 
 ; -----------------------------------------------------------------------------
 ; Data
@@ -28,6 +29,8 @@ input_buf:
 cmd_buf:
         .dw  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
 arg_buf:
+        .dw  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+arg2_buf:
         .dw  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
 scoped_name_buf:
         .dw  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
@@ -84,6 +87,14 @@ more_read_words:
         .dw  0
 more_truncated:
         .dw  0
+lorem_total_words:
+        .dw  0
+lorem_written_words:
+        .dw  0
+lorem_chunk_words:
+        .dw  0
+lorem_max_words:
+        .dw  0
 
 ; constants as data words
 char_space:
@@ -117,6 +128,10 @@ str_unknown:
         .dstr "Bad command or file name\n"
 str_need_arg:
         .dstr "Missing argument.\n"
+str_need_arg2:
+        .dstr "Missing second argument.\n"
+str_bad_count:
+        .dstr "Word count out of range.\n"
 str_need_fdisk:
         .dstr "Storage not partitioned. Run fdisk.\n"
 str_need_format:
@@ -202,6 +217,8 @@ cmd_del:
         .dstr "del"
 cmd_write:
         .dstr "write"
+cmd_lorem:
+        .dstr "lorem"
 cmd_read:
         .dstr "read"
 cmd_more:
@@ -212,7 +229,10 @@ cmd_dotdot:
         .dstr ".."
 
 str_help:
-        .dstr "Commands:\n  help                 Show this help list.\n  fdisk                Init partition table metadata.\n  format               Create empty filesystem.\n  check                Verify filesystem integrity.\n  sync                 Flush/verify storage state.\n  ls                   List current directory.\n  dir                  Alias for ls.\n  find <name>          Find file by exact name.\n  stat <name>          Read metadata for file.\n  mkdir <name>         Create directory.\n  cd <name|..>         Change directory.\n  rmdir <name>         Remove empty directory.\n  touch <name>         Create empty file.\n  rm <name>            Delete file.\n  del <name>           Alias for rm.\n  write <name>         Write demo payload to file.\n  read <name>          Read+verify demo payload.\n  more <name>          Page file content (text).\n  run <name>           Demo execute file stub.\n"
+        .dstr "Commands:\n  help                 Show this help list.\n  fdisk                Init partition table metadata.\n  format               Create empty filesystem.\n  check                Verify filesystem integrity.\n  sync                 Flush/verify storage state.\n  ls                   List current directory.\n  dir                  Alias for ls.\n  find <name>          Find file by exact name.\n  stat <name>          Read metadata for file.\n  mkdir <name>         Create directory.\n  cd <name|..>         Change directory.\n  rmdir <name>         Remove empty directory.\n  touch <name>         Create empty file.\n  rm <name>            Delete file.\n  del <name>           Alias for rm.\n  write <name>         Write demo payload to file.\n  lorem <name> <n>     Write n words of lorem ipsum text.\n  read <name>          Read+verify demo payload.\n  more <name>          Page file content (text).\n  run <name>           Demo execute file stub.\n"
+
+lorem_seed:
+        .dstr "lorem ipsum "
 
 ; -----------------------------------------------------------------------------
 ; Utility: print string
@@ -432,10 +452,106 @@ _seq2_no:
         RET
 
 ; -----------------------------------------------------------------------------
+; parse_u16_dec
+; In: R0=ptr to decimal ascii
+; Out: R0=value, R1=1 ok / 0 fail
+; -----------------------------------------------------------------------------
+
+parse_u16_dec:
+        PUSH  R2
+        PUSH  R3
+        PUSH  R4
+        PUSH  R5
+        PUSH  R6
+        CPY   R2, R0
+        READ  R3, 0              ; value
+        READ  R4, 1
+        READ  R5, 48             ; '0'
+        READ  R6, 57             ; '9'
+
+        READ  R0, [R2]
+        READ  R1, 0
+        CMP   R0, R1
+        JZ    _pud_fail
+
+_pud_loop:
+        READ  R0, [R2]
+        READ  R1, 0
+        CMP   R0, R1
+        JZ    _pud_ok
+        CMP   R0, R5
+        JLT   _pud_fail
+        CMP   R0, R6
+        JGT   _pud_fail
+        SUB   R0, R5             ; digit
+        READ  R1, 10
+        MUL   R3, R1
+        ADD   R3, R0
+        ADD   R2, R4
+        JUMP  _pud_loop
+
+_pud_ok:
+        CPY   R0, R3
+        READ  R1, 1
+        JUMP  _pud_ret
+
+_pud_fail:
+        READ  R0, 0
+        READ  R1, 0
+
+_pud_ret:
+        POP   R6
+        POP   R5
+        POP   R4
+        POP   R3
+        POP   R2
+        RET
+
+; -----------------------------------------------------------------------------
+; fill_lorem_words
+; In: R0=dst ptr, R1=word count
+; -----------------------------------------------------------------------------
+
+fill_lorem_words:
+        PUSH  R2
+        PUSH  R3
+        PUSH  R4
+        PUSH  R5
+        PUSH  R6
+        CPY   R4, R0
+        CPY   R3, R1
+        READ  R5, lorem_seed
+        READ  R2, 1
+        READ  R6, 0
+
+_flw_loop:
+        CMP   R3, R6
+        JZ    _flw_done
+        READ  R1, [R5]
+        CMP   R1, R6
+        JNZ   _flw_emit
+        READ  R5, lorem_seed
+        READ  R1, [R5]
+_flw_emit:
+        STORE [R4], R1
+        ADD   R4, R2
+        ADD   R5, R2
+        SUB   R3, R2
+        JUMP  _flw_loop
+
+_flw_done:
+        POP   R6
+        POP   R5
+        POP   R4
+        POP   R3
+        POP   R2
+        RET
+
+; -----------------------------------------------------------------------------
 ; parse_input
 ; In: R0=input pointer
 ; Out: R0=1 if command exists else 0
-; Fills cmd_buf and arg_buf
+; Fills cmd_buf, arg_buf and arg2_buf
 ; -----------------------------------------------------------------------------
 
 parse_input:
@@ -448,9 +564,11 @@ parse_input:
         CPY   R1, R0
         READ  R2, cmd_buf
         READ  R3, arg_buf
+        READ  R0, arg2_buf
         READ  R4, 0
         STORE [R2], R4
         STORE [R3], R4
+        STORE [R0], R4
 
         READ  R5, 1
 _pi_skip_lead:
@@ -512,6 +630,37 @@ _pi_arg_loop:
         SUB   R4, R5
         JUMP  _pi_arg_loop
 _pi_arg_done:
+        READ  R3, 0
+        STORE [R2], R3
+
+_pi_skip_gap2:
+        READ  R0, [R1]
+        READ  R3, 32
+        CMP   R0, R3
+        JNZ   _pi_arg2_copy
+        ADD   R1, R5
+        JUMP  _pi_skip_gap2
+
+_pi_arg2_copy:
+        READ  R2, arg2_buf
+        READ  R4, 15
+_pi_arg2_loop:
+        READ  R0, [R1]
+        READ  R3, 0
+        CMP   R0, R3
+        JZ    _pi_arg2_done
+        READ  R3, 32
+        CMP   R0, R3
+        JZ    _pi_arg2_done
+        READ  R3, 0
+        CMP   R4, R3
+        JZ    _pi_arg2_done
+        STORE [R2], R0
+        ADD   R2, R5
+        ADD   R1, R5
+        SUB   R4, R5
+        JUMP  _pi_arg2_loop
+_pi_arg2_done:
         READ  R3, 0
         STORE [R2], R3
 
@@ -1548,7 +1697,7 @@ _cmd_rm:
         CALL  str_eq2
         READ  R1, 1
         CMP   R0, R1
-        JNZ   _cmd_run
+        JNZ   _cmd_write
 _cmd_rm_run:
         CALL  ensure_storage_ready
         READ  R1, 0
@@ -1606,7 +1755,7 @@ _cmd_write:
         CALL  str_eq2
         READ  R1, 1
         CMP   R0, R1
-        JNZ   _cmd_read
+        JNZ   _cmd_lorem
         CALL  ensure_storage_ready
         READ  R1, 0
         CMP   R0, R1
@@ -1638,6 +1787,125 @@ _write_call:
         CALL  print_disk_error
         JUMP  main_loop
 _write_ok:
+        READ  R0, str_ok
+        CALL  print_str
+        JUMP  main_loop
+
+_cmd_lorem:
+        READ  R0, cmd_buf
+        READ  R1, cmd_lorem
+        CALL  str_eq2
+        READ  R1, 1
+        CMP   R0, R1
+        JNZ   _cmd_read
+        CALL  ensure_storage_ready
+        READ  R1, 0
+        CMP   R0, R1
+        JZ    main_loop
+
+        READ  R0, [arg_buf]
+        READ  R1, 0
+        CMP   R0, R1
+        JNZ   _lorem_have_name
+        READ  R0, str_need_arg
+        CALL  print_str
+        JUMP  main_loop
+_lorem_have_name:
+        READ  R0, [arg2_buf]
+        READ  R1, 0
+        CMP   R0, R1
+        JNZ   _lorem_build_name
+        READ  R0, str_need_arg2
+        CALL  print_str
+        JUMP  main_loop
+
+_lorem_build_name:
+        READ  R0, arg_buf
+        CALL  build_scoped_name
+        READ  R1, 1
+        CMP   R0, R1
+        JZ    _lorem_parse_count
+        READ  R0, str_name_long
+        CALL  print_str
+        JUMP  main_loop
+
+_lorem_parse_count:
+        READ  R0, arg2_buf
+        CALL  parse_u16_dec
+        READ  R2, 1
+        CMP   R1, R2
+        JZ    _lorem_chk_range
+        READ  R0, str_bad_count
+        CALL  print_str
+        JUMP  main_loop
+
+_lorem_chk_range:
+        READ  R1, 0
+        CMP   R0, R1
+        JGT   _lorem_chk_max
+        READ  R0, str_bad_count
+        CALL  print_str
+        JUMP  main_loop
+_lorem_chk_max:
+        READ  R1, [lorem_max_words]
+        READ  R2, 0
+        CMP   R1, R2
+        JNZ   _lorem_have_max
+        READ  R1, VRAM_START
+        READ  R2, LOREM_RAM_BASE
+        SUB   R1, R2
+        STORE [lorem_max_words], R1
+_lorem_have_max:
+        CMP   R0, R1
+        JLE   _lorem_fill
+        READ  R0, str_bad_count
+        CALL  print_str
+        JUMP  main_loop
+
+_lorem_fill:
+        STORE [lorem_total_words], R0
+        READ  R0, 0
+        STORE [lorem_written_words], R0
+
+_lorem_chunk_loop:
+        READ  R0, [lorem_written_words]
+        READ  R1, [lorem_total_words]
+        CMP   R0, R1
+        JGE   _lorem_ok
+
+        CPY   R2, R1
+        SUB   R2, R0                  ; remaining
+        READ  R3, MORE_BUF_WORDS      ; chunk size cap (512)
+        CMP   R2, R3
+        JLE   _lorem_chunk_set
+        CPY   R2, R3
+_lorem_chunk_set:
+        STORE [lorem_chunk_words], R2
+
+        ; Fill next chunk to RAM at (LOREM_RAM_BASE + written).
+        READ  R0, LOREM_RAM_BASE
+        READ  R1, [lorem_written_words]
+        ADD   R0, R1
+        READ  R1, [lorem_chunk_words]
+        CALL  fill_lorem_words
+
+        ; Increase total bytes to write.
+        READ  R0, [lorem_written_words]
+        READ  R1, [lorem_chunk_words]
+        ADD   R0, R1
+        STORE [lorem_written_words], R0
+
+        ; Write accumulated lorem data with disk_write API.
+        READ  R0, scoped_name_buf
+        READ  R1, LOREM_RAM_BASE
+        READ  R2, [lorem_written_words]
+        CALL  disk_write
+        READ  R1, DISK_OK
+        CMP   R0, R1
+        JZ    _lorem_chunk_loop
+        CALL  print_disk_error
+        JUMP  main_loop
+_lorem_ok:
         READ  R0, str_ok
         CALL  print_str
         JUMP  main_loop
