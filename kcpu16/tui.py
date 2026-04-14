@@ -1066,7 +1066,6 @@ class KCPU16TUI(App[None], TUIRenderMixin, TUICommandsMixin):
         action = actions.get(event.button.id)
         if action:
             action()
-            return
 
         # Nopeudenkertoimen valinta
         if event.button.id in ("btn-mult-x1", "btn-mult-x10", "btn-mult-x100"):
@@ -1084,6 +1083,20 @@ class KCPU16TUI(App[None], TUIRenderMixin, TUICommandsMixin):
                 sl.refresh()
             except Exception:
                 pass
+
+    def on_click(self, event: events.Click) -> None:
+        """Aktivoi game input -tila klikatessa Screen-ikkunaa.
+
+        Klikkaus Screen-alueelle kytkee game input -tilan PÄÄLLE,
+        mutta ei koskaan pois päältä.
+        """
+        widget = event.widget
+        widget_id = getattr(widget, "id", None)
+        if (
+            widget_id in {"screen-view-solo", "screen-section"}
+            and not self._game_input_mode
+        ):
+            self.action_toggle_game_input()
 
     def on_speed_slider_changed(self, event: SpeedSlider.Changed) -> None:
         """Päivitä SLOW-nopeus kun liukusäädin muuttuu."""
@@ -1543,8 +1556,10 @@ class KCPU16TUI(App[None], TUIRenderMixin, TUICommandsMixin):
         if self._game_input_mode:
             cmd_input.value = ""
             cmd_input.disabled = True
-            if cmd_input is self.focused:
-                self.set_focus(None)
+            # Hiirellä klikattu toolbar-painike voi jäädä fokukseen,
+            # jolloin Enter painaa sitä uudelleen ja togglaa tilan pois.
+            # Pudotetaan fokus aina pois kun game input kytketään päälle.
+            self.set_focus(None)
             self._log(
                 "[cyan]Game Input Mode: ENABLED (keyboard → emulator). Toggle with Ctrl+Space.[/cyan]"
             )
