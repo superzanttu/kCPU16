@@ -6,6 +6,7 @@
         .include "../lib/lib-disk.asm"
 
 .const CH_SLASH, 47
+.const CH_BSLASH, 92
 
 ; -----------------------------------------------------------------------------
 ; Data
@@ -50,63 +51,65 @@ char_zero:
         .dw  0
 char_dot:
         .dw  46
+prompt_char_buf:
+        .dw  0,0
 
 ; -----------------------------------------------------------------------------
 ; Strings
 ; -----------------------------------------------------------------------------
 
 str_banner:
-        .dstr "kDOS 0.1\\nType 'help' for commands.\\n"
-str_prompt_a:
-        .dstr "kdos:"
-str_prompt_b:
+        .dstr "Microsoft MS-DOS Version 6.22\n(C)Copyright Microsoft Corp 1981-1994.\n\n"
+str_prompt_drive:
+        .dstr "D:"
+str_prompt_tail:
         .dstr "> "
 str_empty_prompt:
         .dstr ""
 str_ok:
-        .dstr "OK\\n"
+        .dstr "OK\n"
 str_unknown:
-        .dstr "Unknown command. Type 'help'.\\n"
+        .dstr "Bad command or file name\n"
 str_need_arg:
-        .dstr "Missing argument.\\n"
+        .dstr "Missing argument.\n"
 str_need_fdisk:
-        .dstr "Storage not partitioned. Run fdisk.\\n"
+        .dstr "Storage not partitioned. Run fdisk.\n"
 str_need_format:
-        .dstr "Storage not formatted. Run format.\\n"
+        .dstr "Storage not formatted. Run format.\n"
 str_need_fdisk_first:
-        .dstr "Run fdisk before format.\\n"
+        .dstr "Run fdisk before format.\n"
 str_fs_bad:
-        .dstr "Storage check failed. Re-run fdisk + format.\\n"
+        .dstr "Storage check failed. Re-run fdisk + format.\n"
 str_name_long:
-        .dstr "Name/path too long (max 15 chars on disk).\\n"
+        .dstr "Name/path too long (max 15 chars on disk).\n"
 str_exists:
-        .dstr "Already exists.\\n"
+        .dstr "Already exists.\n"
 str_not_found:
-        .dstr "Not found.\\n"
+        .dstr "Not found.\n"
 str_dir_full:
-        .dstr "Directory full.\\n"
+        .dstr "Directory full.\n"
 str_disk_full:
-        .dstr "Disk full.\\n"
+        .dstr "Disk full.\n"
 str_range:
-        .dstr "Invalid range/corrupt entry.\\n"
+        .dstr "Invalid range/corrupt entry.\n"
 str_not_dir:
-        .dstr "Not a directory.\\n"
+        .dstr "Not a directory.\n"
 str_not_file:
-        .dstr "Not a file.\\n"
+        .dstr "Not a file.\n"
 str_dir_not_empty:
-        .dstr "Directory not empty.\\n"
+        .dstr "Directory not empty.\n"
 str_format_done:
-        .dstr "Format complete.\\n"
+        .dstr "Format complete.\n"
 str_fdisk_done:
-        .dstr "Partition table initialized.\\n"
+        .dstr "Partition table initialized.\n"
 str_ls_empty:
-        .dstr "(empty)\\n"
+        .dstr "(empty)\n"
 str_run_err42:
-        .dstr "Error 42: Life not found\\n"
+        .dstr "Error 42: Life not found\n"
 str_cd_now:
         .dstr "Current dir: "
 str_nl:
-        .dstr "\\n"
+        .dstr "\n"
 
 cmd_help:
         .dstr "help"
@@ -132,17 +135,17 @@ cmd_dotdot:
         .dstr ".."
 
 str_help:
-        .dstr "Commands:\\n"
-        .dstr "  help\\n"
-        .dstr "  fdisk\\n"
-        .dstr "  format\\n"
-        .dstr "  ls\\n"
-        .dstr "  mkdir <name>\\n"
-        .dstr "  cd <name|..>\\n"
-        .dstr "  rmdir <name>\\n"
-        .dstr "  touch <name>\\n"
-        .dstr "  rm <name>\\n"
-        .dstr "  run <name>\\n"
+        .dstr "Commands:\n"
+        .dstr "  help\n"
+        .dstr "  fdisk\n"
+        .dstr "  format\n"
+        .dstr "  ls\n"
+        .dstr "  mkdir <name>\n"
+        .dstr "  cd <name|..>\n"
+        .dstr "  rmdir <name>\n"
+        .dstr "  touch <name>\n"
+        .dstr "  rm <name>\n"
+        .dstr "  run <name>\n"
 
 ; -----------------------------------------------------------------------------
 ; Utility: print string
@@ -151,6 +154,70 @@ str_help:
 
 print_str:
         CALL  scr_print
+        RET
+
+; -----------------------------------------------------------------------------
+; print_prompt_dos
+; Tulostaa DOS-tyylisen kehotteen: D:\path>
+; Sisäinen cwd_buf käyttää '/'-erottimia; tässä ne muunnetaan '\\':ksi.
+; Root-hakemistossa tulos on D:\>
+; -----------------------------------------------------------------------------
+
+print_prompt_dos:
+        PUSH  R0
+        PUSH  R1
+        PUSH  R2
+        PUSH  R3
+        PUSH  R4
+        PUSH  R5
+
+        READ  R1, 1
+        READ  R5, 0
+
+        ; "D:"
+        READ  R0, str_prompt_drive
+        CALL  print_str
+
+        ; "\\"
+        READ  R0, prompt_char_buf
+        READ  R2, CH_BSLASH
+        STORE [R0], R2
+        ADD   R0, R1
+        STORE [R0], R5
+        READ  R0, prompt_char_buf
+        CALL  print_str
+
+        ; cwd without leading '/': print chars and convert '/' -> '\\'
+        READ  R4, cwd_buf
+        ADD   R4, R1
+_ppd_loop:
+        READ  R2, [R4]
+        CMP   R2, R5
+        JZ    _ppd_tail
+        READ  R3, CH_SLASH
+        CMP   R2, R3
+        JNZ   _ppd_emit
+        READ  R2, CH_BSLASH
+_ppd_emit:
+        READ  R3, prompt_char_buf
+        STORE [R3], R2
+        ADD   R3, R1
+        STORE [R3], R5
+        READ  R0, prompt_char_buf
+        CALL  print_str
+        ADD   R4, R1
+        JUMP  _ppd_loop
+
+_ppd_tail:
+        READ  R0, str_prompt_tail
+        CALL  print_str
+
+        POP   R5
+        POP   R4
+        POP   R3
+        POP   R2
+        POP   R1
+        POP   R0
         RET
 
 ; -----------------------------------------------------------------------------
@@ -879,12 +946,7 @@ main:
         CALL  print_str
 
 main_loop:
-        READ  R0, str_prompt_a
-        CALL  print_str
-        READ  R0, cwd_buf
-        CALL  print_str
-        READ  R0, str_prompt_b
-        CALL  print_str
+        CALL  print_prompt_dos
 
         READ  R0, str_empty_prompt
         READ  R1, input_buf
