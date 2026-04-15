@@ -1011,6 +1011,7 @@ module_copy_done:
         ; Käynnistä 60 Hz ajastin + keskeytykset
         READ  R0, TICK_MS
         SCTMR R0
+        ; Varmista että käskyvälikeskeytys (INT 7) on pois päältä
         READ  R0, 0
         STMR  R0
         STI
