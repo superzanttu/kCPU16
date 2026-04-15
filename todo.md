@@ -196,7 +196,7 @@ Tehtävät on merkitty hakasulkeilla, ja niiden tilaa voidaan päivittää seura
 
 
 ### Uudet tehtävät
-Ei avoimia uusia tehtäviä.
+- [W] Paranna ohjelman load-komennolla antami virheilmoituksia. TUlosta lataukseen liittyvät vaiheet output-ikkunaan. OLe tarkkana, koska käyttäjä olettaa ohjelman olevan käynnistettävissä, jos lataus onnistuu virheettä. Anna sii virheilmoitus kaikesta, joka estää ohjelman käynnistymisen.
 
 
 

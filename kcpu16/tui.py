@@ -1198,6 +1198,19 @@ class KCPU16TUI(App[None], TUIRenderMixin, TUICommandsMixin):
             self._cpu_run_worker("slow")
         # mode == "stop": pelkkä uudelleenlataus riittää, _do_assemble hoiti
 
+    def _ensure_program_ready(self) -> bool:
+        """Varmista, että ohjelma on assembloitu muistiin ennen ajoa."""
+        if self.is_assembled:
+            return True
+        if self.current_file is not None:
+            self._log("[yellow]Program source loaded; assembling...[/yellow]")
+            self._do_assemble()
+            return self.is_assembled
+        self._log(
+            "[yellow]No program loaded. Use 'load <file>' or Ctrl+O first.[/yellow]"
+        )
+        return False
+
     def action_step_once(self) -> None:
         """Suorita yksi konekielikäsky (F7/F10 tai Step-painike).
 
@@ -1205,10 +1218,7 @@ class KCPU16TUI(App[None], TUIRenderMixin, TUICommandsMixin):
         Tarkistaa sitten onko CPU pysähtynyt (HALT/EXIT). Jos on,
         ladataan ohjelma uudelleen ja suoritetaan ensimmäinen askel.
         """
-        if not self.is_assembled:
-            self._log(
-                "[yellow]No program loaded. Use 'load <file>' or Ctrl+O first.[/yellow]"
-            )
+        if not self._ensure_program_ready():
             return
         if self.machine.cpu.halted or self.machine.process_exited:
             self._reload_and_run("step")
@@ -1232,10 +1242,7 @@ class KCPU16TUI(App[None], TUIRenderMixin, TUICommandsMixin):
         if self._exec_mode == "fast":
             self.action_stop_program()
             return
-        if not self.is_assembled:
-            self._log(
-                "[yellow]No program loaded. Use 'load <file>' or Ctrl+O first.[/yellow]"
-            )
+        if not self._ensure_program_ready():
             return
         if self.machine.cpu.halted or self.machine.process_exited:
             self._reload_and_run("fast")
@@ -1256,10 +1263,7 @@ class KCPU16TUI(App[None], TUIRenderMixin, TUICommandsMixin):
         if self._exec_mode == "max":
             self.action_stop_program()
             return
-        if not self.is_assembled:
-            self._log(
-                "[yellow]No program loaded. Use 'load <file>' or Ctrl+O first.[/yellow]"
-            )
+        if not self._ensure_program_ready():
             return
         if self.machine.cpu.halted or self.machine.process_exited:
             self._reload_and_run("max")
@@ -1279,10 +1283,7 @@ class KCPU16TUI(App[None], TUIRenderMixin, TUICommandsMixin):
         if self._exec_mode == "slow":
             self.action_stop_program()
             return
-        if not self.is_assembled:
-            self._log(
-                "[yellow]No program loaded. Use 'load <file>' or Ctrl+O first.[/yellow]"
-            )
+        if not self._ensure_program_ready():
             return
         if self.machine.cpu.halted or self.machine.process_exited:
             self._reload_and_run("slow")
@@ -1689,29 +1690,45 @@ class KCPU16TUI(App[None], TUIRenderMixin, TUICommandsMixin):
         except Exception:
             pass
 
-    def _do_open(self, path: Path) -> None:
+    def _do_open(self, path: Path) -> bool:
         """Avaa tiedosto, tallentaa polun ja kääntää sen automaattisesti.
 
         Tiedoston olemassaolo tarkistetaan ennen latausta. Onnistuessa
         asetetaan current_file = path, tallennetaan tiedoston mtime
         tiedoston tarkkailua varten ja kutsutaan _do_assemble().
         Virhetilanteessa logitetaan virhe.
+
+        Returns:
+            True jos lataus + assemblointi onnistui ja ohjelma on ajovalmis,
+            muuten False.
         """
         try:
+            self._log(f"[dim]Load 1/3: validating path {path}[/dim]")
             if not path.exists():
-                self._log(f"[red]File not found: {path}[/red]")
-                return
+                self._log(f"[red]Load failed: file not found: {path}[/red]")
+                return False
+            if not path.is_file():
+                self._log(f"[red]Load failed: not a file: {path}[/red]")
+                return False
+            self._log("[dim]Load 2/3: caching source metadata[/dim]")
             self.current_file = path
             self.is_assembled = False
             self.addr_to_line = {}
             self._watched_mtime = path.stat().st_mtime_ns
-            self._log(f"Loaded: [bold]{path}[/bold]")
+            self._log(f"[dim]Load 3/3: assembling [bold]{path}[/bold][/dim]")
             self._update_program_title()
-            self._do_assemble()
+            if self._do_assemble():
+                self._log(f"[green]Load complete: [bold]{path}[/bold] is ready to run.[/green]")
+                return True
+            self._log(
+                "[red]Load incomplete: source file is selected, but assembly failed so the program cannot run.[/red]"
+            )
+            return False
         except Exception as e:
-            self._log(f"[red]Error: {e}[/red]")
+            self._log(f"[red]Load failed: {e}[/red]")
+            return False
 
-    def _do_assemble(self) -> None:
+    def _do_assemble(self) -> bool:
         """Assembloi ladattu tiedosto ja lataa se koneen muistiin.
 
         Tämä on TUI:n keskeinen operaatio - "tiedosto → konekieli → muisti":
@@ -1726,17 +1743,26 @@ class KCPU16TUI(App[None], TUIRenderMixin, TUICommandsMixin):
 
         Virhetilanteessa (syntaksivirhe, tuntematon käsky) assembly
         keskeytyy ja virhe näytetään lokissa punaisella.
+
+        Returns:
+            True jos assemblointi + lataus muistiin onnistui, muuten False.
         """
         self.workers.cancel_all()
         if not self.current_file:
-            self._log("[yellow]No file loaded. Use 'load <file>' or Ctrl+O.[/yellow]")
-            return
+            self._log(
+                "[yellow]Assemble blocked: no file loaded. Use 'load <file>' or Ctrl+O.[/yellow]"
+            )
+            return False
         try:
+            self._log(f"[dim]Assemble: reading source from {self.current_file}[/dim]")
             source = self.current_file.read_text(encoding="utf-8")
             if not source.strip():
-                self._log("[yellow]File is empty.[/yellow]")
-                return
+                self._log(
+                    "[red]Assemble blocked: source file is empty, so no runnable program can be produced.[/red]"
+                )
+                return False
             self._boot_status_text = None
+            self._log("[dim]Assemble: translating source to machine code[/dim]")
             segments = self.assembler.assemble(source, source_path=self.current_file)
             bootblock_words: list[int] | None = None
             bootblock_used_words = 0
@@ -1745,6 +1771,7 @@ class KCPU16TUI(App[None], TUIRenderMixin, TUICommandsMixin):
                 bootblock_words, bootblock_used_words = (
                     self.assembler.build_boot_block_words(source_path=self.current_file)
                 )
+            self._log("[dim]Assemble: resetting machine and loading segments[/dim]")
             self.machine.cold_reset()
             self.machine.load_segments(segments)
             self.is_assembled = True
@@ -1841,13 +1868,18 @@ class KCPU16TUI(App[None], TUIRenderMixin, TUICommandsMixin):
             self._update_run_mode_ui()
             self._update_program_title()
             self._refresh_all(include_screen=True, force_screen=True)
+            return True
         except Exception as e:
             self._log(f"[red]Assembly error: {e}[/red]")
+            self._log(
+                "[red]Program is not runnable until assembly succeeds. Fix the error and load/assemble again.[/red]"
+            )
             self.is_assembled = False
             self._exec_mode = "stopped"
             self._update_run_mode_ui()
             self._update_program_title()
             self._refresh_all(include_screen=True, force_screen=True)
+            return False
 
     def _build_asm_caches(self, segments: list[tuple[int, list[int]]]) -> None:
         """Rakenna --asm-listauksen tukitiedot assembloinnin jälkeen.
@@ -2914,8 +2946,12 @@ class KCPU16TUI(App[None], TUIRenderMixin, TUICommandsMixin):
                     path = path.with_suffix(".asm")
                 if not path.is_absolute():
                     path = self.code_dir / path
-                self._do_open(path)
-                return CommandResult(True, "")
+                if self._do_open(path):
+                    return CommandResult(True, "")
+                return CommandResult(
+                    False,
+                    "Load failed or program not runnable yet. See Output for phase details.",
+                )
 
             if op == "boot":
                 if not args:
