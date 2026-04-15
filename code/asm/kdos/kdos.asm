@@ -47,6 +47,14 @@ list_buf:
 
 io_stat_buf:
         .dw  0,0,0,0,0,0,0,0,0,0
+ls_space_buf:
+        .dw  0,0,0,0
+copy_src_buf:
+        .dw  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+copy_dst_buf:
+        .dw  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+copy_dst_base_buf:
+        .dw  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
 io_read_buf:
         .dw  0,0,0,0,0,0,0,0
 io_demo_buf:
@@ -164,6 +172,24 @@ str_fdisk_done:
         .dstr "Partition table initialized.\n"
 str_ls_empty:
         .dstr "(empty)\n"
+str_ls_dir_tag:
+        .dstr "<DIR> "
+str_ls_files_lbl:
+        .dstr "files: "
+str_ls_dirs_lbl:
+        .dstr " dirs: "
+str_ls_free_lbl:
+        .dstr " free: "
+str_ls_used_lbl:
+        .dstr " used: "
+str_ls_words_nl:
+        .dstr " words\n"
+str_cancelled:
+        .dstr "Cancelled.\n"
+str_confirm_fdisk:
+        .dstr "fdisk will reinitialize partition metadata. Continue? (y/N): "
+str_confirm_format:
+        .dstr "format will destroy filesystem metadata. Continue? (y/N): "
 str_run_err42:
         .dstr "Error 42: Life not found\n"
 str_cd_now:
@@ -178,6 +204,8 @@ str_read_match:
         .dstr "READ OK (matches demo data)\n"
 str_read_diff:
         .dstr "READ OK (content differs from demo data)\n"
+str_copy_wildcard:
+        .dstr "Wildcard copy supports only '*'.\n"
 str_more_prompt:
         .dstr "\n-- More -- (Enter)"
 str_more_empty:
@@ -215,6 +243,8 @@ cmd_rm:
         .dstr "rm"
 cmd_del:
         .dstr "del"
+cmd_copy:
+        .dstr "copy"
 cmd_write:
         .dstr "write"
 cmd_lorem:
@@ -227,9 +257,13 @@ cmd_run:
         .dstr "run"
 cmd_dotdot:
         .dstr ".."
+cmd_star:
+        .dstr "*"
+cmd_format_zero:
+        .dstr "/z"
 
 str_help:
-        .dstr "Commands:\n  help                 Show this help list.\n  fdisk                Init partition table metadata.\n  format               Create empty filesystem.\n  check                Verify filesystem integrity.\n  sync                 Flush/verify storage state.\n  ls                   List current directory.\n  dir                  Alias for ls.\n  find <name>          Find file by exact name.\n  stat <name>          Read metadata for file.\n  mkdir <name>         Create directory.\n  cd <name|..>         Change directory.\n  rmdir <name>         Remove empty directory.\n  touch <name>         Create empty file.\n  rm <name>            Delete file.\n  del <name>           Alias for rm.\n  write <name>         Write demo payload to file.\n  lorem <name> <n>     Write n words of lorem ipsum text.\n  read <name>          Read+verify demo payload.\n  more <name>          Page file content (text).\n  run <name>           Demo execute file stub.\n"
+        .dstr "Commands:\n  help                 Show this help list.\n  fdisk                Init partition metadata (asks confirm if already in use).\n  format [/z]          Create empty filesystem; /z also zeroes free blocks.\n  check                Verify filesystem integrity.\n  sync                 Flush/verify storage state.\n  ls                   List current directory with metadata and disk usage.\n  dir                  Alias for ls.\n  find <name>          Find file by exact name.\n  stat <name>          Read metadata for file.\n  mkdir <name>         Create directory.\n  cd <name|..>         Change directory.\n  rmdir <name>         Remove empty directory.\n  touch <name>         Create empty file.\n  rm <name>            Delete file.\n  del <name>           Alias for rm.\n  copy <src> <dst>     Copy file/dir.\n  copy * <dst_dir>     Copy current directory entries to destination dir.\n  lorem <name> <n>     Create/overwrite file with n words of lorem text.\n  more <name>          Page file content as hex dump.\n  run <name>           Demo execute file stub.\n"
 
 lorem_seed:
         .dstr "lorem ipsum "
@@ -241,6 +275,225 @@ lorem_seed:
 
 print_str:
         CALL  scr_print
+        RET
+
+; -----------------------------------------------------------------------------
+; Utility: print one ASCII character
+; In: R0=ASCII code
+; -----------------------------------------------------------------------------
+
+print_char:
+        PUSH  R1
+        PUSH  R2
+        CPY   R2, R0
+        READ  R1, prompt_char_buf
+        STORE [R1], R2
+        READ  R2, 1
+        ADD   R1, R2
+        READ  R0, 0
+        STORE [R1], R0
+        READ  R0, prompt_char_buf
+        CALL  print_str
+        POP   R2
+        POP   R1
+        RET
+
+; -----------------------------------------------------------------------------
+; Utility: print unsigned 16-bit decimal
+; In: R0=value
+; -----------------------------------------------------------------------------
+
+print_u16_dec:
+        PUSH  R1
+        PUSH  R2
+        PUSH  R3
+        PUSH  R4
+        PUSH  R5
+        PUSH  R6
+        PUSH  R7
+
+        CPY   R7, R0              ; remaining value
+        READ  R6, 0               ; started flag
+        READ  R5, 48              ; ASCII '0'
+
+        READ  R1, 10000
+        CALL  _pu16_emit_div
+        READ  R1, 1000
+        CALL  _pu16_emit_div
+        READ  R1, 100
+        CALL  _pu16_emit_div
+        READ  R1, 10
+        CALL  _pu16_emit_div
+
+        ; ones place
+        CPY   R2, R7
+        ADD   R2, R5
+        CPY   R0, R2
+        CALL  print_char
+
+        POP   R7
+        POP   R6
+        POP   R5
+        POP   R4
+        POP   R3
+        POP   R2
+        POP   R1
+        RET
+
+_pu16_emit_div:
+        CPY   R2, R7
+        DIV   R2, R1              ; digit
+        CPY   R3, R2
+        MUL   R3, R1              ; digit * divisor
+        SUB   R7, R3              ; update remaining
+
+        READ  R4, 0
+        CMP   R6, R4
+        JNZ   _pu16_emit_print
+        CMP   R2, R4
+        JZ    _pu16_emit_ret
+        READ  R6, 1
+
+_pu16_emit_print:
+        ADD   R2, R5
+        CPY   R0, R2
+        CALL  print_char
+
+_pu16_emit_ret:
+        RET
+
+; -----------------------------------------------------------------------------
+; Utility: print two digits with leading zero
+; In: R0=value 0..99
+; -----------------------------------------------------------------------------
+
+print_u16_2:
+        PUSH  R1
+        PUSH  R2
+        PUSH  R3
+        PUSH  R4
+
+        READ  R1, 10
+        CPY   R2, R0
+        DIV   R2, R1              ; tens
+        CPY   R3, R2
+        MUL   R3, R1
+        SUB   R0, R3              ; ones
+        CPY   R3, R0              ; save ones
+
+        READ  R4, 48
+        ADD   R2, R4
+        ADD   R3, R4
+
+        CPY   R0, R2
+        CALL  print_char
+        CPY   R0, R3
+        CALL  print_char
+
+        POP   R4
+        POP   R3
+        POP   R2
+        POP   R1
+        RET
+
+; -----------------------------------------------------------------------------
+; Utility: print N spaces
+; In: R0=count
+; -----------------------------------------------------------------------------
+
+print_spaces:
+        PUSH  R1
+        PUSH  R2
+        PUSH  R3
+
+        CPY   R2, R0
+        READ  R1, 1
+        READ  R3, 0
+
+_ps_loop:
+        CMP   R2, R3
+        JZ    _ps_done
+        READ  R0, 32
+        CALL  print_char
+        SUB   R2, R1
+        JUMP  _ps_loop
+
+_ps_done:
+        POP   R3
+        POP   R2
+        POP   R1
+        RET
+
+; -----------------------------------------------------------------------------
+; Utility: print single hex nibble
+; In: R0=0..15
+; -----------------------------------------------------------------------------
+
+print_hex_nibble:
+        PUSH  R1
+        PUSH  R2
+        CPY   R1, R0
+        READ  R2, 10
+        CMP   R1, R2
+        JLT   _phn_digit
+        READ  R2, 55              ; 'A' - 10
+        ADD   R1, R2
+        JUMP  _phn_emit
+_phn_digit:
+        READ  R2, 48              ; '0'
+        ADD   R1, R2
+_phn_emit:
+        CPY   R0, R1
+        CALL  print_char
+        POP   R2
+        POP   R1
+        RET
+
+; -----------------------------------------------------------------------------
+; Utility: print 16-bit value as 4 hex digits
+; In: R0=word
+; -----------------------------------------------------------------------------
+
+print_u16_hex:
+        PUSH  R1
+        PUSH  R2
+        PUSH  R3
+        PUSH  R4
+
+        CPY   R1, R0
+        READ  R2, 12
+        SHR   R1, R2
+        READ  R3, 0x000F
+        AND   R1, R3
+        CPY   R0, R1
+        CALL  print_hex_nibble
+
+        CPY   R1, R0
+        READ  R2, 8
+        SHR   R1, R2
+        READ  R3, 0x000F
+        AND   R1, R3
+        CPY   R0, R1
+        CALL  print_hex_nibble
+
+        CPY   R1, R0
+        READ  R2, 4
+        SHR   R1, R2
+        READ  R3, 0x000F
+        AND   R1, R3
+        CPY   R0, R1
+        CALL  print_hex_nibble
+
+        CPY   R1, R0
+        READ  R3, 0x000F
+        AND   R1, R3
+        CPY   R0, R1
+        CALL  print_hex_nibble
+
+        POP   R4
+        POP   R3
+        POP   R2
+        POP   R1
         RET
 
 ; -----------------------------------------------------------------------------
@@ -386,7 +639,7 @@ _cw_no:
         RET
 
 ; -----------------------------------------------------------------------------
-; Utility: paged text output for "more"
+; Utility: paged hex output for "more"
 ; In: R0=buffer ptr, R1=word count
 ; -----------------------------------------------------------------------------
 
@@ -401,27 +654,29 @@ more_print_paged:
         CPY   R7, R1
         READ  R5, 0                 ; lines in current page
         READ  R4, MORE_PAGE_LINES
-        READ  R3, 1
-        READ  R2, 0
+        READ  R3, 1                 ; one word step
+        READ  R2, 0                 ; zero
+        READ  R1, 0                 ; words in current line
 _mpp_loop:
         CMP   R7, R2
         JZ    _mpp_done
-        READ  R1, [R6]
-        CMP   R1, R2                ; null ends content
-        JZ    _mpp_done
-        READ  R0, prompt_char_buf
-        STORE [R0], R1
-        ADD   R0, R3
-        STORE [R0], R2
-        READ  R0, prompt_char_buf
-        CALL  print_str
+        READ  R0, [R6]
+        CALL  print_u16_hex
 
-        READ  R0, 10                ; '\n'
+        READ  R0, 32                ; ' '
+        CALL  print_char
+
+        ADD   R1, R3                ; words in line++
+        READ  R0, 8
         CMP   R1, R0
-        JNZ   _mpp_next_char
-        ADD   R5, R3
+        JLT   _mpp_next_word
+
+        READ  R0, str_nl
+        CALL  print_str
+        READ  R1, 0
+        ADD   R5, R3                ; page lines++
         CMP   R5, R4
-        JLT   _mpp_next_char
+        JLT   _mpp_next_word
 
         READ  R0, str_more_prompt
         CALL  print_str
@@ -431,12 +686,18 @@ _mpp_loop:
         CALL  scr_input
         READ  R5, 0
 
-_mpp_next_char:
+_mpp_next_word:
         ADD   R6, R3
         SUB   R7, R3
-        READ  R2, 0
         JUMP  _mpp_loop
 _mpp_done:
+        READ  R0, 0
+        CMP   R1, R0
+        JZ    _mpp_ret
+        READ  R0, str_nl
+        CALL  print_str
+
+_mpp_ret:
         POP   R7
         POP   R6
         POP   R5
@@ -505,6 +766,152 @@ _pud_ret:
         POP   R4
         POP   R3
         POP   R2
+        RET
+
+; -----------------------------------------------------------------------------
+; arg_has_wildcard
+; In: R0=string ptr
+; Out: R0=1 if contains '*', else 0
+; -----------------------------------------------------------------------------
+
+arg_has_wildcard:
+        PUSH  R1
+        PUSH  R2
+        READ  R2, 1
+_ahw_loop:
+        READ  R1, [R0]
+        READ  R2, 0
+        CMP   R1, R2
+        JZ    _ahw_no
+        READ  R2, 42              ; '*'
+        CMP   R1, R2
+        JZ    _ahw_yes
+        READ  R2, 1
+        ADD   R0, R2
+        JUMP  _ahw_loop
+_ahw_yes:
+        READ  R0, 1
+        POP   R2
+        POP   R1
+        RET
+_ahw_no:
+        READ  R0, 0
+        POP   R2
+        POP   R1
+        RET
+
+; -----------------------------------------------------------------------------
+; build_copy_target_name
+; Build copy_dst_buf = copy_dst_base_buf + '/' + line_buf
+; Out: R0=1 ok, 0 fail (too long)
+; -----------------------------------------------------------------------------
+
+build_copy_target_name:
+        PUSH  R1
+        PUSH  R2
+        PUSH  R3
+        PUSH  R4
+        PUSH  R5
+
+        ; dst <- base
+        READ  R0, copy_dst_base_buf
+        READ  R1, copy_dst_buf
+        READ  R2, 16
+        CALL  _disk_str_copy
+
+        ; find end(dst)
+        READ  R1, copy_dst_buf
+        READ  R2, 1
+        READ  R3, 0
+        READ  R4, 16
+_bct_seek:
+        CMP   R4, R3
+        JZ    _bct_fail
+        READ  R5, [R1]
+        CMP   R5, R3
+        JZ    _bct_at_end
+        ADD   R1, R2
+        SUB   R4, R2
+        JUMP  _bct_seek
+
+_bct_at_end:
+        ; append '/'
+        READ  R5, 1
+        CMP   R4, R5
+        JLE   _bct_fail
+        READ  R5, CH_SLASH
+        STORE [R1], R5
+        ADD   R1, R2
+        SUB   R4, R2
+
+        ; append line_buf
+        READ  R0, line_buf
+_bct_copy_loop:
+        READ  R5, [R0]
+        READ  R3, 0
+        CMP   R5, R3
+        JZ    _bct_done
+        READ  R3, CH_SLASH
+        CMP   R5, R3
+        JZ    _bct_done
+        READ  R3, 1
+        CMP   R4, R3
+        JLE   _bct_fail
+        STORE [R1], R5
+        ADD   R1, R2
+        ADD   R0, R2
+        SUB   R4, R2
+        JUMP  _bct_copy_loop
+
+_bct_done:
+        READ  R5, 0
+        STORE [R1], R5
+        READ  R0, 1
+        JUMP  _bct_ret
+
+_bct_fail:
+        READ  R0, 0
+
+_bct_ret:
+        POP   R5
+        POP   R4
+        POP   R3
+        POP   R2
+        POP   R1
+        RET
+
+; -----------------------------------------------------------------------------
+; confirm_action
+; In: R0=prompt ptr
+; Out: R0=1 if user answered y/Y, else 0
+; -----------------------------------------------------------------------------
+
+confirm_action:
+        PUSH  R1
+        PUSH  R2
+
+        CALL  print_str
+        READ  R0, str_empty_prompt
+        READ  R1, input_buf
+        READ  R2, 4
+        CALL  scr_input
+
+        READ  R0, [input_buf]
+        READ  R1, 121             ; 'y'
+        CMP   R0, R1
+        JZ    _ca_yes
+        READ  R1, 89              ; 'Y'
+        CMP   R0, R1
+        JZ    _ca_yes
+        READ  R0, 0
+        JUMP  _ca_ret
+
+_ca_yes:
+        READ  R0, 1
+
+_ca_ret:
+        POP   R2
+        POP   R1
         RET
 
 ; -----------------------------------------------------------------------------
@@ -1081,6 +1488,12 @@ lpf_ptr:
         .dw 0
 lpf_name:
         .dw 0
+lpf_files:
+        .dw 0
+lpf_dirs:
+        .dw 0
+lpf_shown:
+        .dw 0
 ls_print_filtered:
         PUSH  R1
         PUSH  R2
@@ -1096,6 +1509,10 @@ ls_print_filtered:
         STORE [lpf_count], R0
         READ  R1, list_buf
         STORE [lpf_ptr], R1
+        READ  R0, 0
+        STORE [lpf_files], R0
+        STORE [lpf_dirs], R0
+        STORE [lpf_shown], R0
 
 _lpf_loop:
         READ  R0, [lpf_count]
@@ -1112,8 +1529,11 @@ _lpf_loop:
         READ  R1, 0
         CMP   R0, R1
         JZ    _lpf_next
-        READ  R0, line_buf
-        CALL  print_str
+        CALL  _lpf_print_entry
+        READ  R0, [lpf_shown]
+        READ  R1, 1
+        ADD   R0, R1
+        STORE [lpf_shown], R0
 
 _lpf_next:
         READ  R0, [lpf_ptr]
@@ -1126,6 +1546,16 @@ _lpf_next:
         JUMP  _lpf_loop
 
 _lpf_done:
+        READ  R0, [lpf_shown]
+        READ  R1, 0
+        CMP   R0, R1
+        JNZ   _lpf_summary
+        READ  R0, str_ls_empty
+        CALL  print_str
+
+_lpf_summary:
+        CALL  _lpf_print_summary
+
         POP   R7
         POP   R6
         POP   R5
@@ -1137,7 +1567,7 @@ _lpf_done:
 
 ; _lpf_build_line
 ; In: lpf_name points to flat name
-; Out: R0=1 included, 0 skipped. line_buf contains rendered "name[/]\\n"
+; Out: R0=1 included, 0 skipped. line_buf contains rendered "name[/]"
 _lpf_build_line:
         PUSH  R1
         PUSH  R2
@@ -1214,21 +1644,6 @@ _lpf_child_copy:
         JUMP  _lpf_child_copy
 
 _lpf_finish_name:
-        ; append '/' for directories (status at name_ptr-1)
-        READ  R1, [lpf_name]
-        READ  R3, 1
-        SUB   R1, R3
-        READ  R3, [R1]
-        READ  R4, DISK_ENTRY_DIR
-        CMP   R3, R4
-        JNZ   _lpf_add_nl
-        READ  R3, CH_SLASH
-        STORE [R2], R3
-        ADD   R2, R7
-_lpf_add_nl:
-        READ  R3, 10
-        STORE [R2], R3
-        ADD   R2, R7
         READ  R3, 0
         STORE [R2], R3
         READ  R0, 1
@@ -1242,6 +1657,154 @@ _lpf_ret:
         POP   R5
         POP   R4
         POP   R3
+        POP   R2
+        POP   R1
+        RET
+
+; _lpf_print_entry
+; In: lpf_name points to entry name, line_buf contains display name
+; Prints: MM-DD HH:MM  <DIR>|<size>  name
+_lpf_print_entry:
+        PUSH  R1
+        PUSH  R2
+        PUSH  R3
+        PUSH  R4
+        PUSH  R5
+        PUSH  R6
+        PUSH  R7
+
+        ; entry base = name_ptr - 1
+        READ  R1, [lpf_name]
+        READ  R2, 1
+        SUB   R1, R2
+
+        ; size (offset 17)
+        CPY   R3, R1
+        READ  R2, 17
+        ADD   R3, R2
+        READ  R7, [R3]
+
+        ; modified month/day (offset 21)
+        CPY   R3, R1
+        READ  R2, 21
+        ADD   R3, R2
+        READ  R5, [R3]
+
+        ; modified hour/min (offset 25)
+        CPY   R3, R1
+        READ  R2, 25
+        ADD   R3, R2
+        READ  R6, [R3]
+
+        ; MM
+        CPY   R0, R5
+        READ  R4, 8
+        SHR   R0, R4
+        CALL  print_u16_2
+        READ  R0, 45              ; '-'
+        CALL  print_char
+
+        ; DD
+        CPY   R0, R5
+        READ  R4, 0x00FF
+        AND   R0, R4
+        CALL  print_u16_2
+        READ  R0, 32              ; ' '
+        CALL  print_char
+
+        ; HH
+        CPY   R0, R6
+        READ  R4, 8
+        SHR   R0, R4
+        CALL  print_u16_2
+        READ  R0, 58              ; ':'
+        CALL  print_char
+
+        ; MM
+        CPY   R0, R6
+        READ  R4, 0x00FF
+        AND   R0, R4
+        CALL  print_u16_2
+        READ  R0, 2
+        CALL  print_spaces
+
+        ; type/size
+        READ  R3, [R1]            ; status
+        READ  R4, DISK_ENTRY_DIR
+        CMP   R3, R4
+        JNZ   _lpf_print_file
+
+        READ  R0, str_ls_dir_tag
+        CALL  print_str
+        READ  R0, [lpf_dirs]
+        READ  R2, 1
+        ADD   R0, R2
+        STORE [lpf_dirs], R0
+        JUMP  _lpf_print_name
+
+_lpf_print_file:
+        CPY   R0, R7
+        CALL  print_u16_dec
+        READ  R0, 2
+        CALL  print_spaces
+        READ  R0, [lpf_files]
+        READ  R2, 1
+        ADD   R0, R2
+        STORE [lpf_files], R0
+
+_lpf_print_name:
+        READ  R0, line_buf
+        CALL  print_str
+        READ  R0, str_nl
+        CALL  print_str
+
+        POP   R7
+        POP   R6
+        POP   R5
+        POP   R4
+        POP   R3
+        POP   R2
+        POP   R1
+        RET
+
+; _lpf_print_summary
+; Prints file/dir counts and free/used space summary.
+_lpf_print_summary:
+        PUSH  R1
+        PUSH  R2
+
+        READ  R0, ls_space_buf
+        CALL  disk_space
+
+        READ  R0, str_ls_files_lbl
+        CALL  print_str
+        READ  R0, [lpf_files]
+        CALL  print_u16_dec
+
+        READ  R0, str_ls_dirs_lbl
+        CALL  print_str
+        READ  R0, [lpf_dirs]
+        CALL  print_u16_dec
+
+        READ  R0, str_ls_free_lbl
+        CALL  print_str
+        READ  R1, ls_space_buf
+        READ  R2, 2
+        ADD   R1, R2
+        READ  R0, [R1]            ; free words
+        CALL  print_u16_dec
+
+        READ  R0, str_ls_used_lbl
+        CALL  print_str
+        READ  R1, ls_space_buf
+        READ  R2, 3
+        ADD   R1, R2
+        READ  R0, [R1]            ; used words
+        CALL  print_u16_dec
+
+        READ  R0, str_ls_words_nl
+        CALL  print_str
+
         POP   R2
         POP   R1
         RET
@@ -1292,6 +1855,19 @@ _cmd_fdisk:
         READ  R1, 1
         CMP   R0, R1
         JNZ   _cmd_format
+        READ  R0, [fdisk_done]
+        READ  R1, 0
+        CMP   R0, R1
+        JZ    _fdisk_go
+        READ  R0, str_confirm_fdisk
+        CALL  confirm_action
+        READ  R1, 1
+        CMP   R0, R1
+        JZ    _fdisk_go
+        READ  R0, str_cancelled
+        CALL  print_str
+        JUMP  main_loop
+_fdisk_go:
         READ  R0, 1
         STORE [fdisk_done], R0
         READ  R0, 0
@@ -1307,7 +1883,7 @@ _cmd_format:
         CALL  str_eq2
         READ  R1, 1
         CMP   R0, R1
-        JNZ   _cmd_ls
+        JNZ   _cmd_check
         READ  R0, [fdisk_done]
         READ  R1, 0
         CMP   R0, R1
@@ -1316,10 +1892,42 @@ _cmd_format:
         CALL  print_str
         JUMP  main_loop
 _fmt_do:
+        READ  R0, [format_done]
+        READ  R1, 0
+        CMP   R0, R1
+        JZ    _fmt_do_now
+        READ  R0, str_confirm_format
+        CALL  confirm_action
+        READ  R1, 1
+        CMP   R0, R1
+        JZ    _fmt_do_now
+        READ  R0, str_cancelled
+        CALL  print_str
+        JUMP  main_loop
+
+_fmt_do_now:
         CALL  disk_format
         READ  R1, DISK_OK
         CMP   R0, R1
         JNZ   _fmt_err
+
+        ; Optional: format /z -> nollaa myös vapaat datablokit.
+        READ  R0, [arg_buf]
+        READ  R1, 0
+        CMP   R0, R1
+        JZ    _fmt_done_flags
+        READ  R0, arg_buf
+        READ  R1, cmd_format_zero
+        CALL  str_eq2
+        READ  R1, 1
+        CMP   R0, R1
+        JNZ   _fmt_done_flags
+        CALL  disk_zero_free_blocks
+        READ  R1, DISK_OK
+        CMP   R0, R1
+        JNZ   _fmt_err
+
+_fmt_done_flags:
         READ  R0, 1
         STORE [format_done], R0
         CALL  cwd_set_root
@@ -1378,7 +1986,7 @@ _cmd_ls:
         CALL  str_eq2
         READ  R1, 1
         CMP   R0, R1
-        JNZ   _cmd_mkdir
+        JNZ   _cmd_find
 _cmd_ls_run:
         CALL  ensure_storage_ready
         READ  R1, 0
@@ -1697,7 +2305,7 @@ _cmd_rm:
         CALL  str_eq2
         READ  R1, 1
         CMP   R0, R1
-        JNZ   _cmd_write
+        JNZ   _cmd_copy
 _cmd_rm_run:
         CALL  ensure_storage_ready
         READ  R1, 0
@@ -1745,6 +2353,217 @@ _rm_delete:
         CALL  print_disk_error
         JUMP  main_loop
 _rm_ok:
+        READ  R0, str_ok
+        CALL  print_str
+        JUMP  main_loop
+
+_cmd_copy:
+        READ  R0, cmd_buf
+        READ  R1, cmd_copy
+        CALL  str_eq2
+        READ  R1, 1
+        CMP   R0, R1
+        JNZ   _cmd_lorem
+        CALL  ensure_storage_ready
+        READ  R1, 0
+        CMP   R0, R1
+        JZ    main_loop
+
+        ; copy tarvitsee kaksi argumenttia
+        READ  R0, [arg_buf]
+        READ  R1, 0
+        CMP   R0, R1
+        JNZ   _copy_have_arg1
+        READ  R0, str_need_arg
+        CALL  print_str
+        JUMP  main_loop
+_copy_have_arg1:
+        READ  R0, [arg2_buf]
+        READ  R1, 0
+        CMP   R0, R1
+        JNZ   _copy_check_wild
+        READ  R0, str_need_arg2
+        CALL  print_str
+        JUMP  main_loop
+
+_copy_check_wild:
+        READ  R0, arg_buf
+        CALL  arg_has_wildcard
+        READ  R1, 1
+        CMP   R0, R1
+        JZ    _copy_wild
+
+        ; Normaali kopio: copy <src> <dst>
+        READ  R0, arg_buf
+        CALL  build_scoped_name
+        READ  R1, 1
+        CMP   R0, R1
+        JZ    _copy_src_ok
+        READ  R0, str_name_long
+        CALL  print_str
+        JUMP  main_loop
+_copy_src_ok:
+        READ  R0, scoped_name_buf
+        READ  R1, copy_src_buf
+        READ  R2, 16
+        CALL  _disk_str_copy
+
+        READ  R0, arg2_buf
+        CALL  build_scoped_name
+        READ  R1, 1
+        CMP   R0, R1
+        JZ    _copy_dst_ok
+        READ  R0, str_name_long
+        CALL  print_str
+        JUMP  main_loop
+_copy_dst_ok:
+        READ  R0, scoped_name_buf
+        READ  R1, copy_dst_buf
+        READ  R2, 16
+        CALL  _disk_str_copy
+
+        READ  R0, [lorem_max_words]
+        READ  R1, 0
+        CMP   R0, R1
+        JNZ   _copy_have_max
+        READ  R0, VRAM_START
+        READ  R1, LOREM_RAM_BASE
+        SUB   R0, R1
+        STORE [lorem_max_words], R0
+_copy_have_max:
+        READ  R0, copy_src_buf
+        READ  R1, copy_dst_buf
+        READ  R2, LOREM_RAM_BASE
+        READ  R3, [lorem_max_words]
+        CALL  disk_copy
+        READ  R1, DISK_OK
+        CMP   R0, R1
+        JZ    _copy_ok
+        CALL  print_disk_error
+        JUMP  main_loop
+
+_copy_wild:
+        ; Wildcard-tuettu muoto: copy * <dst_dir>
+        READ  R0, arg_buf
+        READ  R1, cmd_star
+        CALL  str_eq2
+        READ  R1, 1
+        CMP   R0, R1
+        JZ    _copy_wild_prepare_dst
+        READ  R0, str_copy_wildcard
+        CALL  print_str
+        JUMP  main_loop
+
+_copy_wild_prepare_dst:
+        ; Laske kohdehakemiston scoped nimi
+        READ  R0, arg2_buf
+        CALL  build_scoped_name
+        READ  R1, 1
+        CMP   R0, R1
+        JZ    _copy_wild_have_dst
+        READ  R0, str_name_long
+        CALL  print_str
+        JUMP  main_loop
+_copy_wild_have_dst:
+        READ  R0, scoped_name_buf
+        READ  R1, copy_dst_base_buf
+        READ  R2, 16
+        CALL  _disk_str_copy
+
+        READ  R0, [lorem_max_words]
+        READ  R1, 0
+        CMP   R0, R1
+        JNZ   _copy_wild_have_max
+        READ  R0, VRAM_START
+        READ  R1, LOREM_RAM_BASE
+        SUB   R0, R1
+        STORE [lorem_max_words], R0
+_copy_wild_have_max:
+
+        ; Varmista että kohde on hakemisto (luodaan jos puuttuu)
+        READ  R0, copy_dst_base_buf
+        CALL  disk_find_any
+        READ  R1, DISK_ERR_NOT_FOUND
+        CMP   R0, R1
+        JNZ   _copy_wild_chk_dst_type
+        READ  R0, copy_dst_base_buf
+        CALL  disk_mkdir
+        READ  R1, DISK_OK
+        CMP   R0, R1
+        JZ    _copy_wild_list
+        CALL  print_disk_error
+        JUMP  main_loop
+_copy_wild_chk_dst_type:
+        CALL  get_entry_status_by_index
+        READ  R1, DISK_ENTRY_DIR
+        CMP   R0, R1
+        JZ    _copy_wild_list
+        READ  R0, str_not_dir
+        CALL  print_str
+        JUMP  main_loop
+
+_copy_wild_list:
+        READ  R0, list_buf
+        READ  R1, 8
+        CALL  disk_list
+        STORE [lpf_count], R0
+        READ  R0, list_buf
+        STORE [lpf_ptr], R0
+
+_copy_wild_loop:
+        READ  R0, [lpf_count]
+        READ  R1, 0
+        CMP   R0, R1
+        JZ    _copy_ok
+
+        READ  R0, [lpf_ptr]
+        READ  R0, [R0]            ; name ptr in disk_io_buf
+        STORE [lpf_name], R0
+
+        ; Ota vain nykyhakemiston välittömät lapset
+        CALL  _lpf_build_line
+        READ  R1, 0
+        CMP   R0, R1
+        JZ    _copy_wild_next
+
+        ; source = full name (copy_src_buf)
+        READ  R0, [lpf_name]
+        READ  R1, copy_src_buf
+        READ  R2, 16
+        CALL  _disk_str_copy
+
+        ; dest = dst_base + '/' + child_name
+        CALL  build_copy_target_name
+        READ  R1, 1
+        CMP   R0, R1
+        JZ    _copy_wild_do
+        READ  R0, str_name_long
+        CALL  print_str
+        JUMP  main_loop
+
+_copy_wild_do:
+        READ  R0, copy_src_buf
+        READ  R1, copy_dst_buf
+        READ  R2, LOREM_RAM_BASE
+        READ  R3, [lorem_max_words]
+        CALL  disk_copy
+        READ  R1, DISK_OK
+        CMP   R0, R1
+        JZ    _copy_wild_next
+        CALL  print_disk_error
+        JUMP  main_loop
+
+_copy_wild_next:
+        READ  R0, [lpf_ptr]
+        READ  R1, 1
+        ADD   R0, R1
+        STORE [lpf_ptr], R0
+        READ  R0, [lpf_count]
+        SUB   R0, R1
+        STORE [lpf_count], R0
+        JUMP  _copy_wild_loop
+
+_copy_ok:
         READ  R0, str_ok
         CALL  print_str
         JUMP  main_loop
@@ -1797,7 +2616,7 @@ _cmd_lorem:
         CALL  str_eq2
         READ  R1, 1
         CMP   R0, R1
-        JNZ   _cmd_read
+        JNZ   _cmd_more
         CALL  ensure_storage_ready
         READ  R1, 0
         CMP   R0, R1
@@ -1864,6 +2683,21 @@ _lorem_have_max:
 
 _lorem_fill:
         STORE [lorem_total_words], R0
+
+        ; Luo tiedosto jos sitä ei ole vielä olemassa.
+        ; Olemassa oleva tiedosto on OK (disk_write ylikirjoittaa sisällön).
+        READ  R0, scoped_name_buf
+        CALL  disk_create
+        READ  R1, DISK_OK
+        CMP   R0, R1
+        JZ    _lorem_fill_continue
+        READ  R1, DISK_ERR_EXISTS
+        CMP   R0, R1
+        JZ    _lorem_fill_continue
+        CALL  print_disk_error
+        JUMP  main_loop
+
+_lorem_fill_continue:
         READ  R0, 0
         STORE [lorem_written_words], R0
 
