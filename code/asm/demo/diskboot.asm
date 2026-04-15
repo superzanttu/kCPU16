@@ -91,7 +91,7 @@ boot_entry:
 ; from the library's global data that gets assembled before its functions.
 ;
 
-.include "lib-screen.asm"
+.include "../lib/lib-screen.asm"
 
 main_start:
     ; This is the standard program area (always present)

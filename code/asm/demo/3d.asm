@@ -1,5 +1,5 @@
 ; =============================================================================
-; demo_3dcube2.asm — Pyörivä 3D-objekti, jossa näkymättömät reunat piilotetaan
+; demo_3d.asm — Yhdistetty 3D-demo (wireframe + solid, tilat B/C)
 ; =============================================================================
 ;
 ; KUVAUS:
@@ -9,10 +9,13 @@
 ;     Y: hitain   (64 askelta/kierros, joka 7. kehys)
 ;     Z: keskinop. (64 askelta/kierros, joka 5. kehys)
 ;
-;   Vaihe 0 (10 s): Tila B — kuutio (säde 12 pikseliä)
-;   Vaihe 1 (10 s): Tila C — L-kirjain (skaalattu ×2)
-;   Vaihe 2 (10 s): Tila B — J-kirjain
-;   Tämän jälkeen: käynnistyy alusta vaiheesta 0.
+;   Kohtaukset ajetaan scene_table-järjestyksessä:
+;     gfx_mode: B -> C
+;     object: cube -> pyramid -> L -> J
+;     drawmode: wireframe -> solid
+;   Kohtaus vaihtuu normaalisti 10 s CTMR-ajastimella.
+;   Lisäksi käytössä on frame-pohjainen varmistus, joka estää
+;   liian pitkän jumittumisen yhteen kohtaukseen hitaassa ajossa.
 ;
 ; PYÖRITYSALGORITMI (järjestys X→Y→Z, ortografinen projektio):
 ;   X: ay=(vy·cox−vz·six)/100, az=(vy·six+vz·cox)/100, ax=vx
@@ -42,7 +45,7 @@
 ;   angle_x, angle_y, angle_z, cnt_x, cnt_y, cnt_z, sin/cos_cache_x/y/z = muistissa
 ;
 ; KÄYTTÖ:
-;   python main.py --run kcpu16/code/demo_3dcube2.asm
+;   python main.py --run kcpu16/code/demo_3d.asm
 ;
 ; =============================================================================
 
@@ -54,13 +57,13 @@
 ; Kirjasto (gfx_clear, gfx_pixel, gfx_line)
 ; =============================================================================
 
-        .include "lib-gfx.asm"
+        .include "../lib/lib-gfx.asm"
 
 ; =============================================================================
 ; Objektidata (sin_table, cube, letter_L, letter_J)
 ; =============================================================================
 
-        .include "lib_3dobjects.asm"
+        .include "../lib/lib-3dobjects.asm"
 
 ; =============================================================================
 ; Projisoidut näyttökoordinaatit — tila 12 kärkipisteelle (L ja J = 12)
@@ -110,7 +113,16 @@ obj_num_faces:
 ; =============================================================================
 
 phase:
-        .db  0         ; 0=kuutio B, 1=L-kirjain C, 2=J-kirjain B, 3=restart
+        .db  0         ; 0..15 = scene-table index (16 kohtauksen sykli)
+
+scene_phase:
+        .db  0         ; aktiivinen kohtausindeksi (silmukan vertailua varten)
+
+draw_mode:
+        .db  0         ; 0=wireframe, 1=solid (piiloviivapoisto)
+
+scene_frames:
+        .dw  0         ; frame-laskuri nykyiselle kohtaukselle (fallback-vaihto)
 
 angle_x:
         .db  0         ; X-akselin rotaatiokulma (0–63)
@@ -148,12 +160,37 @@ cos_cache_z:
 face_visible:
         .dw  0, 0, 0, 0, 0, 0, 0, 0
 
+; Scene-taulukko:
+;   [gfx_mode, object_id, draw_mode]
+;   gfx_mode: 1=B, 2=C
+;   object_id (set_object): 0=cube, 1=L, 2=J, 3=pyramid
+;   draw_mode: 0=wireframe, 1=solid
+scene_table:
+        ; B-tila, wireframe/solid per objekti
+        .dw  1, 0, 0
+        .dw  1, 0, 1
+        .dw  1, 3, 0
+        .dw  1, 3, 1
+        .dw  1, 1, 0
+        .dw  1, 1, 1
+        .dw  1, 2, 0
+        .dw  1, 2, 1
+        ; C-tila, wireframe/solid per objekti
+        .dw  2, 0, 0
+        .dw  2, 0, 1
+        .dw  2, 3, 0
+        .dw  2, 3, 1
+        .dw  2, 1, 0
+        .dw  2, 1, 1
+        .dw  2, 2, 0
+        .dw  2, 2, 1
+
 ; =============================================================================
 ; clock_handler — Kellokeskeytyksen käsittelijä (INT 9)
 ;
-; Kasvattaa demo-vaihetta yhdellä.
-; Jos uusi phase < 4, käynnistää 20 sekunnin ajastimen uudelleen.
-; Jos uusi phase >= 4, pysäyttää ajastimen (pääsilmukka käynnistää sen).
+; Kasvattaa scene-indeksiä yhdellä.
+; Jos uusi phase < 16, käynnistää 10 sekunnin ajastimen uudelleen.
+; Jos uusi phase >= 16, pysäyttää ajastimen (pääsilmukka käynnistää syklin).
 ;
 ; Clobbers: R0, R1 (tallennetaan pinoon ja palautetaan ennen IRET:ä).
 ; =============================================================================
@@ -168,12 +205,12 @@ clock_handler:
         ADD   R0, R1
         STORE [phase], R0
 
-        ; Jos phase >= 3, pysäytä ajastin
-        READ  R1, 3
+        ; Jos phase >= 16, pysäytä ajastin
+        READ  R1, 16
         CMP   R0, R1
         JGE   _ch_stop
 
-        ; phase < 3: käynnistä 10 sekunnin ajastin uudelleen
+        ; phase < 16: käynnistä 10 sekunnin ajastin uudelleen
         READ  R0, 10000
         SCTMR R0
         JUMP  _ch_done
@@ -495,6 +532,12 @@ _dof_edge_loop:
         ADD   R0, R5
         READ  R5, [R0]        ; R5 = v1
 
+        ; Wireframe-tilassa piirretään kaikki kaaret ilman näkyvyystestiä.
+        READ  R0, [draw_mode]
+        READ  R1, 0
+        CMP   R0, R1
+        JZ    _dof_draw_edge
+
         ; Kaari näkyy, jos vähintään yksi viereinen tahko on näkyvä
         CPY   R6, R15
         ADD   R6, R15         ; R6 = edge_idx * 2
@@ -516,6 +559,7 @@ _dof_edge_loop:
         CMP   R6, R0
         JZ    _dof_skip_edge
 
+_dof_draw_edge:
         ; Piirrä viiva
         READ  R0, proj_x
         ADD   R0, R4
@@ -649,8 +693,114 @@ _so_pyramid:
         RET
 
 ; =============================================================================
+; apply_scene_from_phase — aseta tila+objekti+piirtomoodi phase-indeksin mukaan
+;
+; Sisään: [phase] = 0..15
+; Ulos:   R14 = gfx_mode (1/2), draw_mode ja obj_* osoittimet päivitetty
+; Clobbers: R0, R1, R2, R4
+; =============================================================================
+
+apply_scene_from_phase:
+        READ  R0, [phase]
+        ; idx = phase * 3
+        CPY   R2, R0
+        ADD   R2, R0
+        ADD   R2, R0
+
+        READ  R1, scene_table
+        ADD   R1, R2
+
+        ; gfx_mode
+        READ  R4, [R1]
+        READ  R0, GFX_MODE_REG
+        STORE [R0], R4
+        CPY   R14, R4
+
+        ; object_id
+        READ  R0, 1
+        ADD   R1, R0
+        READ  R0, [R1]
+        CALL  set_object
+
+        ; draw_mode
+        READ  R0, 1
+        ADD   R1, R0
+        READ  R0, [R1]
+        STORE [draw_mode], R0
+        RET
+
+; =============================================================================
+; update_angles — päivitä X/Y/Z kulmat omilla nopeuksillaan
+;
+; X joka 3. kehys, Z joka 5. kehys, Y joka 7. kehys.
+; Clobbers: R0, R1, R2
+; =============================================================================
+
+update_angles:
+        ; X
+        READ  R0, [cnt_x]
+        READ  R1, 1
+        ADD   R0, R1
+        READ  R1, 3
+        CMP   R0, R1
+        JNZ   _ua_cnt_x_done
+        READ  R0, 0
+        READ  R1, [angle_x]
+        READ  R2, 1
+        ADD   R1, R2
+        READ  R2, 64
+        CMP   R1, R2
+        JNZ   _ua_ax_no_wrap
+        READ  R1, 0
+_ua_ax_no_wrap:
+        STORE [angle_x], R1
+_ua_cnt_x_done:
+        STORE [cnt_x], R0
+
+        ; Z
+        READ  R0, [cnt_z]
+        READ  R1, 1
+        ADD   R0, R1
+        READ  R1, 5
+        CMP   R0, R1
+        JNZ   _ua_cnt_z_done
+        READ  R0, 0
+        READ  R1, [angle_z]
+        READ  R2, 1
+        ADD   R1, R2
+        READ  R2, 64
+        CMP   R1, R2
+        JNZ   _ua_az_no_wrap
+        READ  R1, 0
+_ua_az_no_wrap:
+        STORE [angle_z], R1
+_ua_cnt_z_done:
+        STORE [cnt_z], R0
+
+        ; Y
+        READ  R0, [cnt_y]
+        READ  R1, 1
+        ADD   R0, R1
+        READ  R1, 7
+        CMP   R0, R1
+        JNZ   _ua_cnt_y_done
+        READ  R0, 0
+        READ  R1, [angle_y]
+        READ  R2, 1
+        ADD   R1, R2
+        READ  R2, 64
+        CMP   R1, R2
+        JNZ   _ua_ay_no_wrap
+        READ  R1, 0
+_ua_ay_no_wrap:
+        STORE [angle_y], R1
+_ua_cnt_y_done:
+        STORE [cnt_y], R0
+        RET
+
+; =============================================================================
 ; main — Pääohjelma
-; Sykli: vaihe 0 = kuutio (tila B), vaihe 1 = L (tila C), vaihe 2 = J (tila B), sitten alusta
+; Sykli: 16 kohtausta scene_table-järjestyksessä (B/C × cube/pyramid/L/J × wire/solid)
 ; =============================================================================
 
 main:
@@ -662,9 +812,9 @@ main:
         STI
 
 restart_loop:
-        ; Nollaa tilamuuttujat phase..cnt_z
+        ; Nollaa tilamuuttujat phase..draw_mode
         READ  R0, phase
-        READ  R1, cnt_z
+        READ  R1, draw_mode
         READ  R2, 0
         FILL  R0, R1, R2
 
@@ -675,248 +825,47 @@ restart_loop:
         READ  R0, 10000
         SCTMR R0
 
-        ; Vaihe 0: kuutio, tila B
-        READ  R0, GFX_MODE_B
-        READ  R1, GFX_MODE_REG
-        STORE [R1], R0
+scene_loop:
+        READ  R0, [phase]
+        READ  R1, 16
+        CMP   R0, R1
+        JGE   restart_loop
 
-        READ  R14, 1
-
+        STORE [scene_phase], R0
         READ  R0, 0
-        CALL  set_object
+        STORE [scene_frames], R0
+        CALL  apply_scene_from_phase
 
-; --- Tila B / kuutio -piirtosilmukka ---
-b_loop:
+scene_frame_loop:
         CALL  gfx_clear
         CALL  draw_object_frame
         CALL  gfx_flip
+        CALL  update_angles
 
-        ; Kasvata angle_x (joka 3. kehys)
-        READ  R0, [cnt_x]
+        ; Fallback: jos CTMR-vaihto viivästyy hitaassa ajossa,
+        ; siirry seuraavaan kohtaukseen frame-katon jälkeen.
+        READ  R0, [scene_frames]
         READ  R1, 1
         ADD   R0, R1
-        READ  R1, 3
+        STORE [scene_frames], R0
+        READ  R1, 60
         CMP   R0, R1
-        JNZ   _b_cnt_x_done
-        READ  R0, 0
-        READ  R1, [angle_x]
-        READ  R2, 1
-        ADD   R1, R2
-        READ  R2, 64
-        CMP   R1, R2
-        JNZ   _b_ax_no_wrap
-        READ  R1, 0
-_b_ax_no_wrap:
-        STORE [angle_x], R1
-_b_cnt_x_done:
-        STORE [cnt_x], R0
-
-        ; Kasvata angle_z (joka 5. kehys)
-        READ  R0, [cnt_z]
-        READ  R1, 1
-        ADD   R0, R1
-        READ  R1, 5
-        CMP   R0, R1
-        JNZ   _b_cnt_z_done
-        READ  R0, 0
-        READ  R1, [angle_z]
-        READ  R2, 1
-        ADD   R1, R2
-        READ  R2, 64
-        CMP   R1, R2
-        JNZ   _b_az_no_wrap
-        READ  R1, 0
-_b_az_no_wrap:
-        STORE [angle_z], R1
-_b_cnt_z_done:
-        STORE [cnt_z], R0
-
-        ; Kasvata angle_y (joka 7. kehys)
-        READ  R0, [cnt_y]
-        READ  R1, 1
-        ADD   R0, R1
-        READ  R1, 7
-        CMP   R0, R1
-        JNZ   _b_cnt_y_done
-        READ  R0, 0
-        READ  R1, [angle_y]
-        READ  R2, 1
-        ADD   R1, R2
-        READ  R2, 64
-        CMP   R1, R2
-        JNZ   _b_ay_no_wrap
-        READ  R1, 0
-_b_ay_no_wrap:
-        STORE [angle_y], R1
-_b_cnt_y_done:
-        STORE [cnt_y], R0
+        JLT   _scene_wait_phase
 
         READ  R0, [phase]
-        READ  R1, 0
+        READ  R1, [scene_phase]
         CMP   R0, R1
-        JZ    b_loop
-
-        ; Siirry vaiheeseen 1: L-kirjain, tila C
-        READ  R0, GFX_MODE_C
-        READ  R1, GFX_MODE_REG
-        STORE [R1], R0
-
-        READ  R14, 2
-
-        READ  R0, 1
-        CALL  set_object
-
-; --- Tila C / L-kirjain -piirtosilmukka ---
-c_loop:
-        CALL  gfx_clear
-        CALL  draw_object_frame
-        CALL  gfx_flip
-
-        ; Kasvata angle_x
-        READ  R0, [cnt_x]
+        JNZ   _scene_wait_phase
+        READ  R0, [scene_phase]
         READ  R1, 1
         ADD   R0, R1
-        READ  R1, 3
-        CMP   R0, R1
-        JNZ   _c_cnt_x_done
-        READ  R0, 0
-        READ  R1, [angle_x]
-        READ  R2, 1
-        ADD   R1, R2
-        READ  R2, 64
-        CMP   R1, R2
-        JNZ   _c_ax_no_wrap
-        READ  R1, 0
-_c_ax_no_wrap:
-        STORE [angle_x], R1
-_c_cnt_x_done:
-        STORE [cnt_x], R0
+        STORE [phase], R0
 
-        ; Kasvata angle_z
-        READ  R0, [cnt_z]
-        READ  R1, 1
-        ADD   R0, R1
-        READ  R1, 5
-        CMP   R0, R1
-        JNZ   _c_cnt_z_done
-        READ  R0, 0
-        READ  R1, [angle_z]
-        READ  R2, 1
-        ADD   R1, R2
-        READ  R2, 64
-        CMP   R1, R2
-        JNZ   _c_az_no_wrap
-        READ  R1, 0
-_c_az_no_wrap:
-        STORE [angle_z], R1
-_c_cnt_z_done:
-        STORE [cnt_z], R0
+_scene_wait_phase:
 
         READ  R0, [phase]
-        READ  R1, 1
+        READ  R1, [scene_phase]
         CMP   R0, R1
-        JZ    c_loop
+        JZ    scene_frame_loop
 
-                ; Kasvata angle_y (joka 7. kehys)
-                READ  R0, [cnt_y]
-                READ  R1, 1
-                ADD   R0, R1
-                READ  R1, 7
-                CMP   R0, R1
-                JNZ   _c_cnt_y_done
-                READ  R0, 0
-                READ  R1, [angle_y]
-                READ  R2, 1
-                ADD   R1, R2
-                READ  R2, 64
-                CMP   R1, R2
-                JNZ   _c_ay_no_wrap
-                READ  R1, 0
-        _c_ay_no_wrap:
-                STORE [angle_y], R1
-        _c_cnt_y_done:
-                STORE [cnt_y], R0
-
-        ; Siirry vaiheeseen 2: J-kirjain, tila B
-        READ  R0, GFX_MODE_B
-        READ  R1, GFX_MODE_REG
-        STORE [R1], R0
-
-        READ  R14, 1
-
-        READ  R0, 2
-        CALL  set_object
-
-; --- Tila B / J-kirjain -piirtosilmukka ---
-d_loop:
-        CALL  gfx_clear
-        CALL  draw_object_frame
-        CALL  gfx_flip
-
-        ; Kasvata angle_x
-        READ  R0, [cnt_x]
-        READ  R1, 1
-        ADD   R0, R1
-        READ  R1, 3
-        CMP   R0, R1
-        JNZ   _d_cnt_x_done
-        READ  R0, 0
-        READ  R1, [angle_x]
-        READ  R2, 1
-        ADD   R1, R2
-        READ  R2, 64
-        CMP   R1, R2
-        JNZ   _d_ax_no_wrap
-        READ  R1, 0
-_d_ax_no_wrap:
-        STORE [angle_x], R1
-_d_cnt_x_done:
-        STORE [cnt_x], R0
-
-        ; Kasvata angle_z
-        READ  R0, [cnt_z]
-        READ  R1, 1
-        ADD   R0, R1
-        READ  R1, 5
-        CMP   R0, R1
-        JNZ   _d_cnt_z_done
-        READ  R0, 0
-        READ  R1, [angle_z]
-        READ  R2, 1
-        ADD   R1, R2
-        READ  R2, 64
-        CMP   R1, R2
-        JNZ   _d_az_no_wrap
-        READ  R1, 0
-_d_az_no_wrap:
-        STORE [angle_z], R1
-_d_cnt_z_done:
-        STORE [cnt_z], R0
-
-        READ  R0, [phase]
-        READ  R1, 2
-        CMP   R0, R1
-        JZ    d_loop
-
-                ; Kasvata angle_y (joka 7. kehys)
-                READ  R0, [cnt_y]
-                READ  R1, 1
-                ADD   R0, R1
-                READ  R1, 7
-                CMP   R0, R1
-                JNZ   _d_cnt_y_done
-                READ  R0, 0
-                READ  R1, [angle_y]
-                READ  R2, 1
-                ADD   R1, R2
-                READ  R2, 64
-                CMP   R1, R2
-                JNZ   _d_ay_no_wrap
-                READ  R1, 0
-        _d_ay_no_wrap:
-                STORE [angle_y], R1
-        _d_cnt_y_done:
-                STORE [cnt_y], R0
-
-        ; Vaihe on 3: aloita koko animaatio alusta
-        JUMP  restart_loop
+        JUMP  scene_loop

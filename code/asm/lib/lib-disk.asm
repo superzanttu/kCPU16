@@ -37,7 +37,11 @@
 ;     Offset 20    : muokkausaika_y (vuosi)
 ;     Offset 21    : muokkausaika_md (kuukausi << 8 | päivä)
 ;     Offset 22    : ensimmäinen_blokki (blokki-indeksi, tai 0 jos koko=0)
-;     Offset 23–31 : varattu (täytetty nollilla)
+;     Offset 23    : luontiaika_hm  (tunti << 8 | minuutti)
+;     Offset 24    : luontiaika_s   (sekunti)
+;     Offset 25    : muokkausaika_hm (tunti << 8 | minuutti)
+;     Offset 26    : muokkausaika_s  (sekunti)
+;     Offset 27–31 : varattu (täytetty nollilla)
 ;
 ; TOIMINNOT:
 ;   disk_format        — Alusta tiedostojärjestelmä (tyhjennä FAT + hakemisto)
@@ -49,7 +53,11 @@
 ;   disk_find          — Etsi tiedosto nimellä
 ;   disk_stat          — Lue tiedoston metatiedot
 ;   disk_list          — Listaa kaikki tiedostot ja hakemistot
+;   disk_space         — Laske vapaa/varattu tila (blokkeina ja sanoina)
+;   disk_copy          — Kopioi tiedosto tai hakemisto
+;   disk_zero_free_blocks — Nollaa kaikki vapaat datablokit
 ;   disk_check         — Tarkista tiedostojärjestelmän eheys
+;   disk_sync          — Varmista, että levylle kirjoitukset ovat valmiit
 ;
 ; REKISTERIKONVENTIO (kutsuvilla aliohjelmilla):
 ;   Sisään: R0–R3 (käyttö vaihtelee, ks. kukin aliohjelma)
@@ -706,6 +714,22 @@ _dc_free_found:
         READ  R1, 0
         STORE [R0], R1
 
+        ; Luonti- ja muokkauskellonaika (hh:mm:ss)
+        READ  R4, [CLOCK_HOUR]
+        READ  R5, 8
+        SHL   R4, R5
+        READ  R5, [CLOCK_MINUTE]
+        OR    R4, R5              ; R4 = tunti<<8 | minuutti
+        READ  R5, [CLOCK_SECOND]  ; R5 = sekunti
+        ADD   R0, R2              ; offset 23: luonti_hm
+        STORE [R0], R4
+        ADD   R0, R2              ; offset 24: luonti_s
+        STORE [R0], R5
+        ADD   R0, R2              ; offset 25: muokkaus_hm
+        STORE [R0], R4
+        ADD   R0, R2              ; offset 26: muokkaus_s
+        STORE [R0], R5
+
         ; Kirjoita hakemisto takaisin levylle
         READ  R0, DISK_DIR_BLOCK
         CALL  _disk_write_block
@@ -822,6 +846,22 @@ _dm_free_found:
         READ  R1, 0
         STORE [R0], R1
 
+        ; Luonti- ja muokkauskellonaika (hh:mm:ss)
+        READ  R4, [CLOCK_HOUR]
+        READ  R5, 8
+        SHL   R4, R5
+        READ  R5, [CLOCK_MINUTE]
+        OR    R4, R5              ; R4 = tunti<<8 | minuutti
+        READ  R5, [CLOCK_SECOND]  ; R5 = sekunti
+        ADD   R0, R2              ; offset 23: luonti_hm
+        STORE [R0], R4
+        ADD   R0, R2              ; offset 24: luonti_s
+        STORE [R0], R5
+        ADD   R0, R2              ; offset 25: muokkaus_hm
+        STORE [R0], R4
+        ADD   R0, R2              ; offset 26: muokkaus_s
+        STORE [R0], R5
+
         ; Kirjoita hakemisto takaisin levylle
         READ  R0, DISK_DIR_BLOCK
         CALL  _disk_write_block
@@ -866,6 +906,9 @@ disk_write:
         STORE [_dw_data_ptr],   R1
         STORE [_dw_data_words], R2
         STORE [_dw_orig_words], R2  ; tallenna alkuperäinen sanamäärä
+        READ  R1, 0
+        STORE [_dw_first_block], R1
+        STORE [_dw_cur_block], R1
         CPY   R9, R0              ; R9 = nimi
 
         ; Etsi tiedosto → R0 = indeksi tai virhe
@@ -1051,6 +1094,20 @@ _dw_update_dir:
         READ  R1, [_dw_first_block]
         STORE [R0], R1
 
+        ; offset 25: muokkaus_hm, offset 26: muokkaus_s
+        READ  R1, [CLOCK_HOUR]
+        READ  R3, 8
+        SHL   R1, R3
+        READ  R3, [CLOCK_MINUTE]
+        OR    R1, R3              ; R1 = tunti<<8 | minuutti
+        READ  R3, [CLOCK_SECOND]  ; R3 = sekunti
+        ADD   R0, R2              ; offset 23 (luonti_hm, säilytetään)
+        ADD   R0, R2              ; offset 24 (luonti_s, säilytetään)
+        ADD   R0, R2              ; offset 25
+        STORE [R0], R1
+        ADD   R0, R2              ; offset 26
+        STORE [R0], R3
+
         READ  R0, DISK_DIR_BLOCK
         CALL  _disk_write_block
 
@@ -1066,6 +1123,37 @@ _dw_not_found:
         RET
 
 _dw_disk_full:
+        ; Jos osa uudesta ketjusta ehdittiin varata, vapauta se.
+        READ  R1, [_dw_first_block]
+        READ  R2, 0
+        CMP   R1, R2
+        JZ    _dw_disk_full_mark_empty
+        CPY   R0, R1
+        CALL  _fat_free_chain
+
+_dw_disk_full_mark_empty:
+        ; Merkitse tiedosto tyhjäksi, jotta osittainen kirjoitus ei jää käyttöön.
+        READ  R0, DISK_DIR_BLOCK
+        CALL  _disk_read_block
+        READ  R0, [_dw_entry_idx]
+        READ  R1, DISK_DIR_ENTRY_SIZE
+        MUL   R0, R1
+        READ  R1, disk_io_buf
+        ADD   R0, R1              ; R0 = &entry
+        READ  R1, 17
+        ADD   R0, R1              ; offset 17: size
+        READ  R2, 0
+        STORE [R0], R2
+        READ  R3, 1
+        ADD   R0, R3              ; 18
+        ADD   R0, R3              ; 19
+        ADD   R0, R3              ; 20
+        ADD   R0, R3              ; 21
+        ADD   R0, R3              ; 22: first block
+        STORE [R0], R2
+        READ  R0, DISK_DIR_BLOCK
+        CALL  _disk_write_block
+
         READ  R0, DISK_ERR_DISK_FULL
         POP   R9
         POP   R8
@@ -1231,7 +1319,7 @@ _dr_copy_n:
         .dw  0
 
 ; =============================================================================
-; disk_delete — Poista tiedosto
+; disk_delete — Poista tiedosto tai hakemisto
 ;
 ; Sisään: R0 = osoitin tiedoston nimeen RAM:ssa
 ; Ulos:   R0 = DISK_OK           jos onnistui
@@ -1243,8 +1331,8 @@ disk_delete:
         PUSH  R9
         CPY   R9, R0
 
-        ; Etsi tiedosto
-        CALL  disk_find
+        ; Etsi tiedosto tai hakemisto
+        CALL  disk_find_any
         READ  R1, DISK_ERR_NOT_FOUND
         CMP   R0, R1
         JZ    _dd_not_found
@@ -1303,16 +1391,191 @@ _dd_entry_idx:
         .dw  0
 
 ; =============================================================================
+; disk_copy — Kopioi tiedosto tai hakemisto
+;
+; Sisään: R0 = lähdenimi (RAM, null-terminoitu)
+;         R1 = kohdenimi (RAM, null-terminoitu)
+;         R2 = välipuskurin osoitin RAM:ssa
+;         R3 = välipuskurin koko sanoina
+; Ulos:   R0 = DISK_OK / DISK_ERR_*
+; Clobbers: R0–R9
+;
+; Huom:
+;   - Hakemisto kopioidaan hakemistomerkintänä (ei rekursiivista sisältökopiota).
+;   - Tiedostokopio vaatii, että koko tiedosto mahtuu annettuun välipuskuriin.
+; =============================================================================
+disk_copy:
+        PUSH  R8
+        PUSH  R9
+
+        STORE [_dcp_src_ptr], R0
+        STORE [_dcp_dst_ptr], R1
+        STORE [_dcp_buf_ptr], R2
+        STORE [_dcp_buf_words], R3
+
+        ; Lähteen on oltava olemassa (tiedosto tai hakemisto)
+        READ  R0, [_dcp_src_ptr]
+        CALL  disk_find_any
+        READ  R1, DISK_ERR_NOT_FOUND
+        CMP   R0, R1
+        JZ    _dcp_ret
+
+        ; Tallenna lähteen status
+        CPY   R8, R0
+        READ  R1, DISK_DIR_ENTRY_SIZE
+        MUL   R8, R1
+        READ  R1, disk_io_buf
+        ADD   R8, R1              ; R8 = &entry
+        READ  R9, [R8]            ; R9 = status
+
+        ; Hakemisto: pelkkä mkdir kohteeseen
+        READ  R1, DISK_ENTRY_DIR
+        CMP   R9, R1
+        JNZ   _dcp_copy_file
+
+        READ  R0, [_dcp_dst_ptr]
+        CALL  disk_mkdir
+        JUMP  _dcp_ret
+
+_dcp_copy_file:
+        ; Oletus: lähde on tiedosto
+        ; Luo kohde
+        READ  R0, [_dcp_dst_ptr]
+        CALL  disk_create
+        READ  R1, DISK_OK
+        CMP   R0, R1
+        JZ    _dcp_stat_src
+        JUMP  _dcp_ret
+
+_dcp_stat_src:
+        ; Hae lähteen koko
+        READ  R0, [_dcp_src_ptr]
+        READ  R1, _dcp_stat_buf
+        CALL  disk_stat
+        READ  R1, DISK_OK
+        CMP   R0, R1
+        JNZ   _dcp_ret
+
+        READ  R8, [_dcp_stat_buf] ; R8 = tiedoston koko sanoina
+        READ  R1, 0
+        CMP   R8, R1
+        JZ    _dcp_ok             ; tyhjä tiedosto
+
+        ; Puskuri riittää?
+        READ  R1, [_dcp_buf_words]
+        CMP   R8, R1
+        JLE   _dcp_read
+        READ  R0, DISK_ERR_RANGE
+        JUMP  _dcp_ret
+
+_dcp_read:
+        READ  R0, [_dcp_src_ptr]
+        READ  R1, [_dcp_buf_ptr]
+        CPY   R2, R8
+        CALL  disk_read
+        READ  R1, DISK_OK
+        CMP   R0, R1
+        JNZ   _dcp_ret
+
+        READ  R0, [_dcp_dst_ptr]
+        READ  R1, [_dcp_buf_ptr]
+        CPY   R2, R8
+        CALL  disk_write
+        JUMP  _dcp_ret
+
+_dcp_ok:
+        READ  R0, DISK_OK
+
+_dcp_ret:
+        POP   R9
+        POP   R8
+        RET
+
+_dcp_src_ptr:
+        .dw  0
+_dcp_dst_ptr:
+        .dw  0
+_dcp_buf_ptr:
+        .dw  0
+_dcp_buf_words:
+        .dw  0
+_dcp_stat_buf:
+        .dw  0,0,0,0,0,0,0,0,0,0
+
+; =============================================================================
+; disk_zero_free_blocks — Nollaa kaikki vapaat datablokit
+;
+; Sisään: (ei parametreja)
+; Ulos:   R0 = DISK_OK
+; Clobbers: R0–R9
+; =============================================================================
+disk_zero_free_blocks:
+        PUSH  R8
+        PUSH  R9
+
+        ; Lue FAT
+        READ  R0, DISK_FAT_BLOCK
+        CALL  _disk_read_block
+
+        ; R8 = FAT-indeksi/blokki, R9 = loppu
+        READ  R8, DISK_DATA_START
+        READ  R9, 256
+        READ  R7, 1
+        READ  R6, 0
+
+_dzfb_loop:
+        CMP   R8, R9
+        JGE   _dzfb_done
+
+        ; Jos FAT[blokki] != 0, blokki käytössä -> ohita
+        READ  R0, disk_io_buf
+        ADD   R0, R8
+        READ  R1, [R0]
+        CMP   R1, R6
+        JNZ   _dzfb_next
+
+        ; Nollaa io-puskuri
+        READ  R2, disk_io_buf
+        READ  R3, 256
+        READ  R4, 1
+        READ  R5, 0
+_dzfb_zero_buf:
+        CMP   R3, R5
+        JZ    _dzfb_write
+        STORE [R2], R5
+        ADD   R2, R4
+        SUB   R3, R4
+        JUMP  _dzfb_zero_buf
+
+_dzfb_write:
+        CPY   R0, R8
+        CALL  _disk_write_block
+
+_dzfb_next:
+        ADD   R8, R7
+        JUMP  _dzfb_loop
+
+_dzfb_done:
+        READ  R0, DISK_OK
+        POP   R9
+        POP   R8
+        RET
+
+; =============================================================================
 ; disk_stat — Lue tiedoston metatiedot
 ;
 ; Sisään: R0 = osoitin tiedoston nimeen RAM:ssa
-;         R1 = osoitin tulosrakenteeseen RAM:ssa (9 sanaa):
+;         R1 = osoitin tulosrakenteeseen RAM:ssa (10 sanaa):
 ;              [0] = koko (sanoja)
 ;              [1] = luontivuosi
 ;              [2] = luonti md (kuukausi<<8|päivä)
-;              [3] = muokkausvuosi
-;              [4] = muokkaus md
-;              [5] = ensimmäinen blokki
+;              [3] = luonti hm (tunti<<8|minuutti)
+;              [4] = luonti s
+;              [5] = muokkausvuosi
+;              [6] = muokkaus md
+;              [7] = muokkaus hm (tunti<<8|minuutti)
+;              [8] = muokkaus s
+;              [9] = ensimmäinen blokki
 ; Ulos:   R0 = DISK_OK           jos onnistui
 ;         R0 = DISK_ERR_NOT_FOUND jos ei löydy
 ; Clobbers: R0–R7
@@ -1334,12 +1597,12 @@ disk_stat:
         READ  R1, disk_io_buf
         ADD   R0, R1              ; R0 = &entry
 
-        ; Siirry offset 17:ään
+        ; Siirry offset 17:ään (koko)
         READ  R1, 17
         ADD   R0, R1              ; R0 = &entry.size
 
         READ  R2, 1
-        ; Kopioi 6 kenttää: koko, luontivuosi, luontimd, muokvuosi, muokmd, 1.blokki
+        ; Kopioi koko + luonti/muokkaus päivämäärä + ensimmäinen blokki
         READ  R3, [R0]  ; koko
         STORE [R9], R3
         ADD   R0, R2
@@ -1355,6 +1618,22 @@ disk_stat:
         ADD   R0, R2
         ADD   R9, R2
 
+        ; luonti_hm (offset 23)
+        CPY   R3, R0
+        READ  R1, 3
+        ADD   R3, R1
+        READ  R3, [R3]
+        STORE [R9], R3
+        ADD   R9, R2
+
+        ; luonti_s (offset 24)
+        CPY   R3, R0
+        READ  R1, 4
+        ADD   R3, R1
+        READ  R3, [R3]
+        STORE [R9], R3
+        ADD   R9, R2
+
         READ  R3, [R0]  ; muokkausvuosi
         STORE [R9], R3
         ADD   R0, R2
@@ -1365,7 +1644,25 @@ disk_stat:
         ADD   R0, R2
         ADD   R9, R2
 
-        READ  R3, [R0]  ; ensimmäinen blokki
+        ; muokkaus_hm (offset 25)
+        CPY   R3, R0
+        READ  R1, 3
+        ADD   R3, R1
+        READ  R3, [R3]
+        STORE [R9], R3
+        ADD   R9, R2
+
+        ; muokkaus_s (offset 26)
+        CPY   R3, R0
+        READ  R1, 4
+        ADD   R3, R1
+        READ  R3, [R3]
+        STORE [R9], R3
+        ADD   R9, R2
+
+        ; ensimmäinen blokki (offset 22)
+        CPY   R3, R0
+        READ  R3, [R3]
         STORE [R9], R3
 
         READ  R0, DISK_OK
@@ -1596,6 +1893,97 @@ _dchk_fail:
         READ  R0, DISK_ERR_RANGE
         POP   R9
         POP   R8
+        RET
+
+; =============================================================================
+; disk_space — Laske vapaa ja varattu tila FAT:n perusteella
+;
+; Sisään: R0 = osoitin tulospuskuriin (4 sanaa):
+;              [0] = vapaat blokit
+;              [1] = varatut blokit
+;              [2] = vapaat sanat
+;              [3] = varatut sanat
+; Ulos:   R0 = DISK_OK
+; Clobbers: R0–R9
+; =============================================================================
+disk_space:
+        PUSH  R8
+        PUSH  R9
+
+        CPY   R3, R0              ; R3 = tulospuskuri
+
+        ; Lue FAT puskuriin
+        READ  R0, DISK_FAT_BLOCK
+        CALL  _disk_read_block
+
+        READ  R6, DISK_DATA_START ; R6 = blokki-indeksi (3..255)
+        READ  R7, 256             ; yläraja
+        READ  R8, 0               ; vapaat blokit
+        READ  R9, 0               ; varatut blokit
+        READ  R5, 1
+        READ  R4, 0
+
+_dsp_loop:
+        CMP   R6, R7
+        JGE   _dsp_done_count
+
+        READ  R0, disk_io_buf
+        ADD   R0, R6
+        READ  R1, [R0]            ; FAT[blokki]
+        CMP   R1, R4              ; 0 => vapaa
+        JZ    _dsp_free
+
+        ADD   R9, R5
+        JUMP  _dsp_next
+
+_dsp_free:
+        ADD   R8, R5
+
+_dsp_next:
+        ADD   R6, R5
+        JUMP  _dsp_loop
+
+_dsp_done_count:
+        ; [0] vapaat blokit
+        STORE [R3], R8
+        ADD   R3, R5
+        ; [1] varatut blokit
+        STORE [R3], R9
+        ADD   R3, R5
+
+        ; [2] vapaat sanat = vapaat blokit * 256
+        CPY   R2, R8
+        READ  R1, DISK_BLOCK_SIZE
+        MUL   R2, R1
+        STORE [R3], R2
+        ADD   R3, R5
+
+        ; [3] varatut sanat = varatut blokit * 256
+        CPY   R2, R9
+        READ  R1, DISK_BLOCK_SIZE
+        MUL   R2, R1
+        STORE [R3], R2
+
+        READ  R0, DISK_OK
+        POP   R9
+        POP   R8
+        RET
+
+; =============================================================================
+; disk_sync — Varmista levykirjoitusten valmistuminen ennen sammutusta/resettiä
+;
+; Nykyisessä emulaattorissa DWRITE on synkroninen (kirjoitus tapahtuu heti),
+; joten varsinainen "flush" on no-op. Tämä funktio tarjoaa silti
+; eksplisiittisen synkronointipisteen ohjelmille ja tarkistaa samalla, että
+; tiedostojärjestelmä on eheä ennen sammutusta tai uudelleenkäynnistystä.
+;
+; Sisään:  (ei parametreja)
+; Ulos:    R0 = DISK_OK jos levy eheä
+;          R0 = DISK_ERR_RANGE jos eheystarkistus epäonnistuu
+; Clobbers: R0–R9
+; =============================================================================
+disk_sync:
+        CALL  disk_check
         RET
 
 ; --- disk_list apumuuttujat ---

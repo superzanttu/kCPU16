@@ -741,13 +741,14 @@ class KCPU16TUI(App[None], TUIRenderMixin, TUICommandsMixin):
         height: 1fr;
     }
 
-    #game-input-indicator {
+    #btn-game-input {
         width: 30;
         height: 1;
-        content-align: center middle;
+        min-width: 30;
+        background: transparent;
         color: #a0a0a0;
     }
-    #game-input-indicator.game-input-on {
+    #btn-game-input.game-input-on {
         color: #101010;
         background: #ffd75f;
         text-style: bold;
@@ -833,8 +834,9 @@ class KCPU16TUI(App[None], TUIRenderMixin, TUICommandsMixin):
         self.dbg = DebugState()
         self.current_file: Path | None = None
         self.current_disk_file: Path | None = None
-        self.code_dir: Path = Path(__file__).resolve().parent / "code"
-        self.code_dir.mkdir(exist_ok=True)
+        repo_root = Path(__file__).resolve().parents[1]
+        self.code_dir: Path = repo_root / "code" / "asm"
+        self.code_dir.mkdir(parents=True, exist_ok=True)
         self.storage_dir: Path = Path(__file__).resolve().parent / "storage"
         self.storage_dir.mkdir(exist_ok=True)
         self.mem_view_addr: int = BOOT_RAM_START
@@ -855,7 +857,7 @@ class KCPU16TUI(App[None], TUIRenderMixin, TUICommandsMixin):
         self._w_screen_view: Static | None = None
         self._w_memory_view: Static | None = None
         self._w_stack_view: Static | None = None
-        self._w_game_input_indicator: Static | None = None
+        self._w_game_input_indicator: Button | None = None
         self._output_buffer: list[str] = []
         self._boot_status_text: str | None = None
         self._disk_dirty: bool = False
@@ -869,6 +871,9 @@ class KCPU16TUI(App[None], TUIRenderMixin, TUICommandsMixin):
         self._game_input_mode: bool = (
             False  # True = emulator gets keyboard; False = TUI gets shortcuts
         )
+        self._kbd_dbg_last_key: str = "n/a"
+        self._kbd_dbg_last_code: int | None = None
+        self._kbd_dbg_forwarded_count: int = 0
         # --asm listing caches (rebuilt each assemble)
         self._asm_addr_to_src: dict[int, str] = {}  # addr → raw source line
         self._asm_addr_to_label: dict[int, str] = {}  # addr → label name
@@ -912,7 +917,7 @@ class KCPU16TUI(App[None], TUIRenderMixin, TUICommandsMixin):
             yield Button("Clear F9", id="btn-clear", variant="default")
             yield Button("Help F1", id="btn-help", variant="default")
             yield Static(" ", classes="sep")
-            yield Static("kbd OFF (TUI)", id="game-input-indicator")
+            yield Button("kbd OFF (TUI)", id="btn-game-input", variant="default")
             yield Static(" ", classes="sep")
             with Horizontal(id="speed-control-group"):
                 yield SpeedSlider(value=10, id="speed-slider")
@@ -985,7 +990,7 @@ class KCPU16TUI(App[None], TUIRenderMixin, TUICommandsMixin):
         self._w_screen_view = self.query_one("#screen-view-solo", Static)
         self._w_memory_view = self.query_one("#memory-view", Static)
         self._w_stack_view = self.query_one("#stack-view", Static)
-        self._w_game_input_indicator = self.query_one("#game-input-indicator", Static)
+        self._w_game_input_indicator = self.query_one("#btn-game-input", Button)
 
         self.machine.cold_reset()
         self.dbg.snapshot_registers(self.machine.dump_registers())
@@ -1026,10 +1031,10 @@ class KCPU16TUI(App[None], TUIRenderMixin, TUICommandsMixin):
             return
 
         if self._game_input_mode:
-            widget.update("GAME INPUT ON (kbd -> emulator)")
+            widget.label = "GAME INPUT ON (kbd -> emulator)"
             widget.add_class("game-input-on")
         else:
-            widget.update("kbd OFF (TUI)")
+            widget.label = "kbd OFF (TUI)"
             widget.remove_class("game-input-on")
 
     # ------------------------------------------------------------------
@@ -1056,11 +1061,13 @@ class KCPU16TUI(App[None], TUIRenderMixin, TUICommandsMixin):
             "btn-bp": self.action_toggle_breakpoint,
             "btn-clear": self.action_clear_screen,
             "btn-help": self.action_show_help,
+            "btn-game-input": self.action_toggle_game_input,
         }
         action = actions.get(event.button.id)
         if action:
+            if self._game_input_mode and event.button.id != "btn-game-input":
+                return
             action()
-            return
 
         # Nopeudenkertoimen valinta
         if event.button.id in ("btn-mult-x1", "btn-mult-x10", "btn-mult-x100"):
@@ -1078,6 +1085,20 @@ class KCPU16TUI(App[None], TUIRenderMixin, TUICommandsMixin):
                 sl.refresh()
             except Exception:
                 pass
+
+    def on_click(self, event: events.Click) -> None:
+        """Aktivoi game input -tila klikatessa Screen-ikkunaa.
+
+        Klikkaus Screen-alueelle kytkee game input -tilan PÄÄLLE,
+        mutta ei koskaan pois päältä.
+        """
+        widget = event.widget
+        widget_id = getattr(widget, "id", None)
+        if (
+            widget_id in {"screen-view-solo", "screen-section"}
+            and not self._game_input_mode
+        ):
+            self.action_toggle_game_input()
 
     def on_speed_slider_changed(self, event: SpeedSlider.Changed) -> None:
         """Päivitä SLOW-nopeus kun liukusäädin muuttuu."""
@@ -1111,6 +1132,20 @@ class KCPU16TUI(App[None], TUIRenderMixin, TUICommandsMixin):
         cmd_verb = cmd.split()[0].lower()
         if cmd_verb in {"step", "run", "slow", "restart", "asm", "reset", "stop"}:
             self._refresh_all(include_screen=True)
+
+    def on_input_changed(self, event: Input.Changed) -> None:
+        """Estä komentokentän kirjoitus game input -tilassa.
+
+        Joissain terminaaliympäristöissä Input voi käsitellä näppäimen ennen
+        App-tason on_key()-käsittelijää. Tyhjennetään cmd-input heti, jotta
+        näppäimet eivät jää komentoriville game input -tilassa.
+        """
+        if (
+            self._game_input_mode
+            and event.input.id == "cmd-input"
+            and event.input.value
+        ):
+            event.input.value = ""
 
     # ------------------------------------------------------------------
     # Actions (näppäinsidonnaisuudet)
@@ -1318,10 +1353,13 @@ class KCPU16TUI(App[None], TUIRenderMixin, TUICommandsMixin):
     def action_open_file(self) -> None:
         """Open a file picker dialog to load an .asm file (Ctrl+O).
 
-        Shows all .asm files in the code directory as a selectable list.
+        Shows all .asm files in the code directory tree as a selectable list.
         Selecting a file loads and assembles it. Cancel dismisses without loading.
         """
-        files = sorted(p.name for p in self.code_dir.iterdir() if p.suffix == ".asm")
+        files = sorted(
+            str(p.relative_to(self.code_dir)).replace("\\", "/")
+            for p in self.code_dir.rglob("*.asm")
+        )
         if not files:
             self._log("[yellow]No .asm files found in code directory.[/yellow]")
             return
@@ -1486,7 +1524,7 @@ class KCPU16TUI(App[None], TUIRenderMixin, TUICommandsMixin):
         self._log("  reset cpu                    CPU only (memory intact)")
         self._log("[bold]Other:[/bold]")
         self._log(
-            "  gameinput [on|off|toggle]      Toggle game input mode from command line"
+            "  gameinput [on|off|toggle]      Toggle game input mode from command line (same as Ctrl+Space)"
         )
         self._log("  cls                          Clear VRAM")
         self._log("  spec                         Show architecture spec")
@@ -1516,13 +1554,29 @@ class KCPU16TUI(App[None], TUIRenderMixin, TUICommandsMixin):
     def action_toggle_game_input(self) -> None:
         """Vaihda game input -tila päälle/pois (Ctrl+Space)."""
         self._game_input_mode = not self._game_input_mode
-        mode_text = (
-            "ENABLED (keyboard → emulator)"
-            if self._game_input_mode
-            else "DISABLED (keyboard → TUI)"
-        )
-        self._log(f"[cyan]Game Input Mode: {mode_text}[/cyan]")
+        cmd_input = self.query_one("#cmd-input", Input)
+        if self._game_input_mode:
+            cmd_input.value = ""
+            cmd_input.disabled = True
+            # Hiirellä klikattu toolbar-painike voi jäädä fokukseen,
+            # jolloin Enter painaa sitä uudelleen ja togglaa tilan pois.
+            # Pudotetaan fokus aina pois kun game input kytketään päälle.
+            self.set_focus(None)
+            self._log(
+                "[cyan]Game Input Mode: ENABLED (keyboard → emulator). Toggle with Ctrl+Space.[/cyan]"
+            )
+        else:
+            cmd_input.disabled = False
+            cmd_input.focus()
+            self._log("[cyan]Game Input Mode: DISABLED (keyboard → TUI)[/cyan]")
         self._update_game_input_indicator()
+        self._refresh_flags()
+
+    def _record_kbd_forward(self, key_label: str, code: int) -> None:
+        """Tallenna viimeisin emulaattorille välitetty näppäin debug-paneeliin."""
+        self._kbd_dbg_last_key = key_label
+        self._kbd_dbg_last_code = code & 0xFF
+        self._kbd_dbg_forwarded_count += 1
         self._refresh_flags()
 
     def on_key(self, event) -> None:
@@ -1539,14 +1593,16 @@ class KCPU16TUI(App[None], TUIRenderMixin, TUICommandsMixin):
         Terminaali ei tue näppäimennostotapahtumia, joten painallus ja
         vapautus lähetetään peräkkäin samasta tapahtumasta.
         """
-        # Toggle game input mode with Ctrl+Space
+        # Ctrl+Space is handled by Textual binding (single source of truth).
         if event.key == "ctrl+space":
-            self.action_toggle_game_input()
             return
 
-        # Älä välitä jos käyttäjä kirjoittaa komentokenttään
-        cmd_input = self.query_one("#cmd-input", Input)
-        if cmd_input is self.focused:
+        # Keep quit shortcuts always available (Textual default + app binding).
+        if event.key == "ctrl+c":
+            return
+        if event.key == "ctrl+q":
+            self.action_quit()
+            event.stop()
             return
 
         # In game input mode, forward keyboard to emulator
@@ -1562,6 +1618,7 @@ class KCPU16TUI(App[None], TUIRenderMixin, TUICommandsMixin):
                 code = special_ascii[key_name]
                 self.machine.keyboard.push_key(code)
                 self.machine.keyboard.push_key_release(code)
+                self._record_kbd_forward(key_name, code)
                 event.stop()
                 return
 
@@ -1571,8 +1628,26 @@ class KCPU16TUI(App[None], TUIRenderMixin, TUICommandsMixin):
                 if 32 <= code <= 126:  # printable ASCII
                     self.machine.keyboard.push_key(code)
                     self.machine.keyboard.push_key_release(code)
+                    self._record_kbd_forward(repr(char), code)
                     event.stop()
                     return
+
+            # Game input -tilassa mikään näppäin ei saa ohjautua TUI:hin.
+            event.stop()
+            return
+
+        # TUI mode: anna Input-widgetin käsitellä kirjoitus normaalisti.
+        return
+
+    def check_action(self, action: str, parameters: tuple[object, ...]) -> bool | None:
+        """Estä kaikki TUI-näppäintoiminnot game input -tilassa.
+
+        Vain game input -tilan toggle sallitaan, jotta käyttäjä pääsee
+        takaisin TUI-tilaan Ctrl+Space:lla.
+        """
+        if self._game_input_mode and action not in {"toggle_game_input", "quit"}:
+            return False
+        return None
 
     # ------------------------------------------------------------------
     # Perusoperaatiot
@@ -2460,6 +2535,25 @@ class KCPU16TUI(App[None], TUIRenderMixin, TUICommandsMixin):
             else "[dim]OFF[/] [dim](keyboard → TUI)[/]"
         )
 
+        kbd = self.machine.keyboard
+        if kbd is not None:
+            queue_len = kbd.read_status()
+            pending_int = getattr(kbd, "_pending_interrupts", 0)
+        else:
+            queue_len = 0
+            pending_int = 0
+
+        if self._kbd_dbg_last_code is None:
+            last_code_str = "[dim]n/a[/]"
+        else:
+            last_code_str = f"0x{self._kbd_dbg_last_code:02X}"
+
+        try:
+            cmd_input = self.query_one("#cmd-input", Input)
+            cmd_state = f"disabled={int(bool(cmd_input.disabled))} focused={int(cmd_input is self.focused)}"
+        except Exception:
+            cmd_state = "[dim]n/a[/]"
+
         content = (
             f"{' '.join(parts)}\n"
             f"Mode: {mode}\n"
@@ -2468,6 +2562,9 @@ class KCPU16TUI(App[None], TUIRenderMixin, TUICommandsMixin):
             f"CTMR: {ctmr_str}\n"
             f"GFX:  {gfx_str}\n"
             f"Game Input: {game_input_str}\n"
+            f"GI Debug: key={self._kbd_dbg_last_key} code={last_code_str}\n"
+            f"GI Queue: q={queue_len} pending_int={pending_int} fwd={self._kbd_dbg_forwarded_count}\n"
+            f"CMD Input: {cmd_state}\n"
             f"Boot: {self._boot_status_text or '[dim]n/a[/]'}"
         )
         if self._w_flags_content:
@@ -2538,12 +2635,10 @@ class KCPU16TUI(App[None], TUIRenderMixin, TUICommandsMixin):
             memory = self.machine.memory
             mode = memory.read(GFX_MODE_REG)
             vram_version = screen.get_vram_version()
-            use_text_fast = (
-                self._text_fast_mode
-                and not force
-                and mode == 0
-                and self._exec_mode in {"fast", "max", "slow"}
-            )
+            # NOTE: Text-only fast path drops VRAM color attributes (FG/BG),
+            # so C64-style colored backgrounds become black in FAST/MAX/SLOW.
+            # Keep colors correct by always using color-aware rendering in mode A.
+            use_text_fast = False
 
             # Dirty-check: Jos VRAM ei ole muuttunut ja GFX_MODE ei muuttunut (paitsi force)
             # Tekstitilassa voidaan ohittaa suoraan viime renderiin.
@@ -2569,32 +2664,8 @@ class KCPU16TUI(App[None], TUIRenderMixin, TUICommandsMixin):
                     # Näytä viimeisin atomiesti flipattu kehys
                     rendered = screen.get_front_buffer()
             else:
-                # Tekstitila A: fast-tiloissa käytä kevyttä text-only renderiä,
-                # ja päivitä dirty-spanin mukaan vain muuttuneet rivit.
-                if use_text_fast and self._last_screen_lines is not None:
-                    span = screen.consume_dirty_span()
-                    if span is not None:
-                        first_row = span[0] // screen.cols
-                        last_row = span[1] // screen.cols
-                        lines = self._last_screen_lines[:]
-                        row_base = VRAM_START + (first_row * screen.cols)
-                        for row in range(first_row, last_row + 1):
-                            chars: list[str] = []
-                            addr = row_base
-                            for _ in range(screen.cols):
-                                word = memory.read(addr)
-                                ch = chr(word & 0xFF)
-                                chars.append(ch if 32 <= ord(ch) < 127 else " ")
-                                addr += 1
-                            lines[row] = "".join(chars)
-                            row_base += screen.cols
-                        rendered = "\n".join(lines)
-                    else:
-                        rendered = screen.render_text(memory)
-                elif use_text_fast:
-                    rendered = screen.render_text(memory)
-                else:
-                    rendered = screen.render_auto(memory)
+                # Tekstitila A: renderöi aina värit säilyttävällä polulla.
+                rendered = screen.render_auto(memory)
 
             # Päivitä tracked versiot (dirty-checkia varten seuraavaa kutsua)
             self._last_vram_version = vram_version
@@ -2948,6 +3019,26 @@ class KCPU16TUI(App[None], TUIRenderMixin, TUICommandsMixin):
             # --- Reset ---
             if op == "reset":
                 return self._handle_reset_command(args)
+
+            if op == "gameinput":
+                mode = args[0].lower() if args else "toggle"
+                if mode == "on":
+                    if not self._game_input_mode:
+                        self.action_toggle_game_input()
+                elif mode == "off":
+                    if self._game_input_mode:
+                        self.action_toggle_game_input()
+                elif mode == "toggle":
+                    self.action_toggle_game_input()
+                else:
+                    return CommandResult(False, "Usage: gameinput [on|off|toggle]")
+
+                state = (
+                    "ON (keyboard -> emulator)"
+                    if self._game_input_mode
+                    else "OFF (keyboard -> TUI)"
+                )
+                return CommandResult(True, f"Game input mode: {state}")
 
             # --- Näyttö & muut ---
             if op == "cls":

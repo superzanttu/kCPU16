@@ -91,6 +91,143 @@ scr_cursor_row:
 scr_color:
         .dw  0x0700     ; Väriattribuutti: FG=7 (valkoinen), BG=0 (musta)
 
+scr_cursor_blink_enabled:
+        .db  0          ; 1 = vilkutus käytössä, 0 = pois
+
+scr_cursor_blink_visible:
+        .db  0          ; 1 = kursori piirretty ruudulle
+
+scr_cursor_blink_saved_addr:
+        .dw  0          ; VRAM-osoite, johon kursori viimeksi piirrettiin
+
+scr_cursor_blink_saved_word:
+        .dw  0          ; Alkuperäinen VRAM-sana kursori-solussa
+
+scr_cursor_blink_counter:
+        .dw  0          ; Pollauslaskuri vilkutuksen ajoitukseen
+
+scr_cursor_blink_period:
+        .dw  6000       ; Togglausväli scr_input-pollauskierroksina
+
+; =============================================================================
+; Cursor blink API
+;
+; scr_cursor_blink_on   — Ota vilkutus käyttöön (näytä kursori heti)
+; scr_cursor_blink_off  — Poista vilkutus käytöstä (palauta solu)
+; =============================================================================
+
+_scr_cursor_addr:
+        ; Out: R0 = VRAM-osoite nykyiselle kursoripaikalle
+        PUSH  R1
+        PUSH  R2
+        READ  R0, [scr_cursor_row]
+        READ  R1, SCREEN_COLS
+        MUL   R0, R1
+        READ  R2, [scr_cursor_col]
+        ADD   R0, R2
+        READ  R1, VRAM_START
+        ADD   R0, R1
+        POP   R2
+        POP   R1
+        RET
+
+_scr_cursor_hide:
+        ; Palauta aiemmin korvattu solu, jos kursori näkyy
+        PUSH  R0
+        PUSH  R1
+        READ  R0, [scr_cursor_blink_visible]
+        READ  R1, 0
+        CMP   R0, R1
+        JZ    _sc_hide_done
+        READ  R0, [scr_cursor_blink_saved_addr]
+        READ  R1, [scr_cursor_blink_saved_word]
+        STORE [R0], R1
+        READ  R1, 0
+        STORE [scr_cursor_blink_visible], R1
+_sc_hide_done:
+        POP   R1
+        POP   R0
+        RET
+
+_scr_cursor_show:
+        ; Piirrä kursori nykyiseen paikkaan (alaviiva)
+        PUSH  R0
+        PUSH  R1
+        PUSH  R2
+        READ  R0, [scr_cursor_blink_visible]
+        READ  R1, 0
+        CMP   R0, R1
+        JNZ   _sc_show_done
+        CALL  _scr_cursor_addr
+        STORE [scr_cursor_blink_saved_addr], R0
+        READ  R1, [R0]
+        STORE [scr_cursor_blink_saved_word], R1
+        READ  R2, [scr_color]
+        READ  R1, 95               ; '_'
+        OR    R1, R2
+        STORE [R0], R1
+        READ  R1, 1
+        STORE [scr_cursor_blink_visible], R1
+_sc_show_done:
+        POP   R2
+        POP   R1
+        POP   R0
+        RET
+
+_scr_cursor_tick:
+        ; Togglaa kursori näkyviin/piiloon periodin välein (pollauspohjainen)
+        PUSH  R0
+        PUSH  R1
+        PUSH  R2
+        READ  R0, [scr_cursor_blink_enabled]
+        READ  R1, 0
+        CMP   R0, R1
+        JNZ   _sc_tick_count
+        CALL  _scr_cursor_hide
+        JUMP  _sc_tick_done
+_sc_tick_count:
+        READ  R0, [scr_cursor_blink_counter]
+        READ  R1, 1
+        ADD   R0, R1
+        STORE [scr_cursor_blink_counter], R0
+        READ  R1, [scr_cursor_blink_period]
+        CMP   R0, R1
+        JLT   _sc_tick_done
+        READ  R2, 0
+        STORE [scr_cursor_blink_counter], R2
+        READ  R0, [scr_cursor_blink_visible]
+        CMP   R0, R2
+        JZ    _sc_tick_show
+        CALL  _scr_cursor_hide
+        JUMP  _sc_tick_done
+_sc_tick_show:
+        CALL  _scr_cursor_show
+_sc_tick_done:
+        POP   R2
+        POP   R1
+        POP   R0
+        RET
+
+scr_cursor_blink_on:
+        PUSH  R0
+        READ  R0, 1
+        STORE [scr_cursor_blink_enabled], R0
+        READ  R0, 0
+        STORE [scr_cursor_blink_counter], R0
+        CALL  _scr_cursor_hide
+        CALL  _scr_cursor_show
+        POP   R0
+        RET
+
+scr_cursor_blink_off:
+        PUSH  R0
+        READ  R0, 0
+        STORE [scr_cursor_blink_enabled], R0
+        STORE [scr_cursor_blink_counter], R0
+        CALL  _scr_cursor_hide
+        POP   R0
+        RET
+
 ; =============================================================================
 ; scr_set_color — Aseta väriattribuutti
 ;
@@ -429,6 +566,7 @@ scr_input:
         ; scr_print säilyttää R9–R13 (clobbers R0–R3, ei koske R9+)
         CALL  scr_print
 _si_poll:
+        CALL  _scr_cursor_tick
         ; Pollaa näppäimistöä
         READ  R0, [KBD_STATUS]      ; tapahtumien määrä puskurissa
         READ  R1, 0
@@ -452,6 +590,7 @@ _si_poll:
         CMP   R0, R1
         JNZ   _si_printable
         ; --- Backspace ---
+        CALL  _scr_cursor_hide
         READ  R1, 0
         CMP   R11, R1               ; count = 0 → ei poistettavaa
         JZ    _si_poll
@@ -470,12 +609,14 @@ _si_printable:
         CMP   R11, R1               ; count vs (max_len − 1)
         JGE   _si_poll              ; täynnä → ohita
         ; Tallenna merkkiä puskuriin ja kaiuta näytölle
+        CALL  _scr_cursor_hide
         STORE [R13], R0             ; buf[count] = merkki (R0 = ASCII)
         ADD   R13, R12              ; write_ptr++
         ADD   R11, R12              ; count++
         CALL  _scr_putchar          ; kaiuta merkki; R0=merkki; R9–R13 OK
         JUMP  _si_poll
 _si_done:
+        CALL  _scr_cursor_hide
         ; Null-terminoi puskuri
         READ  R0, 0
         STORE [R13], R0

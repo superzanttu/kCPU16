@@ -343,4 +343,4 @@ prev_S2:
 ; FONTTILIITOS — BIG_FONT-data sijoittuu tänne koodin perään
 ; =============================================================================
 
-        .include "lib_font_big.asm"
+        .include "../lib/lib-font_big.asm"
