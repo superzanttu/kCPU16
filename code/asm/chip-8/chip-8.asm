@@ -102,15 +102,19 @@ get_vy_ptr:
 
 ; set_vf: R0 = 0/1
 set_vf:
+        PUSH  R2
         READ  R1, chip8_v
-        ADD   R1, 15
+        READ  R2, 15
+        ADD   R1, R2
         STORE [R1], R0
+        POP   R2
         RET
 
 ; skip_next: PC += 2 (12-bit wrap)
 skip_next:
         READ  R0, [chip8_pc]
-        ADD   R0, 2
+        READ  R2, 2
+        ADD   R0, R2
         READ  R1, 0x0FFF
         AND   R0, R1
         STORE [chip8_pc], R0
@@ -119,12 +123,14 @@ skip_next:
 ; stack_push: R0 = arvo
 stack_push:
         READ  R1, [chip8_sp]
-        CMP   R1, 16
+        READ  R3, 16
+        CMP   R1, R3
         JGE   stack_push_done
         READ  R2, chip8_stack
         ADD   R2, R1
         STORE [R2], R0
-        ADD   R1, 1
+        READ  R3, 1
+        ADD   R1, R3
         STORE [chip8_sp], R1
 stack_push_done:
         RET
@@ -132,9 +138,11 @@ stack_push_done:
 ; stack_pop: R0 = arvo
 stack_pop:
         READ  R1, [chip8_sp]
-        CMP   R1, 0
+        READ  R3, 0
+        CMP   R1, R3
         JZ    stack_pop_empty
-        SUB   R1, 1
+        READ  R3, 1
+        SUB   R1, R3
         STORE [chip8_sp], R1
         READ  R2, chip8_stack
         ADD   R2, R1
@@ -153,11 +161,13 @@ draw_screen:
 
         READ  R8, 0
 draw_y:
-        CMP   R8, CH8_FB_H
+        READ  R0, CH8_FB_H
+        CMP   R8, R0
         JGE   draw_done
         READ  R7, 0
 draw_x:
-        CMP   R7, CH8_FB_W
+        READ  R0, CH8_FB_W
+        CMP   R7, R0
         JGE   draw_row_done
 
         CPY   R9, R8
@@ -167,13 +177,16 @@ draw_x:
         READ  R0, CH8_FB
         ADD   R9, R0
         READ  R0, [R9]
-        CMP   R0, 0
+        READ  R6, 0
+        CMP   R0, R6
         JZ    draw_next
 
         CPY   R3, R8
-        ADD   R3, SCR_OFS_Y
+        READ  R0, SCR_OFS_Y
+        ADD   R3, R0
         CPY   R4, R7
-        ADD   R4, SCR_OFS_X
+        READ  R0, SCR_OFS_X
+        ADD   R4, R0
 
         CPY   R5, R3
         READ  R0, 1
@@ -186,7 +199,8 @@ draw_x:
 
         READ  R6, 1
         AND   R6, R3
-        CMP   R6, 0
+        READ  R1, 0
+        CMP   R6, R1
         JNZ   draw_lower
         READ  R6, 2
         JUMP  draw_plot
@@ -200,11 +214,13 @@ draw_plot:
         STORE [R5], R0
 
 draw_next:
-        ADD   R7, 1
+        READ  R0, 1
+        ADD   R7, R0
         JUMP  draw_x
 
 draw_row_done:
-        ADD   R8, 1
+        READ  R0, 1
+        ADD   R8, R0
         JUMP  draw_y
 
 draw_done:
@@ -223,7 +239,8 @@ kbd_handler:
         PUSH  R3
 
         READ  R0, [KBD_DATA]
-        CMP   R0, 0
+        READ  R3, 0
+        CMP   R0, R3
         JZ    kbd_done
 
         READ  R1, KBD_RELEASE_BIT
@@ -234,14 +251,16 @@ kbd_handler:
         READ  R3, KEYMAP
         ADD   R3, R2
         READ  R3, [R3]                   ; R3 = key 0..15 tai 0xFF
-        CMP   R3, 0xFF
+        READ  R0, 0xFF
+        CMP   R3, R0
         JZ    kbd_done
 
         READ  R2, 1
         SHL   R2, R3                     ; R2 = 1 << key
 
         READ  R0, [chip8_keymask]
-        CMP   R1, 0
+        READ  R3, 0
+        CMP   R1, R3
         JNZ   kbd_release
 
         OR    R0, R2                     ; press
@@ -249,7 +268,8 @@ kbd_handler:
         STORE [chip8_last_key], R3
 
         READ  R0, [chip8_wait_vx]
-        CMP   R0, 0xFFFF
+        READ  R3, 0xFFFF
+        CMP   R0, R3
         JZ    kbd_done
 
         READ  R1, chip8_v
@@ -276,16 +296,20 @@ clk_handler:
         PUSH  R1
 
         READ  R0, [chip8_dt]
-        CMP   R0, 0
+        READ  R1, 0
+        CMP   R0, R1
         JZ    clk_st
-        SUB   R0, 1
+        READ  R1, 1
+        SUB   R0, R1
         STORE [chip8_dt], R0
 
 clk_st:
         READ  R0, [chip8_st]
-        CMP   R0, 0
+        READ  R1, 0
+        CMP   R0, R1
         JZ    clk_rearm
-        SUB   R0, 1
+        READ  R1, 1
+        SUB   R0, R1
         STORE [chip8_st], R0
 
 clk_rearm:
@@ -309,7 +333,8 @@ clk_rearm:
 ; -----------------------------------------------------------------------------
 
 op_0xxx:
-        CMP   R13, 0xE0
+        READ  R0, 0xE0
+        CMP   R13, R0
         JNZ   op0_check_ret
         READ  R0, CH8_FB
         READ  R1, CH8_FB_END
@@ -319,7 +344,8 @@ op_0xxx:
         RET
 
 op0_check_ret:
-        CMP   R13, 0xEE
+        READ  R0, 0xEE
+        CMP   R13, R0
         JNZ   op0_done
         CALL  stack_pop
         STORE [chip8_pc], R0
@@ -359,7 +385,8 @@ op4_done:
         RET
 
 op_5xy0:
-        CMP   R12, 0
+        READ  R0, 0
+        CMP   R12, R0
         JNZ   op5_done
         CALL  get_v_ptr
         READ  R2, [R0]
@@ -514,7 +541,8 @@ alu_nop:
         RET
 
 op_9xy0:
-        CMP   R12, 0
+        READ  R0, 0
+        CMP   R12, R0
         JNZ   op9_done
         CALL  get_v_ptr
         READ  R2, [R0]
@@ -574,7 +602,8 @@ opd_row:
         JGE   opd_done
 
         READ  R3, [R6]
-        ADD   R6, 1
+        READ  R0, 1
+        ADD   R6, R0
 
         CPY   R8, R5
         ADD   R8, R9
@@ -583,14 +612,16 @@ opd_row:
 
         READ  R7, 0                      ; bit 0..7
 opd_bit:
-        CMP   R7, 8
+        READ  R0, 8
+        CMP   R7, R0
         JGE   opd_next_row
 
         READ  R0, 0x0080
         SHR   R0, R7
         CPY   R1, R3
         AND   R1, R0
-        CMP   R1, 0
+        READ  R0, 0
+        CMP   R1, R0
         JZ    opd_skip
 
         CPY   R1, R4
@@ -606,7 +637,8 @@ opd_bit:
         ADD   R2, R0
 
         READ  R0, [R2]
-        CMP   R0, 1
+        READ  R1, 1
+        CMP   R0, R1
         JNZ   opd_xor
         READ  R0, 1
         CALL  set_vf
@@ -619,11 +651,13 @@ opd_xor:
         STORE [R2], R0
 
 opd_skip:
-        ADD   R7, 1
+        READ  R0, 1
+        ADD   R7, R0
         JUMP  opd_bit
 
 opd_next_row:
-        ADD   R9, 1
+        READ  R0, 1
+        ADD   R9, R0
         JUMP  opd_row
 
 opd_done:
@@ -641,17 +675,21 @@ op_exxx:
         READ  R2, [chip8_keymask]
         AND   R2, R1                     ; 0 if not pressed
 
-        CMP   R13, 0x9E
+        READ  R0, 0x9E
+        CMP   R13, R0
         JNZ   opex_a1
-        CMP   R2, 0
+        READ  R0, 0
+        CMP   R2, R0
         JZ    opex_done
         CALL  skip_next
         RET
 
 opex_a1:
-        CMP   R13, 0xA1
+        READ  R0, 0xA1
+        CMP   R13, R0
         JNZ   opex_done
-        CMP   R2, 0
+        READ  R0, 0
+        CMP   R2, R0
         JNZ   opex_done
         CALL  skip_next
 
@@ -659,27 +697,38 @@ opex_done:
         RET
 
 op_fxxx:
-        CMP   R13, 0x07
+        READ  R0, 0x07
+        CMP   R13, R0
         JZ    fx_07
-        CMP   R13, 0x0A
+        READ  R0, 0x0A
+        CMP   R13, R0
         JZ    fx_0A
-        CMP   R13, 0x15
+        READ  R0, 0x15
+        CMP   R13, R0
         JZ    fx_15
-        CMP   R13, 0x18
+        READ  R0, 0x18
+        CMP   R13, R0
         JZ    fx_18
-        CMP   R13, 0x1E
+        READ  R0, 0x1E
+        CMP   R13, R0
         JZ    fx_1E
-        CMP   R13, 0x29
+        READ  R0, 0x29
+        CMP   R13, R0
         JZ    fx_29
-        CMP   R13, 0x33
+        READ  R0, 0x33
+        CMP   R13, R0
         JZ    fx_33
-        CMP   R13, 0x55
+        READ  R0, 0x55
+        CMP   R13, R0
         JZ    fx_55
-        CMP   R13, 0x65
+        READ  R0, 0x65
+        CMP   R13, R0
         JZ    fx_65
-        CMP   R13, 0x75
+        READ  R0, 0x75
+        CMP   R13, R0
         JZ    fx_75
-        CMP   R13, 0x85
+        READ  R0, 0x85
+        CMP   R13, R0
         JZ    fx_85
         RET
 
@@ -737,7 +786,8 @@ fx_33:
         READ  R1, 100
         DIV   R3, R1
         STORE [R2], R3
-        ADD   R2, 1
+        READ  R4, 1
+        ADD   R2, R4
 
         MUL   R3, R1
         SUB   R0, R3
@@ -745,7 +795,8 @@ fx_33:
         READ  R1, 10
         DIV   R3, R1
         STORE [R2], R3
-        ADD   R2, 1
+        READ  R4, 1
+        ADD   R2, R4
 
         MUL   R3, R1
         SUB   R0, R3
@@ -758,14 +809,15 @@ fx_55:
         ADD   R2, R1
         READ  R3, chip8_v
         READ  R4, 0
+        READ  R0, 1
 fx55_loop:
         CMP   R4, R10
         JGT   fx55_done
         READ  R1, [R3]
         STORE [R2], R1
-        ADD   R2, 1
-        ADD   R3, 1
-        ADD   R4, 1
+        ADD   R2, R0
+        ADD   R3, R0
+        ADD   R4, R0
         JUMP  fx55_loop
 fx55_done:
         RET
@@ -776,14 +828,15 @@ fx_65:
         ADD   R2, R1
         READ  R3, chip8_v
         READ  R4, 0
+        READ  R0, 1
 fx65_loop:
         CMP   R4, R10
         JGT   fx65_done
         READ  R1, [R2]
         STORE [R3], R1
-        ADD   R2, 1
-        ADD   R3, 1
-        ADD   R4, 1
+        ADD   R2, R0
+        ADD   R3, R0
+        ADD   R4, R0
         JUMP  fx65_loop
 fx65_done:
         RET
@@ -792,8 +845,10 @@ fx_75:
         READ  R2, chip8_rpl
         READ  R3, chip8_v
         READ  R4, 0
-        READ  R5, R10
-        CMP   R5, CH8_RPL_LAST
+        CPY   R5, R10
+        READ  R0, 1
+        READ  R1, CH8_RPL_LAST
+        CMP   R5, R1
         JLE   fx75_loop
         READ  R5, CH8_RPL_LAST
 fx75_loop:
@@ -801,9 +856,9 @@ fx75_loop:
         JGT   fx75_done
         READ  R1, [R3]
         STORE [R2], R1
-        ADD   R2, 1
-        ADD   R3, 1
-        ADD   R4, 1
+        ADD   R2, R0
+        ADD   R3, R0
+        ADD   R4, R0
         JUMP  fx75_loop
 fx75_done:
         RET
@@ -812,8 +867,10 @@ fx_85:
         READ  R2, chip8_rpl
         READ  R3, chip8_v
         READ  R4, 0
-        READ  R5, R10
-        CMP   R5, CH8_RPL_LAST
+        CPY   R5, R10
+        READ  R0, 1
+        READ  R1, CH8_RPL_LAST
+        CMP   R5, R1
         JLE   fx85_loop
         READ  R5, CH8_RPL_LAST
 fx85_loop:
@@ -821,9 +878,9 @@ fx85_loop:
         JGT   fx85_done
         READ  R1, [R2]
         STORE [R3], R1
-        ADD   R2, 1
-        ADD   R3, 1
-        ADD   R4, 1
+        ADD   R2, R0
+        ADD   R3, R0
+        ADD   R4, R0
         JUMP  fx85_loop
 fx85_done:
         RET
@@ -838,7 +895,8 @@ main:
         ; Nollaa emulaattorin tila
         READ  R0, chip8_v
         READ  R1, chip8_v
-        ADD   R1, 15
+        READ  R3, 15
+        ADD   R1, R3
         READ  R2, 0
         FILL  R0, R1, R2
 
@@ -852,7 +910,8 @@ main:
         STORE [chip8_last_key], 0
         READ  R0, chip8_rpl
         READ  R1, chip8_rpl
-        ADD   R1, CH8_RPL_LAST
+        READ  R3, CH8_RPL_LAST
+        ADD   R1, R3
         READ  R2, 0
         FILL  R0, R1, R2
 
@@ -871,14 +930,16 @@ main:
         READ  R0, chip8_font
         READ  R1, CH8_MEM
         READ  R2, 80
+        READ  R5, 1
 font_copy_loop:
-        CMP   R2, 0
+        READ  R4, 0
+        CMP   R2, R4
         JZ    font_copy_done
         READ  R3, [R0]
         STORE [R1], R3
-        ADD   R0, 1
-        ADD   R1, 1
-        SUB   R2, 1
+        ADD   R0, R5
+        ADD   R1, R5
+        SUB   R2, R5
         JUMP  font_copy_loop
 font_copy_done:
 
@@ -925,15 +986,17 @@ font_copy_done:
         ADD   R1, R0
         READ  R2, chip8_mod_snake_data
         READ  R3, [chip8_mod_snake_size]
+        READ  R5, 1
 
 module_copy_loop:
-        CMP   R3, 0
+        READ  R4, 0
+        CMP   R3, R4
         JZ    module_copy_done
         READ  R4, [R2]
         STORE [R1], R4
-        ADD   R1, 1
-        ADD   R2, 1
-        SUB   R3, 1
+        ADD   R1, R5
+        ADD   R2, R5
+        SUB   R3, R5
         JUMP  module_copy_loop
 
 module_copy_done:
@@ -948,6 +1011,9 @@ module_copy_done:
         ; Käynnistä 60 Hz ajastin + keskeytykset
         READ  R0, TICK_MS
         SCTMR R0
+        ; Varmista että käskyvälikeskeytys (INT 7) on pois päältä
+        READ  R0, 0
+        STMR  R0
         STI
 
 ; -----------------------------------------------------------------------------
@@ -956,7 +1022,8 @@ module_copy_done:
 emu_loop:
         ; FX0A-odotuksessa jäädään odottamaan key interruptia
         READ  R0, [chip8_wait_vx]
-        CMP   R0, 0xFFFF
+        READ  R1, 0xFFFF
+        CMP   R0, R1
         JNZ   emu_loop
 
         ; Fetch opcode
@@ -964,7 +1031,8 @@ emu_loop:
         READ  R1, CH8_MEM
         ADD   R1, R0
         READ  R2, [R1]
-        ADD   R1, 1
+        READ  R4, 1
+        ADD   R1, R4
         READ  R3, [R1]
         READ  R4, 8
         SHL   R2, R4
@@ -972,7 +1040,8 @@ emu_loop:
 
         ; PC += 2
         READ  R0, [chip8_pc]
-        ADD   R0, 2
+        READ  R2, 2
+        ADD   R0, R2
         READ  R1, 0x0FFF
         AND   R0, R1
         STORE [chip8_pc], R0
