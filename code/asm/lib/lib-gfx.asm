@@ -79,6 +79,8 @@
 ;
 ; =============================================================================
 
+        .include "lib-font_small.asm"
+
 ; Näyttötilarekisterin osoite ($FF80) ja grafiikkatilakoodit ovat
 ; arkkitehtuurivakioita (ARCH_SYMBOLS) — ei tarvita .const-määrittelyjä:
 ;   GFX_MODE_REG = 0xFF80,  GFX_MODE_A = 0,  GFX_MODE_B = 1,  GFX_MODE_C = 2
@@ -101,6 +103,8 @@
 
 gfx_draw_mode:
         .db  0
+gfx_flip_enabled:
+        .db  1
 
 ; =============================================================================
 ; gfx_set_draw_mode — Aseta piirtotila
@@ -112,6 +116,23 @@ gfx_draw_mode:
 
 gfx_set_draw_mode:
         STORE [gfx_draw_mode], R0
+        RET
+
+; =============================================================================
+; gfx_set_flip_enabled — Ota kaksoispuskurointi paalle/pois
+;
+; Sisään:  R0 = 0 (pois), muu kuin 0 (paalle)
+; Ulos:    —
+; Clobbers: —
+; =============================================================================
+
+gfx_set_flip_enabled:
+        READ  R1, 0
+        CMP   R0, R1
+        JZ    _gfx_sfe_off
+        READ  R0, 1
+_gfx_sfe_off:
+        STORE [gfx_flip_enabled], R0
         RET
 
 ; =============================================================================
@@ -130,8 +151,13 @@ gfx_set_draw_mode:
 ; =============================================================================
 
 gfx_flip:
+        READ  R1, [gfx_flip_enabled]
+        READ  R0, 0
+        CMP   R1, R0
+        JZ    _gfx_flip_done
         READ  R0, 1
         STORE [GFX_FLIP_REG], R0
+_gfx_flip_done:
         RET
 
 ; =============================================================================
@@ -943,4 +969,187 @@ _gfx_line_no_y:
         JUMP  _gfx_line_loop
 
 _gfx_line_done:
+        RET
+
+; =============================================================================
+; gfx_draw_text_small — Piirrä 4x5 heksateksti (0-9, A-F)
+;
+; Sisään:  R0 = merkkijonon osoite (null-terminoitu)
+;          R1 = x
+;          R2 = y
+; Ulos:    —
+; Clobbers: R0–R12
+;
+; Tuntemattomat merkit käsitellään välilyöntinä.
+; =============================================================================
+
+gfx_draw_text_small:
+        PUSH  R13
+        PUSH  R14
+        CPY   R13, R0                 ; str ptr
+        CPY   R14, R1                 ; cursor x
+        CPY   R12, R2                 ; base y
+
+_gdt_next_char:
+        READ  R0, [R13]
+        READ  R1, 0
+        CMP   R0, R1
+        JZ    _gdt_done
+
+        CALL  font_small_get_glyph    ; R0=ptr, R1=valid
+        READ  R2, 0
+        CMP   R1, R2
+        JZ    _gdt_advance
+
+        CPY   R11, R0                 ; glyph ptr
+        READ  R10, 0                  ; row
+_gdt_row:
+        READ  R0, 5
+        CMP   R10, R0
+        JGE   _gdt_advance
+
+        READ  R9, [R11]               ; row bits
+        READ  R8, 0                   ; col
+_gdt_col:
+        READ  R0, 4
+        CMP   R8, R0
+        JGE   _gdt_next_row
+
+        READ  R0, 3
+        SUB   R0, R8                  ; shift = 3-col
+        CPY   R1, R9
+        SHR   R1, R0
+        READ  R0, 1
+        AND   R1, R0
+        READ  R0, 0
+        CMP   R1, R0
+        JZ    _gdt_inc_col
+
+        CPY   R0, R14
+        ADD   R0, R8
+        CPY   R1, R12
+        ADD   R1, R10
+
+        ; Tallenna silmukkatilat gfx_pixel-kutsun yli
+        PUSH  R8
+        PUSH  R9
+        PUSH  R10
+        PUSH  R11
+        PUSH  R12
+        PUSH  R13
+        PUSH  R14
+        CALL  gfx_pixel
+        POP   R14
+        POP   R13
+        POP   R12
+        POP   R11
+        POP   R10
+        POP   R9
+        POP   R8
+
+_gdt_inc_col:
+        READ  R0, 1
+        ADD   R8, R0
+        JUMP  _gdt_col
+
+_gdt_next_row:
+        READ  R0, 1
+        ADD   R10, R0
+        ADD   R11, R0
+        JUMP  _gdt_row
+
+_gdt_advance:
+        ; 1 pikseli väli glyphien väliin
+        READ  R0, 5
+        ADD   R14, R0
+        READ  R0, 1
+        ADD   R13, R0
+        JUMP  _gdt_next_char
+
+_gdt_done:
+        POP   R14
+        POP   R13
+        RET
+
+; =============================================================================
+; gfx_chip8_sprite_xor — XOR-piirto CHIP-8 64x32 framebufferiin
+;
+; Sisään:  R0 = fb_base (64x32, 1 sana / pikseli)
+;          R1 = x (0..63)
+;          R2 = y (0..31)
+;          R3 = sprite_ptr (N tavua / sanaa)
+;          R4 = N (rivikorkeus)
+; Ulos:    R0 = collision (0/1)
+; Clobbers: R0–R12
+; =============================================================================
+
+gfx_chip8_sprite_xor:
+        CPY   R12, R0                 ; fb base
+        READ  R10, 0x003F
+        AND   R1, R10
+        READ  R10, 0x001F
+        AND   R2, R10
+        READ  R0, 0                   ; collision = 0
+
+        READ  R9, 0                   ; row index
+_gcs_row:
+        CMP   R9, R4
+        JGE   _gcs_done
+
+        READ  R8, [R3]                ; sprite byte
+        READ  R11, 1
+        ADD   R3, R11
+
+        CPY   R7, R2
+        ADD   R7, R9
+        READ  R10, 0x001F
+        AND   R7, R10                 ; sy
+
+        READ  R6, 0                   ; bit index
+_gcs_bit:
+        READ  R10, 8
+        CMP   R6, R10
+        JGE   _gcs_next_row
+
+        READ  R10, 0x0080
+        SHR   R10, R6
+        CPY   R5, R8
+        AND   R5, R10
+        READ  R10, 0
+        CMP   R5, R10
+        JZ    _gcs_inc_bit
+
+        CPY   R5, R1
+        ADD   R5, R6
+        READ  R10, 0x003F
+        AND   R5, R10                 ; sx
+
+        CPY   R10, R7
+        READ  R11, 6
+        SHL   R10, R11
+        ADD   R10, R5
+        ADD   R10, R12                ; addr
+
+        READ  R11, [R10]
+        READ  R5, 1
+        CMP   R11, R5
+        JNZ   _gcs_xor
+        READ  R0, 1                   ; collision = 1
+
+_gcs_xor:
+        READ  R5, 1
+        XOR   R11, R5
+        STORE [R10], R11
+
+_gcs_inc_bit:
+        READ  R10, 1
+        ADD   R6, R10
+        JUMP  _gcs_bit
+
+_gcs_next_row:
+        READ  R10, 1
+        ADD   R9, R10
+        JUMP  _gcs_row
+
+_gcs_done:
         RET

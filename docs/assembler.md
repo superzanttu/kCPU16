@@ -4,6 +4,10 @@ Tämä dokumentti kuvaa kCPU16:n assembly-kielen syntaksin, direktiivit, arkkite
 
 Käskykannan kuvaukset, opcode-arvot ja lippuvaikutukset löytyvät [architecture.md](architecture.md#7-käskykanta).
 
+Muistialueiden massaoperaatiot ovat käytettävissä myös assemblerissa:
+- `FILL rStart, rEnd, rValue` täyttää alueen `[rStart..rEnd]`.
+- `COPY rStart, rEnd, rDst` kopioi alueen `[rStart..rEnd]` kohteeseen `rDst` (myös päällekkäisillä alueilla turvallisesti).
+
 ---
 
 # 1. Yleismuoto

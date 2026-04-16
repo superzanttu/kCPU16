@@ -64,6 +64,8 @@ chip8_rpl:
 chip8_sprite_tmp:
         .db 0, 0, 0, 0, 0, 0, 0, 0
         .db 0, 0, 0, 0, 0, 0, 0, 0
+chip8_boot_text:
+        .dstr "C8B007"
 
 chip8_stack:
         .db 0, 0, 0, 0, 0, 0, 0, 0
@@ -157,10 +159,9 @@ stack_pop_empty:
 
 ; draw_screen: piirtää 64x32 CH8_FB -> tila B (80x48)
 draw_screen:
-        READ  R0, VRAM_START
-        READ  R1, VRAM_END
-        READ  R2, 0
-        FILL  R0, R1, R2
+        CALL  gfx_clear
+        READ  R0, GFX_DRAW_FG
+        CALL  gfx_set_draw_mode
 
         READ  R8, 0
 draw_y:
@@ -184,37 +185,13 @@ draw_x:
         CMP   R0, R6
         JZ    draw_next
 
-        CPY   R3, R8
+        CPY   R1, R8
         READ  R0, SCR_OFS_Y
-        ADD   R3, R0
-        CPY   R4, R7
+        ADD   R1, R0
+        CPY   R0, R7
         READ  R0, SCR_OFS_X
-        ADD   R4, R0
-
-        CPY   R5, R3
-        READ  R0, 1
-        SHR   R5, R0
-        READ  R0, 80
-        MUL   R5, R0
-        ADD   R5, R4
-        READ  R0, VRAM_START
-        ADD   R5, R0
-
-        READ  R6, 1
-        AND   R6, R3
-        READ  R1, 0
-        CMP   R6, R1
-        JNZ   draw_lower
-        READ  R6, 2
-        JUMP  draw_plot
-
-draw_lower:
-        READ  R6, 1
-
-draw_plot:
-        READ  R0, [R5]
-        OR    R0, R6
-        STORE [R5], R0
+        ADD   R0, R7
+        CALL  gfx_pixel
 
 draw_next:
         READ  R0, 1
@@ -227,7 +204,12 @@ draw_row_done:
         JUMP  draw_y
 
 draw_done:
-        STORE [GFX_FLIP_REG], 1
+        ; Näytä pieni boot-status-teksti kulmassa
+        READ  R0, chip8_boot_text
+        READ  R1, 0
+        READ  R2, 0
+        CALL  gfx_draw_text_small
+        CALL  gfx_flip
         RET
 
 ; fb_scroll_down: scrollaa framebufferia alas R12 rivia
@@ -783,71 +765,13 @@ op_dxyn:
         READ  R2, chip8_sprite_tmp
         COPY  R0, R1, R2
 
-        READ  R6, chip8_sprite_tmp       ; R6 = staged sprite ptr
-
-        READ  R9, 0                      ; row
-opd_row:
-        CMP   R9, R12
-        JGE   opd_done
-
-        READ  R3, [R6]
-        READ  R0, 1
-        ADD   R6, R0
-
-        CPY   R8, R5
-        ADD   R8, R9
-        READ  R1, 0x001F
-        AND   R8, R1
-
-        READ  R7, 0                      ; bit 0..7
-opd_bit:
-        READ  R0, 8
-        CMP   R7, R0
-        JGE   opd_next_row
-
-        READ  R0, 0x0080
-        SHR   R0, R7
-        CPY   R1, R3
-        AND   R1, R0
-        READ  R0, 0
-        CMP   R1, R0
-        JZ    opd_skip
-
-        CPY   R1, R4
-        ADD   R1, R7
-        READ  R2, 0x003F
-        AND   R1, R2
-
-        CPY   R2, R8
-        READ  R0, 6
-        SHL   R2, R0
-        ADD   R2, R1
         READ  R0, CH8_FB
-        ADD   R2, R0
-
-        READ  R0, [R2]
-        READ  R1, 1
-        CMP   R0, R1
-        JNZ   opd_xor
-        READ  R0, 1
+        CPY   R1, R4
+        CPY   R2, R5
+        READ  R3, chip8_sprite_tmp
+        CPY   R4, R12
+        CALL  gfx_chip8_sprite_xor
         CALL  set_vf
-        ; set_vf käyttää R0 palautusarvona, joten hae pikseli uudestaan
-        READ  R0, [R2]
-
-opd_xor:
-        READ  R1, 1
-        XOR   R0, R1
-        STORE [R2], R0
-
-opd_skip:
-        READ  R0, 1
-        ADD   R7, R0
-        JUMP  opd_bit
-
-opd_next_row:
-        READ  R0, 1
-        ADD   R9, R0
-        JUMP  opd_row
 
 opd_done:
         CALL  draw_screen
@@ -1209,6 +1133,8 @@ module_copy_done:
 
         ; Aseta grafiikkatila B
         STORE [GFX_MODE_REG], GFX_MODE_B
+        READ  R0, 1
+        CALL  gfx_set_flip_enabled
         CALL  draw_screen
 
         ; Käynnistä 60 Hz ajastin + keskeytykset
@@ -1286,4 +1212,5 @@ emu_loop:
 ; -----------------------------------------------------------------------------
 ; CHIP-8 ROM-moduuli (tuotettu chip2asm.py:llä)
 ; -----------------------------------------------------------------------------
+        .include "../lib/lib-gfx.asm"
         .include "chip8-snake.asm"
