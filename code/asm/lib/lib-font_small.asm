@@ -1,17 +1,21 @@
 ; =============================================================================
-; lib-font_small.asm — 4x5 pikselin heksafontti (0..F)
+; lib-font_small.asm — 4x5 pikselifontti (CHIP-8 0..F + printable ASCII)
 ; =============================================================================
 ;
 ; FONTTI:
-;   - 16 glyphia: 0..9, A..F
+;   - CHIP-8-yhteensopivat glyphit 0..9, A..F (indeksit 0..15)
 ;   - Jokainen glyphi on 4x5 pikselia
 ;   - Tallennusmuoto: 5 sanaa / glyphi, yksi sana per rivi
 ;   - Rivin alimmat 4 bittiä koodaavat pikselit vasemmalta oikealle
 ;     bit3=vasen ... bit0=oikea
+;   - Kaikki tulostettavat ASCII-merkit (0x20..0x7E) palautetaan kelvollisena:
+;       * '0'..'9', 'A'..'F', 'a'..'f' -> aidot heksaglyphit
+;       * ' '                            -> tyhja glyphi
+;       * muu printable ASCII            -> geneerinen "printable"-glyphi
 ;
 ; JULKINEN APURI:
 ;   font_small_get_glyph
-;     Sisään:  R0 = ASCII-merkki ('0'..'9','A'..'F','a'..'f')
+;     Sisään:  R0 = ASCII-merkki (printable 0x20..0x7E)
 ;     Ulos:    R0 = glyph-osoite (font_small_data + idx*5)
 ;              R1 = 1 jos kelvollinen, 0 jos ei
 ; =============================================================================
@@ -50,6 +54,12 @@ font_small_data:
         ; F
         .db 0xF, 0x8, 0xF, 0x8, 0x8
 
+font_small_space:
+        .db 0x0, 0x0, 0x0, 0x0, 0x0
+
+font_small_printable_generic:
+        .db 0xF, 0x8, 0xF, 0x8, 0xF
+
 font_small_get_glyph:
         ; Oletus: invalid
         READ  R1, 0
@@ -81,14 +91,38 @@ _fsg_lower:
         ; 'a'..'f'
         READ  R2, 0x61
         CMP   R0, R2
-        JLT   _fsg_invalid
+        JLT   _fsg_printable
         READ  R3, 0x66
         CMP   R0, R3
-        JGT   _fsg_invalid
+        JGT   _fsg_printable
         SUB   R0, R2
         READ  R4, 10
         ADD   R0, R4
         JUMP  _fsg_resolve
+
+_fsg_printable:
+        ; Kaikki tulostettavat ASCII-merkit 0x20..0x7E ovat kelvollisia.
+        READ  R2, 0x20
+        CMP   R0, R2
+        JLT   _fsg_invalid
+        READ  R3, 0x7E
+        CMP   R0, R3
+        JGT   _fsg_invalid
+
+        ; Space -> tyhja glyphi
+        READ  R2, 0x20
+        CMP   R0, R2
+        JZ    _fsg_space
+
+        ; Muut printable-merkit -> geneerinen glyphi
+        READ  R0, font_small_printable_generic
+        READ  R1, 1
+        RET
+
+_fsg_space:
+        READ  R0, font_small_space
+        READ  R1, 1
+        RET
 
 _fsg_invalid:
         READ  R0, 0
