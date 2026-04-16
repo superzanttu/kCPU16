@@ -221,3 +221,4 @@ Tehtävät on merkitty hakasulkeilla, ja niiden tilaa voidaan päivittää seura
 - [ ] Lisää lib_gfx.asm::n kaikkien lib-gfx.asm:n toimintojen esittely. Esittele jokaista toimintoa 10 sekunttia.
 - [ ] Lisää lib-font_small.asm::n kaikki tulostettavat ASCII merkit. Varmista yhteensopivuus CHIP-8:n kanssa.
 - [ ] Lisää ".state_text N, TEKSTI"-direktiiviin muotooon ".state_text N, DELAY_IN_SECS, TEKSTI", jossa DELAY_IN_SEC kertoo kuinka moneksi sekunniksi ohjelman suoritus keskeytetään STATE-komennon kohdalla. 0=ei keskeytystä, 1=1 sekunnin keskeytys jne. Lisää tuki tähän assembleriin ja emulaattoriin. Varmista, että tämä toimii oikein ja että teksti näkyy oikeaan aikaan. 
+- [ ] Luo code\asm\state.asm, joka esittelee kaikki 16 state komennolla lähettävät tekstit. Käytä tätä testataksesi, että kaikki tekstit näkyvät oikein ja että viiveet toimivat odotetusti. Jokaisessa state komennossa pitää olla viivenneä 2 sek.
