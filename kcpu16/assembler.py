@@ -129,6 +129,29 @@ REGISTER_TO_ID: dict[str, int] = {
 MNEMONIC_TO_OPCODE: dict[str, int] = {v[0]: k for k, v in OPCODE_TABLE.items()}
 
 
+def _strip_comment_outside_quotes(raw: str) -> str:
+    """Poista ';' kommentti vain, jos se on lainausmerkkien ulkopuolella."""
+    in_quote: str | None = None
+    escaped = False
+    for idx, ch in enumerate(raw):
+        if escaped:
+            escaped = False
+            continue
+        if ch == "\\":
+            escaped = True
+            continue
+        if in_quote is None:
+            if ch in ('"', "'"):
+                in_quote = ch
+                continue
+            if ch == ";":
+                return raw[:idx]
+            continue
+        if ch == in_quote:
+            in_quote = None
+    return raw
+
+
 @dataclass(slots=True, frozen=True)
 class _ParsedLine:
     """Esiparsittu lähderivi - vältä redundanttia split/strip/lower toimintoa."""
@@ -140,7 +163,7 @@ class _ParsedLine:
     @staticmethod
     def parse(raw: str) -> "_ParsedLine":
         """Parsii lähdekoodi-rivin yksinkertaisesti."""
-        stripped = raw.split(";", 1)[0].strip()
+        stripped = _strip_comment_outside_quotes(raw).strip()
         return _ParsedLine(raw=raw, stripped=stripped, lower=stripped.lower())
 
 
@@ -362,7 +385,7 @@ class Assembler:
         for lineno, line in enumerate(lines, start=1):
             self._current_lineno = lineno
             self._current_line = line
-            stripped = line.split(";", 1)[0].strip()
+            stripped = _strip_comment_outside_quotes(line).strip()
             lower = stripped.lower()
 
             if lower == ".endbootblock" or lower.startswith(".endbootblock "):
@@ -467,7 +490,7 @@ class Assembler:
         """
         symbols: set[str] = set()
         for raw_line in source.splitlines():
-            line = raw_line.split(";", 1)[0].strip()
+            line = _strip_comment_outside_quotes(raw_line).strip()
             if not line:
                 continue
             sl = line.lower()
@@ -524,7 +547,7 @@ class Assembler:
 
         result_lines: list[str] = []
         for raw_line in source.splitlines():
-            stripped = raw_line.split(";", 1)[0].strip()
+            stripped = _strip_comment_outside_quotes(raw_line).strip()
             sl = stripped.lower()
             if sl.startswith(".include"):
                 # Parsi tiedostonimi: .include "nimi.asm" tai .include 'nimi.asm'
@@ -648,7 +671,7 @@ class Assembler:
         for lineno, line in enumerate(lines, start=1):
             self._current_lineno = lineno
             self._current_line = line
-            stripped = line.split(";", 1)[0].strip()
+            stripped = _strip_comment_outside_quotes(line).strip()
             sl = stripped.lower()
             # Täsmällinen tarkistus: direktiivi on joko yksin tai sen jälkeen tulee välilyönti
             # (estää .orgin-tyyppiset kirjoitusvirheet menemästä läpi hiljaa)
@@ -672,7 +695,7 @@ class Assembler:
             line = lines[i]
             self._current_lineno = i + 1
             self._current_line = line
-            stripped = line.split(";", 1)[0].strip()
+            stripped = _strip_comment_outside_quotes(line).strip()
 
             # Makron alkaminen
             if stripped.lower().startswith(".macro"):
@@ -686,7 +709,7 @@ class Assembler:
                 i += 1
                 while i < len(lines):
                     macro_line = lines[i]
-                    macro_stripped = macro_line.split(";", 1)[0].strip()
+                    macro_stripped = _strip_comment_outside_quotes(macro_line).strip()
 
                     if macro_stripped.lower().startswith(".endmacro"):
                         macros[macro_name] = macro_lines
@@ -819,7 +842,7 @@ class Assembler:
             self._current_lineno = lineno
             self._current_line = raw_line
             # Poista kommentit (puolipiste ja kaikki sen jalkeen)
-            line = raw_line.split(";", 1)[0].strip()
+            line = _strip_comment_outside_quotes(raw_line).strip()
             if not line:
                 continue  # Tyhja rivi -> ohita
 
@@ -958,7 +981,7 @@ class Assembler:
             self._current_lineno = lineno
             self._current_line = raw_line
             # Poista kommentit
-            line = raw_line.split(";", 1)[0].strip()
+            line = _strip_comment_outside_quotes(raw_line).strip()
 
             # Ohita tyhjat rivit ja labelit
             if not line or line.endswith(":"):
