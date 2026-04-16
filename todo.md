@@ -223,9 +223,11 @@ Tehtävät on merkitty hakasulkeilla, ja niiden tilaa voidaan päivittää seura
 - [X] Lisää ".state_text N, TEKSTI"-direktiiviin muotooon ".state_text N, DELAY_IN_SECS, TEKSTI", jossa DELAY_IN_SEC kertoo kuinka moneksi sekunniksi ohjelman suoritus keskeytetään STATE-komennon kohdalla. 0=ei keskeytystä, 1=1 sekunnin keskeytys jne. Lisää tuki tähän assembleriin ja emulaattoriin. Varmista, että tämä toimii oikein ja että teksti näkyy oikeaan aikaan. 
 - [X] Luo code\asm\state.asm, joka esittelee kaikki 16 state komennolla lähettävät tekstit. Käytä tätä testataksesi, että kaikki tekstit näkyvät oikein ja että viiveet toimivat odotetusti. Jokaisessa state komennossa pitää olla viivenneä 2 sek.
 - [X] Käytä state-komentoa ja .state_test-direktiiviä, ja paranna demo/lib_gfx.asm:aim niin että se näyttää direktiivin avulla esiteltävän toiminnon nimen.
-- [ ] Käytä state-komentoa ja .state_test-direktiiviä, ja paranna chip-8.asm:ia niin että se näyttää käynnistyksen ja toiminnan vaiheet.
-- [ ] poista .state_test direktiivi 
-- [ ] Varmista että state-komento ei vaikuta suoritustilan ollessa MAX. MAX-tilassa simulaation tulee toimia mahdollisimman nopeasti.
-- [ ] Varmista että state-komento pysäyttää suorituksen odotetus. Tämän hetkinen toteutus ei pysäytä suoritusta.
-- [ ] statue-komento tulostaa vain tekstin "STATE 0: STATE 0", eikä eikä .state_test-direktiivillä määriteltyä tekstiä. Näin tapahtuu ainakin lib_gfx.asm:ssa.
+- [X] Käytä state-komentoa ja .state_test-direktiiviä, ja paranna chip-8.asm:ia niin että se näyttää käynnistyksen ja toiminnan vaiheet.
+- [X] poista .state_test direktiivi 
+- [X] Varmista että state-komento ei vaikuta suoritustilan ollessa MAX. MAX-tilassa simulaation tulee toimia mahdollisimman nopeasti.
+- [X] Varmista että state-komento pysäyttää suorituksen odotetus. Tämän hetkinen toteutus ei pysäytä suoritusta.
+- [X] statue-komento tulostaa vain tekstin "STATE 0: STATE 0", eikä eikä .state_test-direktiivillä määriteltyä tekstiä. Näin tapahtuu ainakin lib_gfx.asm:ssa.
+
+### Muut tehtävät
 - [ ] Paranna asm-kirjastojen, kuten lib-disk.asm ja lib-screen.asm nimeämiskäytäntöä siten, siten että kirjastot eivät mene helposti ristiin varsinaisten .asm-ohjelmien kanssa. Nyt esimerkiksi demo/lib_gfx.asm ja code/asm/lib/lib-gfx.asm voivat aiheuttaa sekaannusta. Ehdota ja toteuta uusi nimeämiskäytäntö, joka selkeyttää kirjastojen ja ohjelmien erottelua.

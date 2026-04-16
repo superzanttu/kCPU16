@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import time
+
 from ..constants import (
     INT_PROCESS_EXIT,
     SR_FLAG_C,
@@ -488,9 +490,14 @@ class CPUEXecMixin:
     def _exec_state(self, ins) -> None:
         """Emit one-word state signal (id 0..15) to optional UI callback."""
         state_id = ins.opcode & STATE_ID_MASK
+        delay_secs = 0.0
         cb = getattr(self, "state_callback", None)
         if callable(cb):
-            cb(state_id)
+            ret = cb(state_id)
+            if isinstance(ret, (int, float)):
+                delay_secs = max(0.0, float(ret))
+        if delay_secs > 0.0:
+            time.sleep(delay_secs)
 
     def _exec_nop(self, ins) -> None:
         """Execute NOP with no side effects."""

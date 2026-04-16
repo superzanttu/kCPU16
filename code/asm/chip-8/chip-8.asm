@@ -37,6 +37,14 @@
 .const SCR_OFS_Y,    8
 .const CH8_RPL_LAST, 7
 
+.state_text 0, 0, "chip8: boot"
+.state_text 1, 0, "chip8: clear state"
+.state_text 2, 0, "chip8: load font"
+.state_text 3, 0, "chip8: load module"
+.state_text 4, 0, "chip8: init graphics"
+.state_text 5, 0, "chip8: running"
+.state_text 6, 0, "chip8: wait key"
+
 ; -----------------------------------------------------------------------------
 ; Emulaattorin tila
 ; -----------------------------------------------------------------------------
@@ -1016,10 +1024,12 @@ fx85_done:
 ; Main
 ; -----------------------------------------------------------------------------
 main:
+        STATE 0
         STORE [INT_KEYBOARD], kbd_handler
         STORE [INT_CLOCK], clk_handler
 
         ; Nollaa emulaattorin tila
+        STATE 1
         READ  R0, chip8_v
         READ  R1, chip8_v
         READ  R3, 15
@@ -1054,6 +1064,7 @@ main:
         FILL  R0, R1, R2
 
         ; Kopioi fontti CH8_MEM[0..79]
+        STATE 2
         READ  R0, chip8_font
         READ  R1, CH8_MEM
         READ  R2, 80
@@ -1108,6 +1119,7 @@ font_copy_done:
         STORE [0x4056], 15   ; V
 
         ; Lataa chip2asm-moduuli CH8_MEM + module_load_addr
+        STATE 3
         READ  R0, [chip8_mod_snake_load_addr]
         READ  R1, CH8_MEM
         ADD   R1, R0
@@ -1132,6 +1144,7 @@ module_copy_done:
         STORE [chip8_pc], R0
 
         ; Aseta grafiikkatila B
+        STATE 4
         STORE [GFX_MODE_REG], GFX_MODE_B
         READ  R0, 1
         CALL  gfx_set_flip_enabled
@@ -1144,6 +1157,7 @@ module_copy_done:
         READ  R0, 0
         STMR  R0
         STI
+        STATE 5
 
 ; -----------------------------------------------------------------------------
 ; Emulointisilmukka
@@ -1153,8 +1167,19 @@ emu_loop:
         READ  R0, [chip8_wait_vx]
         READ  R1, 0xFFFF
         CMP   R0, R1
-        JNZ   emu_loop
+        JNZ   emu_wait_key
+        JUMP  emu_fetch
 
+emu_wait_key:
+        STATE 6
+emu_wait_key_loop:
+        READ  R0, [chip8_wait_vx]
+        READ  R1, 0xFFFF
+        CMP   R0, R1
+        JNZ   emu_wait_key_loop
+        STATE 5
+
+emu_fetch:
         ; Fetch opcode
         READ  R0, [chip8_pc]
         READ  R1, CH8_MEM

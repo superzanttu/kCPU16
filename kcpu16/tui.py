@@ -49,6 +49,7 @@ Layout:
 from __future__ import annotations
 
 import re
+import threading
 import time
 from pathlib import Path
 from rich.text import Text
@@ -3415,17 +3416,30 @@ class KCPU16TUI(App[None], TUIRenderMixin, TUICommandsMixin):
     # Apumetodit
     # ------------------------------------------------------------------
 
-    def _on_state_signal(self, state_id: int) -> None:
-        """Käsittele CPU:n STATE-käsky ja kirjoita tilaviestiteksti Output-paneeliin."""
+    def _on_state_signal(self, state_id: int) -> float:
+        """Käsittele CPU:n STATE-käsky, kirjaa viesti ja palauta viivesekunnit.
+
+        Paluuarvoa käyttää CPU._exec_state() suorituksen mahdolliseen pysäytykseen.
+        MAX-tilassa palautetaan aina 0.0 ja lokikirjaus ohitetaan suorituskyvyn vuoksi.
+        """
+        if self._exec_mode == "max":
+            return 0.0
+
         text = self._state_texts.get(state_id, f"STATE {state_id}")
         delay_secs = max(0, int(self._state_delays.get(state_id, 0)))
+        msg = f"[cyan]STATE {state_id}: {text}[/cyan]"
         if delay_secs > 0:
-            self._log(
-                f"[cyan]STATE {state_id}: {text} (pause {delay_secs}s)[/cyan]"
-            )
-            time.sleep(delay_secs)
-            return
-        self._log(f"[cyan]STATE {state_id}: {text}[/cyan]")
+            msg = f"[cyan]STATE {state_id}: {text} (pause {delay_secs}s)[/cyan]"
+
+        if threading.current_thread() is threading.main_thread():
+            self._log(msg)
+        else:
+            try:
+                self.call_from_thread(self._log, msg)
+            except Exception:
+                pass
+
+        return float(delay_secs)
 
     def _log(self, message: str) -> None:
         """Kirjoita viesti output-paneelin RichLog-widgettiin.

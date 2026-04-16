@@ -28,17 +28,17 @@
 .const PHASE_COUNT, 11
 .const CH8_FB_BASE, 0x3000
 
-.state_test 0, 0, "gfx_clear"
-.state_test 1, 0, "gfx_pixel"
-.state_test 2, 0, "gfx_line"
-.state_test 3, 0, "gfx_set_draw_mode"
-.state_test 4, 0, "gfx_scroll_up"
-.state_test 5, 0, "gfx_scroll_down"
-.state_test 6, 0, "gfx_scroll_left"
-.state_test 7, 0, "gfx_scroll_right"
-.state_test 8, 0, "gfx_draw_text_small"
-.state_test 9, 0, "gfx_set_flip_enabled + gfx_flip"
-.state_test 10, 0, "gfx_chip8_sprite_xor"
+.state_text 0, 0, "gfx_clear"
+.state_text 1, 0, "gfx_pixel"
+.state_text 2, 0, "gfx_line"
+.state_text 3, 0, "gfx_set_draw_mode"
+.state_text 4, 0, "gfx_scroll_up"
+.state_text 5, 0, "gfx_scroll_down"
+.state_text 6, 0, "gfx_scroll_left"
+.state_text 7, 0, "gfx_scroll_right"
+.state_text 8, 0, "gfx_draw_text_small"
+.state_text 9, 0, "gfx_set_flip_enabled + gfx_flip"
+.state_text 10, 0, "gfx_chip8_sprite_xor"
 
 phase:
         .db 0

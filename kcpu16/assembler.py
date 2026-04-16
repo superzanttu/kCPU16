@@ -41,7 +41,6 @@ SYNTAKSI:
     - .diskblock N (esim. .diskblock 0, tallenna konekieli levyblokkiin N)
         - .state_text N, "TEKSTI" (liita tilaviestiteksti STATE N -kaskylle)
         - .state_text N, DELAY_SECS, "TEKSTI" (tilaviestin lisaksi suoritusviive)
-        - .state_test ... (yhteensopivuus-aliaksena .state_text-direktiiville)
     - .bootblock "LEVYKUVA", overwrite=0|1, boot=0|1 (bootsektoriksi kirjoitettava osuus)
     - .endbootblock (paattaa .bootblock-osuuden)
   - .include "TIEDOSTO" tai .include 'TIEDOSTO' (liitä toinen asm-tiedosto tähän
@@ -730,7 +729,7 @@ class Assembler:
                 i += 1
                 continue  # Ei lisata expanded_lines:iin
 
-            # .state_text / .state_test -direktiivi (UI-tilaviestit)
+            # .state_text-direktiivi (UI-tilaviestit)
             if self._is_state_text_directive(stripped):
                 state_id, delay_secs, message = self._parse_state_text_directive(stripped)
                 self._state_texts[state_id] = message
@@ -872,7 +871,7 @@ class Assembler:
                 addr += len(self._parse_dstr_values(line))
                 continue
 
-            # .state_text/.state_test-direktiivi: pass0 käsittelee, ei tuota koodia
+            # .state_text-direktiivi: pass0 käsittelee, ei tuota koodia
             if self._is_state_text_directive(line):
                 continue
 
@@ -1006,7 +1005,7 @@ class Assembler:
                 current_words.extend(self._parse_dstr_values(line))
                 continue
 
-            # .state_text/.state_test-direktiivi: pass0 käsittelee, ei tuota koodia
+            # .state_text-direktiivi: pass0 käsittelee, ei tuota koodia
             if self._is_state_text_directive(line):
                 continue
 
@@ -1347,12 +1346,12 @@ class Assembler:
 
     @staticmethod
     def _is_state_text_directive(line: str) -> bool:
-        """Tunnista .state_text ja .state_test -direktiivit."""
+        """Tunnista .state_text-direktiivi."""
         ll = line.lower().lstrip()
-        return ll.startswith(".state_text") or ll.startswith(".state_test")
+        return ll.startswith(".state_text")
 
     def _parse_state_text_directive(self, line: str) -> tuple[int, int, str]:
-        """Parsi .state_text/.state_test -direktiivit.
+        """Parsi .state_text-direktiivi.
 
         Sallitut muodot:
           - .state_text N, "teksti"
@@ -1360,12 +1359,9 @@ class Assembler:
         """
         stripped = line.strip()
         lower = stripped.lower()
-        if lower.startswith(".state_text"):
-            rest = stripped[len(".state_text") :].strip()
-        elif lower.startswith(".state_test"):
-            rest = stripped[len(".state_test") :].strip()
-        else:
+        if not lower.startswith(".state_text"):
             raise ValueError(f"Invalid state text directive: {line!r}")
+        rest = stripped[len(".state_text") :].strip()
 
         if not rest:
             raise ValueError("Invalid .state_text syntax: missing id and text")
