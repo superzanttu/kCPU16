@@ -16,6 +16,7 @@ from ..constants import (
     WORD_SIGN_BIT,
 )
 from ..exceptions import InvalidOpcodeError
+from ..instruction import STATE_ID_MASK
 
 
 _TMR_DISABLED_EXEC = 0x7FFFFFFFFFFFFFFF
@@ -483,6 +484,13 @@ class CPUEXecMixin:
         self._set_reg(reg_idx, old_value)
         self.memory.write(addr, 1)
         self.regs.set_zn_flags(old_value)
+
+    def _exec_state(self, ins) -> None:
+        """Emit one-word state signal (id 0..15) to optional UI callback."""
+        state_id = ins.opcode & STATE_ID_MASK
+        cb = getattr(self, "state_callback", None)
+        if callable(cb):
+            cb(state_id)
 
     def _exec_nop(self, ins) -> None:
         """Execute NOP with no side effects."""

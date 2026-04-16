@@ -136,6 +136,11 @@ def _op(p: int, grp: int, id_: int, nops: int) -> int:
     )
 
 
+# 1-sanaisen STATE-kaskyn opcode-perhe (16 tilaa, id 0..15 opcode:n alimmissa biteissa)
+STATE_OPCODE_BASE: int = _op(0, 7, 14, 0)
+STATE_ID_MASK: int = 0x000F
+
+
 # =============================================================================
 # OPCODE-TAULUKKO
 # =============================================================================
@@ -319,6 +324,10 @@ OPCODE_TABLE: dict[int, tuple[str, int, bool]] = {
         2,
         False,
     ),  # TSL    reg, addr   Test and Set Lock        [USER]
+    **{
+        (STATE_OPCODE_BASE | sid): ("STATE", 0, False)
+        for sid in range(16)
+    },  # STATE id(0..15)  1-sanaisen tilasignaalin lahetys [USER]
     _op(0, 7, 15, 0): (
         "NOP",
         0,
@@ -415,6 +424,7 @@ EXEC_CYCLES: dict[str, int] = {
     "SCTMR": 1,
     "EXIT": 4,  # Prosessin lopetus (tallentaa tilan)
     "TSL": 2,  # Lue-muokkaa-kirjoita (atomi)
+    "STATE": 1,  # 1-sanan tilasignaali emulaattorin UI:lle
     "NOP": 1,
 }
 
@@ -491,6 +501,7 @@ OPERAND_TYPE_TABLE: dict[str, tuple[str, ...]] = {
     "SCTMR": ("reg",),
     "EXIT": (),
     "TSL": ("reg", "addr"),
+    "STATE": ("imm4",),
     "NOP": (),
 }
 

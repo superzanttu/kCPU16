@@ -39,6 +39,7 @@ SYNTAKSI:
   - .inject_key KOODI (esim. .inject_key 0x41, simuloi A-painallus; testaukseen)
   - .inject_key_release KOODI (esim. .inject_key_release 0x41, simuloi A-vapautus; testaukseen)
   - .diskblock N (esim. .diskblock 0, tallenna konekieli levyblokkiin N)
+    - .state_text N, "TEKSTI" (liita tilaviestiteksti STATE N -kaskylle)
     - .bootblock "LEVYKUVA", overwrite=0|1, boot=0|1 (bootsektoriksi kirjoitettava osuus)
     - .endbootblock (paattaa .bootblock-osuuden)
   - .include "TIEDOSTO" tai .include 'TIEDOSTO' (liitä toinen asm-tiedosto tähän
@@ -90,6 +91,7 @@ from pathlib import Path
 from .constants import ARCH_SYMBOLS, BOOT_RAM_START, STORAGE_BLOCK_SIZE, WORD_MASK
 from .instruction import (
     OPCODE_TABLE,
+    STATE_OPCODE_BASE,
     is_deprecated_assembler_mnemonic,
     is_variable_length_mnemonic,
 )
@@ -216,6 +218,11 @@ class Assembler:
         return self._bootblock_directive
 
     @property
+    def state_texts(self) -> dict[int, str]:
+        """Palauta .state_text-direktiiveilla määritetty tilaviestikartta."""
+        return dict(self._state_texts)
+
+    @property
     def has_bootblock(self) -> bool:
         """Kertoo onko lähteessä .bootblock-osuus."""
         return self._bootblock_directive is not None and bool(self._bootblock_source)
@@ -248,6 +255,7 @@ class Assembler:
         self._disk_block: int | None = None
         self._bootblock_directive: BootBlockDirective | None = None
         self._bootblock_source: str | None = None
+        self._state_texts: dict[int, str] = {}
         self._source_map: list[tuple[str, int]] = []  # (lahderivi, abs_osoite)
         self._labels: dict[str, int] = {}
         self._included_files: list[Path] = []
@@ -714,6 +722,13 @@ class Assembler:
                 i += 1
                 continue  # Ei lisata expanded_lines:iin
 
+            # .state_text N, "teksti" -direktiivi (UI-tilaviestit)
+            if stripped.lower().startswith(".state_text"):
+                state_id, message = self._parse_state_text_directive(stripped)
+                self._state_texts[state_id] = message
+                i += 1
+                continue  # Ei lisata expanded_lines:iin
+
             # Ohita .origin, .org, .macro ja .endmacro rivit tulosteesta
             sl = stripped.lower()
             if (
@@ -848,6 +863,10 @@ class Assembler:
                 addr += len(self._parse_dstr_values(line))
                 continue
 
+            # .state_text-direktiivi: pass0 käsittelee, ei tuota koodia
+            if line.lower().startswith(".state_text"):
+                continue
+
             # .expect_*-direktiivit: ainoastaan testaukseen, ei tuota koodia
             if line.lower().startswith(".expect_"):
                 continue
@@ -875,6 +894,15 @@ class Assembler:
                 raise ValueError(
                     "STORE vaatii [..] osoitussyntaksin: STORE [osoite], reg/arvo"
                 )
+
+            if mnemonic == "STATE":
+                if len(parts) != 2:
+                    raise ValueError("STATE vaatii yhden operandin: STATE <0..15>")
+                state_id = self._parse_operand(parts[1], symbols)
+                if state_id < 0 or state_id > 15:
+                    raise ValueError("STATE-id:n on oltava valilla 0..15")
+                addr += 1
+                continue
 
             # Hae opcode ja operandien maara
             opcode = MNEMONIC_TO_OPCODE.get(mnemonic)
@@ -967,6 +995,10 @@ class Assembler:
                     (raw_line.strip(), current_start + len(current_words))
                 )
                 current_words.extend(self._parse_dstr_values(line))
+                continue
+
+            # .state_text-direktiivi: pass0 käsittelee, ei tuota koodia
+            if line.lower().startswith(".state_text"):
                 continue
 
             # .expect_*-direktiivit: testaukseen, ei tuota koodia
@@ -1078,6 +1110,19 @@ class Assembler:
                 raise ValueError(
                     "STORE vaatii [..] osoitussyntaksin: STORE [osoite], reg/arvo"
                 )
+
+            # 1-sanan STATE-käsky: STATE <id>, missä id on 0..15.
+            if mnemonic == "STATE":
+                if len(parts) != 2:
+                    raise ValueError("STATE vaatii yhden operandin: STATE <0..15>")
+                state_id = self._parse_operand(parts[1], labels)
+                if state_id < 0 or state_id > 15:
+                    raise ValueError("STATE-id:n on oltava valilla 0..15")
+                self._source_map.append(
+                    (raw_line.strip(), current_start + len(current_words))
+                )
+                current_words.append((STATE_OPCODE_BASE | state_id) & WORD_MASK)
+                continue
 
             # Hae opcode
             opcode = MNEMONIC_TO_OPCODE.get(mnemonic)
@@ -1288,15 +1333,47 @@ class Assembler:
             [115, 97, 121, 32, 34, 104, 105, 34, 0]
         """
         rest = line[5:].strip()
-        if not rest or rest[0] not in ('"', "'"):
-            raise ValueError(f"Invalid .dstr syntax (missing quotes): {line}")
+        chars = self._parse_quoted_text_bytes(rest, ".dstr")
+        return chars + [0x00]
 
-        quote_char = rest[0]
+    def _parse_state_text_directive(self, line: str) -> tuple[int, str]:
+        """Parsi .state_text N, "teksti" -direktiivi."""
+        rest = line[len(".state_text") :].strip()
+        if not rest:
+            raise ValueError("Invalid .state_text syntax: missing id and text")
+
+        comma = rest.find(",")
+        if comma < 0:
+            raise ValueError("Invalid .state_text syntax: expected comma")
+
+        id_token = rest[:comma].strip()
+        text_token = rest[comma + 1 :].strip()
+        if not id_token:
+            raise ValueError("Invalid .state_text syntax: missing state id")
+        if not text_token:
+            raise ValueError("Invalid .state_text syntax: missing text")
+
+        try:
+            state_id = int(id_token, 0)
+        except ValueError:
+            raise ValueError(f"Invalid .state_text state id: {id_token!r}")
+        if state_id < 0 or state_id > 15:
+            raise ValueError(".state_text id must be in range 0..15")
+
+        text_bytes = self._parse_quoted_text_bytes(text_token, ".state_text")
+        return state_id, "".join(chr(b) for b in text_bytes)
+
+    def _parse_quoted_text_bytes(self, text: str, directive_name: str) -> list[int]:
+        """Parsi lainausmerkkien sisältö tavuiksi (escape-tuella)."""
+        if not text or text[0] not in ('"', "'"):
+            raise ValueError(f"Invalid {directive_name} syntax (missing quotes): {text}")
+
+        quote_char = text[0]
         chars: list[int] = []
         i = 1
         closed = False
 
-        _escapes: dict[str, int] = {
+        escapes: dict[str, int] = {
             "\\": ord("\\"),
             '"': ord('"'),
             "'": ord("'"),
@@ -1305,24 +1382,34 @@ class Assembler:
             "0": 0x00,
         }
 
-        while i < len(rest):
-            c = rest[i]
+        while i < len(text):
+            c = text[i]
             if c == "\\":
-                if i + 1 >= len(rest):
-                    raise ValueError(f"Invalid .dstr: unterminated escape in: {line}")
-                esc = rest[i + 1]
-                if esc not in _escapes:
-                    raise ValueError(f"Unknown .dstr escape '\\{esc}' in: {line}")
-                chars.append(_escapes[esc])
+                if i + 1 >= len(text):
+                    raise ValueError(
+                        f"Invalid {directive_name}: unterminated escape in: {text}"
+                    )
+                esc = text[i + 1]
+                if esc not in escapes:
+                    raise ValueError(
+                        f"Unknown {directive_name} escape '\\{esc}' in: {text}"
+                    )
+                chars.append(escapes[esc])
                 i += 2
-            elif c == quote_char:
+                continue
+
+            if c == quote_char:
                 closed = True
-                break
-            else:
-                chars.append(ord(c) & 0xFF)
                 i += 1
+                break
+
+            chars.append(ord(c) & 0xFF)
+            i += 1
 
         if not closed:
-            raise ValueError(f"Invalid .dstr syntax (unterminated string): {line}")
+            raise ValueError(f"Invalid {directive_name} syntax (unterminated string): {text}")
 
-        return chars + [0x00]
+        if text[i:].strip():
+            raise ValueError(f"Invalid {directive_name} syntax (trailing tokens): {text}")
+
+        return chars

@@ -96,6 +96,8 @@ class CPU(CPUCoreMixin, CPUEXecMixin, CPUMemCheckMixin, CPUMMIOMixin):
     # (arvo != 0). Machine asettaa tämän renderoimaan VRAMin etupuskuriin
     # juuri sillä hetkellä kun kehys on valmis — ennen kuin gfx_clear tyhjentää sen.
     flip_callback: object = field(default=None, init=False, repr=False)
+    # Valinnainen hook: kutsutaan STATE-käskyllä (id 0..15) UI-tilaviesteille.
+    state_callback: object = field(default=None, init=False, repr=False)
 
     _uptime_counter: int = field(default=0, init=False)
 
