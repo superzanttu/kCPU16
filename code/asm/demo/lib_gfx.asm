@@ -2,7 +2,7 @@
 ; demo_lib_gfx.asm — lib-gfx.asm kaikkien toimintojen esittely
 ; =============================================================================
 ;
-; Jokainen vaihe kestaa 10 sekuntia (INT 9 + SCTMR 10000).
+; Jokainen vaihe kestaa 5 sekuntia (INT 9 + SCTMR 5000).
 ; Vaiheet:
 ;   0  gfx_clear
 ;   1  gfx_pixel
@@ -73,7 +73,7 @@ clock_handler:
 _ch_store:
         STORE [phase], R0
 
-        READ  R0, 10000
+        READ  R0, 5000
         SCTMR R0
 
         POP   R1
@@ -348,7 +348,7 @@ main:
         READ  R0, 1
         CALL  gfx_set_flip_enabled
 
-        READ  R0, 10000
+        READ  R0, 5000   ; odotetaan ennen kuin vaihdetaan seuraavaan
         SCTMR R0
         STI
 

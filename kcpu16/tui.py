@@ -1771,6 +1771,8 @@ class KCPU16TUI(App[None], TUIRenderMixin, TUICommandsMixin):
             self._boot_status_text = None
             self._log("[dim]Assemble: translating source to machine code[/dim]")
             segments = self.assembler.assemble(source, source_path=self.current_file)
+            self._state_texts = self.assembler.state_texts
+            self._state_delays = self.assembler.state_delays
             bootblock_words: list[int] | None = None
             bootblock_used_words = 0
             bootblock_config = self.assembler.bootblock_directive
@@ -1881,6 +1883,8 @@ class KCPU16TUI(App[None], TUIRenderMixin, TUICommandsMixin):
             self._log(
                 "[red]Program is not runnable until assembly succeeds. Fix the error and load/assemble again.[/red]"
             )
+            self._state_texts = {}
+            self._state_delays = {}
             self.is_assembled = False
             self._exec_mode = "stopped"
             self._update_run_mode_ui()
