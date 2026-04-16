@@ -425,8 +425,65 @@ gfx_scroll_up:
 _gfx_scroll_up_amt_ok:
         CPY   R12, R0                 ; amount
         CMP   R12, R11
-        JLT   _gfx_scroll_up_loop
+        JLT   _gfx_scroll_up_try_fast
         CALL  gfx_clear
+        RET
+
+        ; Fastpath: käytä COPY/FILL:ä kun siirto osuu VRAM-rivijaolle.
+        ; Tila B: amount % 2 == 0  -> row_shift = amount / 2
+        ; Tila C: amount % 4 == 0  -> row_shift = amount / 4
+_gfx_scroll_up_try_fast:
+        READ  R2, [GFX_MODE_REG]
+        READ  R3, GFX_MODE_B
+        CMP   R2, R3
+        JZ    _gfx_scroll_up_try_fast_b
+
+        ; Tila C: tarkista jaaollisuus luvulla 4
+        READ  R3, 4
+        CPY   R4, R12
+        DIV   R4, R3                  ; R4 = row_shift
+        CPY   R5, R4
+        MUL   R5, R3                  ; R5 = row_shift * 4
+        CPY   R6, R12
+        SUB   R6, R5                  ; R6 = amount % 4
+        READ  R7, 0
+        CMP   R6, R7
+        JNZ   _gfx_scroll_up_loop
+        JUMP  _gfx_scroll_up_fast
+
+_gfx_scroll_up_try_fast_b:
+        ; Tila B: tarkista jaaollisuus luvulla 2
+        READ  R3, 2
+        CPY   R4, R12
+        DIV   R4, R3                  ; R4 = row_shift
+        CPY   R5, R4
+        MUL   R5, R3                  ; R5 = row_shift * 2
+        CPY   R6, R12
+        SUB   R6, R5                  ; R6 = amount % 2
+        READ  R7, 0
+        CMP   R6, R7
+        JNZ   _gfx_scroll_up_loop
+
+_gfx_scroll_up_fast:
+        ; row_ofs_words = row_shift * 80
+        READ  R6, 80
+        MUL   R4, R6                  ; R4 = row_ofs_words
+
+        ; COPY [VRAM_START + ofs .. VRAM_END] -> VRAM_START
+        READ  R0, VRAM_START
+        ADD   R0, R4
+        READ  R1, VRAM_END
+        READ  R2, VRAM_START
+        COPY  R0, R1, R2
+
+        ; FILL [VRAM_END - ofs + 1 .. VRAM_END] = 0
+        READ  R0, VRAM_END
+        SUB   R0, R4
+        READ  R1, 1
+        ADD   R0, R1
+        READ  R1, VRAM_END
+        READ  R2, 0
+        FILL  R0, R1, R2
         RET
 
 _gfx_scroll_up_loop:
@@ -484,8 +541,66 @@ gfx_scroll_down:
 _gfx_scroll_down_amt_ok:
         CPY   R12, R0                 ; amount
         CMP   R12, R11
-        JLT   _gfx_scroll_down_loop
+        JLT   _gfx_scroll_down_try_fast
         CALL  gfx_clear
+        RET
+
+        ; Fastpath: käytä COPY/FILL:ä kun siirto osuu VRAM-rivijaolle.
+        ; Tila B: amount % 2 == 0  -> row_shift = amount / 2
+        ; Tila C: amount % 4 == 0  -> row_shift = amount / 4
+_gfx_scroll_down_try_fast:
+        READ  R2, [GFX_MODE_REG]
+        READ  R3, GFX_MODE_B
+        CMP   R2, R3
+        JZ    _gfx_scroll_down_try_fast_b
+
+        ; Tila C: tarkista jaaollisuus luvulla 4
+        READ  R3, 4
+        CPY   R4, R12
+        DIV   R4, R3                  ; R4 = row_shift
+        CPY   R5, R4
+        MUL   R5, R3                  ; R5 = row_shift * 4
+        CPY   R6, R12
+        SUB   R6, R5                  ; R6 = amount % 4
+        READ  R7, 0
+        CMP   R6, R7
+        JNZ   _gfx_scroll_down_loop
+        JUMP  _gfx_scroll_down_fast
+
+_gfx_scroll_down_try_fast_b:
+        ; Tila B: tarkista jaaollisuus luvulla 2
+        READ  R3, 2
+        CPY   R4, R12
+        DIV   R4, R3                  ; R4 = row_shift
+        CPY   R5, R4
+        MUL   R5, R3                  ; R5 = row_shift * 2
+        CPY   R6, R12
+        SUB   R6, R5                  ; R6 = amount % 2
+        READ  R7, 0
+        CMP   R6, R7
+        JNZ   _gfx_scroll_down_loop
+
+_gfx_scroll_down_fast:
+        ; row_ofs_words = row_shift * 80
+        READ  R6, 80
+        MUL   R4, R6                  ; R4 = row_ofs_words
+
+        ; COPY [VRAM_START .. VRAM_END - ofs] -> VRAM_START + ofs
+        READ  R0, VRAM_START
+        READ  R1, VRAM_END
+        SUB   R1, R4
+        READ  R2, VRAM_START
+        ADD   R2, R4
+        COPY  R0, R1, R2
+
+        ; FILL [VRAM_START .. VRAM_START + ofs - 1] = 0
+        READ  R0, VRAM_START
+        READ  R1, VRAM_START
+        ADD   R1, R4
+        READ  R3, 1
+        SUB   R1, R3
+        READ  R2, 0
+        FILL  R0, R1, R2
         RET
 
 _gfx_scroll_down_loop:
@@ -547,9 +662,69 @@ gfx_scroll_left:
 _gfx_scroll_left_amt_ok:
         CPY   R12, R0                 ; amount
         CMP   R12, R10
-        JLT   _gfx_scroll_left_loop
+        JLT   _gfx_scroll_left_try_fast
         CALL  gfx_clear
         RET
+
+        ; Fastpath: vaakasiirto sanarajassa.
+        ; Tila B: 1 px = 1 sana -> aina fastpath.
+        ; Tila C: 2 px = 1 sana -> fastpath kun amount % 2 == 0.
+_gfx_scroll_left_try_fast:
+        READ  R2, [GFX_MODE_REG]
+        READ  R3, GFX_MODE_B
+        CMP   R2, R3
+        JZ    _gfx_scroll_left_fast_b
+
+        ; Tila C: amount / 2 (vain jos jaollinen)
+        READ  R3, 2
+        CPY   R4, R12
+        DIV   R4, R3                  ; R4 = word_shift
+        CPY   R5, R4
+        MUL   R5, R3                  ; R5 = word_shift * 2
+        CPY   R6, R12
+        SUB   R6, R5                  ; R6 = amount % 2
+        READ  R7, 0
+        CMP   R6, R7
+        JNZ   _gfx_scroll_left_loop
+        CPY   R12, R4                 ; R12 = word_shift
+        JUMP  _gfx_scroll_left_fast
+
+_gfx_scroll_left_fast_b:
+        ; Tila B: R12 (px) == word_shift
+_gfx_scroll_left_fast:
+        READ  R4, VRAM_START          ; row_base
+        READ  R5, 0                   ; row_idx
+        READ  R6, 24                  ; VRAM-rivien maara (molemmissa tiloissa)
+
+_gfx_scroll_left_fast_row:
+        CMP   R5, R6
+        JGE   _gfx_scroll_left_done
+
+        ; COPY [row_base + shift .. row_base + 79] -> row_base
+        CPY   R0, R4
+        ADD   R0, R12
+        CPY   R1, R4
+        READ  R2, 79
+        ADD   R1, R2
+        CPY   R2, R4
+        COPY  R0, R1, R2
+
+        ; FILL [row_base + (80 - shift) .. row_base + 79] = 0
+        CPY   R0, R4
+        READ  R1, 80
+        ADD   R0, R1
+        SUB   R0, R12
+        CPY   R1, R4
+        READ  R2, 79
+        ADD   R1, R2
+        READ  R2, 0
+        FILL  R0, R1, R2
+
+        READ  R0, 80
+        ADD   R4, R0
+        READ  R0, 1
+        ADD   R5, R0
+        JUMP  _gfx_scroll_left_fast_row
 
 _gfx_scroll_left_loop:
         READ  R4, 0                   ; y
@@ -606,9 +781,68 @@ gfx_scroll_right:
 _gfx_scroll_right_amt_ok:
         CPY   R12, R0                 ; amount
         CMP   R12, R10
-        JLT   _gfx_scroll_right_loop
+        JLT   _gfx_scroll_right_try_fast
         CALL  gfx_clear
         RET
+
+        ; Fastpath: vaakasiirto sanarajassa.
+        ; Tila B: 1 px = 1 sana -> aina fastpath.
+        ; Tila C: 2 px = 1 sana -> fastpath kun amount % 2 == 0.
+_gfx_scroll_right_try_fast:
+        READ  R2, [GFX_MODE_REG]
+        READ  R3, GFX_MODE_B
+        CMP   R2, R3
+        JZ    _gfx_scroll_right_fast_b
+
+        ; Tila C: amount / 2 (vain jos jaollinen)
+        READ  R3, 2
+        CPY   R4, R12
+        DIV   R4, R3                  ; R4 = word_shift
+        CPY   R5, R4
+        MUL   R5, R3                  ; R5 = word_shift * 2
+        CPY   R6, R12
+        SUB   R6, R5                  ; R6 = amount % 2
+        READ  R7, 0
+        CMP   R6, R7
+        JNZ   _gfx_scroll_right_loop
+        CPY   R12, R4                 ; R12 = word_shift
+        JUMP  _gfx_scroll_right_fast
+
+_gfx_scroll_right_fast_b:
+        ; Tila B: R12 (px) == word_shift
+_gfx_scroll_right_fast:
+        READ  R4, VRAM_START          ; row_base
+        READ  R5, 0                   ; row_idx
+        READ  R6, 24                  ; VRAM-rivien maara (molemmissa tiloissa)
+
+_gfx_scroll_right_fast_row:
+        CMP   R5, R6
+        JGE   _gfx_scroll_right_done
+
+        ; COPY [row_base .. row_base + (79 - shift)] -> row_base + shift
+        CPY   R0, R4
+        CPY   R1, R4
+        READ  R2, 79
+        ADD   R1, R2
+        SUB   R1, R12
+        CPY   R2, R4
+        ADD   R2, R12
+        COPY  R0, R1, R2
+
+        ; FILL [row_base .. row_base + shift - 1] = 0
+        CPY   R0, R4
+        CPY   R1, R4
+        ADD   R1, R12
+        READ  R2, 1
+        SUB   R1, R2
+        READ  R2, 0
+        FILL  R0, R1, R2
+
+        READ  R0, 80
+        ADD   R4, R0
+        READ  R0, 1
+        ADD   R5, R0
+        JUMP  _gfx_scroll_right_fast_row
 
 _gfx_scroll_right_loop:
         READ  R4, 0                   ; y
