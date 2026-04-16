@@ -38,8 +38,10 @@ SYNTAKSI:
   - .expect_storage OSOITE, ARVO (tallennuslaiteen testaus)
   - .inject_key KOODI (esim. .inject_key 0x41, simuloi A-painallus; testaukseen)
   - .inject_key_release KOODI (esim. .inject_key_release 0x41, simuloi A-vapautus; testaukseen)
-  - .diskblock N (esim. .diskblock 0, tallenna konekieli levyblokkiin N)
-    - .state_text N, "TEKSTI" (liita tilaviestiteksti STATE N -kaskylle)
+    - .diskblock N (esim. .diskblock 0, tallenna konekieli levyblokkiin N)
+        - .state_text N, "TEKSTI" (liita tilaviestiteksti STATE N -kaskylle)
+        - .state_text N, DELAY_SECS, "TEKSTI" (tilaviestin lisaksi suoritusviive)
+        - .state_test ... (yhteensopivuus-aliaksena .state_text-direktiiville)
     - .bootblock "LEVYKUVA", overwrite=0|1, boot=0|1 (bootsektoriksi kirjoitettava osuus)
     - .endbootblock (paattaa .bootblock-osuuden)
   - .include "TIEDOSTO" tai .include 'TIEDOSTO' (liitä toinen asm-tiedosto tähän
@@ -223,6 +225,11 @@ class Assembler:
         return dict(self._state_texts)
 
     @property
+    def state_delays(self) -> dict[int, int]:
+        """Palauta .state_text-direktiiveilla määritetty tilaviivekartta (sekunteina)."""
+        return dict(self._state_delays)
+
+    @property
     def has_bootblock(self) -> bool:
         """Kertoo onko lähteessä .bootblock-osuus."""
         return self._bootblock_directive is not None and bool(self._bootblock_source)
@@ -256,6 +263,7 @@ class Assembler:
         self._bootblock_directive: BootBlockDirective | None = None
         self._bootblock_source: str | None = None
         self._state_texts: dict[int, str] = {}
+        self._state_delays: dict[int, int] = {}
         self._source_map: list[tuple[str, int]] = []  # (lahderivi, abs_osoite)
         self._labels: dict[str, int] = {}
         self._included_files: list[Path] = []
@@ -722,10 +730,11 @@ class Assembler:
                 i += 1
                 continue  # Ei lisata expanded_lines:iin
 
-            # .state_text N, "teksti" -direktiivi (UI-tilaviestit)
-            if stripped.lower().startswith(".state_text"):
-                state_id, message = self._parse_state_text_directive(stripped)
+            # .state_text / .state_test -direktiivi (UI-tilaviestit)
+            if self._is_state_text_directive(stripped):
+                state_id, delay_secs, message = self._parse_state_text_directive(stripped)
                 self._state_texts[state_id] = message
+                self._state_delays[state_id] = delay_secs
                 i += 1
                 continue  # Ei lisata expanded_lines:iin
 
@@ -863,8 +872,8 @@ class Assembler:
                 addr += len(self._parse_dstr_values(line))
                 continue
 
-            # .state_text-direktiivi: pass0 käsittelee, ei tuota koodia
-            if line.lower().startswith(".state_text"):
+            # .state_text/.state_test-direktiivi: pass0 käsittelee, ei tuota koodia
+            if self._is_state_text_directive(line):
                 continue
 
             # .expect_*-direktiivit: ainoastaan testaukseen, ei tuota koodia
@@ -997,8 +1006,8 @@ class Assembler:
                 current_words.extend(self._parse_dstr_values(line))
                 continue
 
-            # .state_text-direktiivi: pass0 käsittelee, ei tuota koodia
-            if line.lower().startswith(".state_text"):
+            # .state_text/.state_test-direktiivi: pass0 käsittelee, ei tuota koodia
+            if self._is_state_text_directive(line):
                 continue
 
             # .expect_*-direktiivit: testaukseen, ei tuota koodia
@@ -1336,9 +1345,28 @@ class Assembler:
         chars = self._parse_quoted_text_bytes(rest, ".dstr")
         return chars + [0x00]
 
-    def _parse_state_text_directive(self, line: str) -> tuple[int, str]:
-        """Parsi .state_text N, "teksti" -direktiivi."""
-        rest = line[len(".state_text") :].strip()
+    @staticmethod
+    def _is_state_text_directive(line: str) -> bool:
+        """Tunnista .state_text ja .state_test -direktiivit."""
+        ll = line.lower().lstrip()
+        return ll.startswith(".state_text") or ll.startswith(".state_test")
+
+    def _parse_state_text_directive(self, line: str) -> tuple[int, int, str]:
+        """Parsi .state_text/.state_test -direktiivit.
+
+        Sallitut muodot:
+          - .state_text N, "teksti"
+          - .state_text N, DELAY_SECS, "teksti"
+        """
+        stripped = line.strip()
+        lower = stripped.lower()
+        if lower.startswith(".state_text"):
+            rest = stripped[len(".state_text") :].strip()
+        elif lower.startswith(".state_test"):
+            rest = stripped[len(".state_test") :].strip()
+        else:
+            raise ValueError(f"Invalid state text directive: {line!r}")
+
         if not rest:
             raise ValueError("Invalid .state_text syntax: missing id and text")
 
@@ -1347,10 +1375,10 @@ class Assembler:
             raise ValueError("Invalid .state_text syntax: expected comma")
 
         id_token = rest[:comma].strip()
-        text_token = rest[comma + 1 :].strip()
+        after_id = rest[comma + 1 :].strip()
         if not id_token:
             raise ValueError("Invalid .state_text syntax: missing state id")
-        if not text_token:
+        if not after_id:
             raise ValueError("Invalid .state_text syntax: missing text")
 
         try:
@@ -1360,8 +1388,28 @@ class Assembler:
         if state_id < 0 or state_id > 15:
             raise ValueError(".state_text id must be in range 0..15")
 
+        delay_secs = 0
+        text_token = after_id
+        if after_id and after_id[0] not in ('"', "'"):
+            comma2 = after_id.find(",")
+            if comma2 < 0:
+                raise ValueError(
+                    "Invalid .state_text syntax: expected '.state_text N, \"TEXT\"' "
+                    "or '.state_text N, DELAY, \"TEXT\"'"
+                )
+            delay_token = after_id[:comma2].strip()
+            text_token = after_id[comma2 + 1 :].strip()
+            if not delay_token:
+                raise ValueError("Invalid .state_text syntax: missing delay")
+            try:
+                delay_secs = int(delay_token, 0)
+            except ValueError:
+                raise ValueError(f"Invalid .state_text delay: {delay_token!r}")
+            if delay_secs < 0:
+                raise ValueError(".state_text delay must be >= 0")
+
         text_bytes = self._parse_quoted_text_bytes(text_token, ".state_text")
-        return state_id, "".join(chr(b) for b in text_bytes)
+        return state_id, delay_secs, "".join(chr(b) for b in text_bytes)
 
     def _parse_quoted_text_bytes(self, text: str, directive_name: str) -> list[int]:
         """Parsi lainausmerkkien sisältö tavuiksi (escape-tuella)."""

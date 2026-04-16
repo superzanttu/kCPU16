@@ -211,6 +211,7 @@ class StateManager:
                 source, source_path=self.app.current_file
             )
             self.app._state_texts = self.app.assembler.state_texts
+            self.app._state_delays = self.app.assembler.state_delays
             bootblock_words: list[int] | None = None
             bootblock_used_words = 0
             bootblock_config = self.app.assembler.bootblock_directive
@@ -317,6 +318,7 @@ class StateManager:
         except Exception as e:
             self.app._log(f"[red]Assembly error: {e}[/red]")
             self.app._state_texts = {}
+            self.app._state_delays = {}
             self.app.is_assembled = False
             self.app._exec_mode = "stopped"
             self.app._update_run_mode_ui()

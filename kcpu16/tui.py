@@ -861,6 +861,7 @@ class KCPU16TUI(App[None], TUIRenderMixin, TUICommandsMixin):
         self._w_game_input_indicator: Button | None = None
         self._output_buffer: list[str] = []
         self._state_texts: dict[int, str] = {}
+        self._state_delays: dict[int, int] = {}
         self._boot_status_text: str | None = None
         self._disk_dirty: bool = False
         self._watched_mtime: int | None = None  # st_mtime_ns (kokonaisluku)
@@ -3377,6 +3378,7 @@ class KCPU16TUI(App[None], TUIRenderMixin, TUICommandsMixin):
             self._asm_jump_targets = {}
             self._disasm_cache = {}
             self._state_texts = {}
+            self._state_delays = {}
             self.dbg.snapshot_registers(self.machine.dump_registers())
             self._update_program_title()
             self._update_disk_title()
@@ -3395,6 +3397,7 @@ class KCPU16TUI(App[None], TUIRenderMixin, TUICommandsMixin):
             self._asm_jump_targets = {}
             self._disasm_cache = {}
             self._state_texts = {}
+            self._state_delays = {}
             self.dbg.snapshot_registers(self.machine.dump_registers())
             self._disk_dirty = False
             self._update_program_title()
@@ -3415,6 +3418,13 @@ class KCPU16TUI(App[None], TUIRenderMixin, TUICommandsMixin):
     def _on_state_signal(self, state_id: int) -> None:
         """Käsittele CPU:n STATE-käsky ja kirjoita tilaviestiteksti Output-paneeliin."""
         text = self._state_texts.get(state_id, f"STATE {state_id}")
+        delay_secs = max(0, int(self._state_delays.get(state_id, 0)))
+        if delay_secs > 0:
+            self._log(
+                f"[cyan]STATE {state_id}: {text} (pause {delay_secs}s)[/cyan]"
+            )
+            time.sleep(delay_secs)
+            return
         self._log(f"[cyan]STATE {state_id}: {text}[/cyan]")
 
     def _log(self, message: str) -> None:

@@ -28,6 +28,18 @@
 .const PHASE_COUNT, 11
 .const CH8_FB_BASE, 0x3000
 
+.state_test 0, 0, "gfx_clear"
+.state_test 1, 0, "gfx_pixel"
+.state_test 2, 0, "gfx_line"
+.state_test 3, 0, "gfx_set_draw_mode"
+.state_test 4, 0, "gfx_scroll_up"
+.state_test 5, 0, "gfx_scroll_down"
+.state_test 6, 0, "gfx_scroll_left"
+.state_test 7, 0, "gfx_scroll_right"
+.state_test 8, 0, "gfx_draw_text_small"
+.state_test 9, 0, "gfx_set_flip_enabled + gfx_flip"
+.state_test 10, 0, "gfx_chip8_sprite_xor"
+
 phase:
         .db 0
 drawn_phase:
@@ -83,11 +95,13 @@ _draw_common_mode_b:
         RET
 
 demo_clear:
+        STATE 0
         CALL  _draw_common_mode_c
         CALL  gfx_flip
         RET
 
 demo_pixel:
+        STATE 1
         CALL  _draw_common_mode_c
         READ  R0, GFX_DRAW_FG
         CALL  gfx_set_draw_mode
@@ -104,6 +118,7 @@ demo_pixel:
         RET
 
 demo_line:
+        STATE 2
         CALL  _draw_common_mode_c
         READ  R0, GFX_DRAW_FG
         CALL  gfx_set_draw_mode
@@ -130,6 +145,7 @@ demo_line:
         RET
 
 demo_draw_mode:
+        STATE 3
         CALL  _draw_common_mode_c
 
         READ  R0, GFX_DRAW_FG
@@ -162,6 +178,7 @@ demo_draw_mode:
         RET
 
 demo_scroll_up:
+        STATE 4
         CALL  _draw_common_mode_c
         READ  R0, GFX_DRAW_FG
         CALL  gfx_set_draw_mode
@@ -176,6 +193,7 @@ demo_scroll_up:
         RET
 
 demo_scroll_down:
+        STATE 5
         CALL  _draw_common_mode_c
         READ  R0, GFX_DRAW_FG
         CALL  gfx_set_draw_mode
@@ -190,6 +208,7 @@ demo_scroll_down:
         RET
 
 demo_scroll_left:
+        STATE 6
         CALL  _draw_common_mode_c
         READ  R0, GFX_DRAW_FG
         CALL  gfx_set_draw_mode
@@ -204,6 +223,7 @@ demo_scroll_left:
         RET
 
 demo_scroll_right:
+        STATE 7
         CALL  _draw_common_mode_c
         READ  R0, GFX_DRAW_FG
         CALL  gfx_set_draw_mode
@@ -218,6 +238,7 @@ demo_scroll_right:
         RET
 
 demo_text_small:
+        STATE 8
         CALL  _draw_common_mode_c
         READ  R0, GFX_DRAW_FG
         CALL  gfx_set_draw_mode
@@ -229,6 +250,7 @@ demo_text_small:
         RET
 
 demo_flip_enabled:
+        STATE 9
         CALL  _draw_common_mode_b
 
         READ  R0, 0
@@ -252,6 +274,7 @@ demo_flip_enabled:
         RET
 
 demo_chip8_sprite:
+        STATE 10
         CALL  _draw_common_mode_c
 
         READ  R0, CH8_FB_BASE
