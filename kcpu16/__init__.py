@@ -28,7 +28,7 @@ PAKETIN SISALTO:
 
 from .hardware.machine import KCPU16Machine
 
-__version__ = "1.3.0"  # Semanttinen versio, kaytettavissa esim. pip-pakettina
+__version__ = "1.3.1"  # Semanttinen versio, kaytettavissa esim. pip-pakettina
 
 # __all__ maarittaa mita "from kcpu16 import *" tuo
 __all__ = ["KCPU16Machine", "__version__"]

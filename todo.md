@@ -228,6 +228,7 @@ Tehtävät on merkitty hakasulkeilla, ja niiden tilaa voidaan päivittää seura
 - [X] Varmista että state-komento ei vaikuta suoritustilan ollessa MAX. MAX-tilassa simulaation tulee toimia mahdollisimman nopeasti.
 - [X] Varmista että state-komento pysäyttää suorituksen odotetus. Tämän hetkinen toteutus ei pysäytä suoritusta.
 - [X] statue-komento tulostaa vain tekstin "STATE 0: STATE 0", eikä eikä .state_test-direktiivillä määriteltyä tekstiä. Näin tapahtuu ainakin lib_gfx.asm:ssa.
+- [ ] lib-screen.asm optimoi tekstin tulostusta niin että pitkä teksti tulostuu nopeammin.
 
 ### Muut tehtävät
 - [ ] Paranna asm-kirjastojen, kuten lib-disk.asm ja lib-screen.asm nimeämiskäytäntöä siten, siten että kirjastot eivät mene helposti ristiin varsinaisten .asm-ohjelmien kanssa. Nyt esimerkiksi demo/lib_gfx.asm ja code/asm/lib/lib-gfx.asm voivat aiheuttaa sekaannusta. Ehdota ja toteuta uusi nimeämiskäytäntö, joka selkeyttää kirjastojen ja ohjelmien erottelua.

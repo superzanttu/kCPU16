@@ -263,7 +263,7 @@ cmd_format_zero:
         .dstr "/z"
 
 str_help:
-        .dstr "Commands:\n  help                 Show this help list.\n  fdisk                Init partition metadata (asks confirm if already in use).\n  format [/z]          Create empty filesystem, /z also zeroes free blocks.\n  check                Verify filesystem integrity.\n  sync                 Flush/verify storage state.\n  ls                   List current directory with metadata and disk usage.\n  dir                  Alias for ls.\n  find <name>          Find file by exact name.\n  stat <name>          Read metadata for file.\n  mkdir <name>         Create directory.\n  cd <name|..>         Change directory.\n  rmdir <name>         Remove empty directory.\n  touch <name>         Create empty file.\n  rm <name>            Delete file.\n  del <name>           Alias for rm.\n  copy <src> <dst>     Copy file/dir.\n  copy * <dst_dir>     Copy current directory entries to destination dir.\n  lorem <name> <n>     Create/overwrite file with n words of lorem text.\n  more <name>          Page file content as hex dump.\n  run <name>           Demo execute file stub.\n"
+        .dstr "Commands:\n  help fdisk format check sync ls dir\n  find stat mkdir cd rmdir touch rm del\n  copy lorem more run\nUse 'help' for quick list.\n"
 
 lorem_seed:
         .dstr "lorem ipsum "
