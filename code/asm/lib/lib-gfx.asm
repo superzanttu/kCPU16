@@ -14,6 +14,10 @@
 ;   gfx_clear         — Tyhjennä näyttö (nollaa koko VRAM)
 ;   gfx_flip          — Flipaa kaksoisbufferointi (triggeroi näytönpäivitys)
 ;   gfx_set_draw_mode — Aseta piirtotila (R0 = piirtotila)
+;   gfx_scroll_up     — Scrollaa kuvaa ylöspäin (R0 = 1..15 px)
+;   gfx_scroll_down   — Scrollaa kuvaa alaspäin (R0 = 1..15 px)
+;   gfx_scroll_left   — Scrollaa kuvaa vasemmalle (R0 = 1..15 px)
+;   gfx_scroll_right  — Scrollaa kuvaa oikealle (R0 = 1..15 px)
 ;   gfx_pixel         — Piirra pikseli (R0=x, R1=y)
 ;   gfx_line          — Piirrä viiva (R0=x0, R1=y0, R2=x1, R3=y1)
 ;
@@ -26,6 +30,7 @@
 ;   gfx_clear:         R0–R2  (käyttää FILL-käskyä, ei enää R3:a)
 ;   gfx_flip:          R0
 ;   gfx_set_draw_mode: —
+;   gfx_scroll_*:      R0–R12
 ;   gfx_pixel:         R0–R7
 ;   gfx_line:          R0–R12  (kutsuu gfx_pixel sisäisesti)
 ;
@@ -154,6 +159,476 @@ _gfx_clear_ok:
         READ  R1, VRAM_END            ; R1 = loppuosoite ($FF7F, inklusiivinen)
         READ  R2, 0                   ; R2 = täyttöarvo (nolla)
         FILL  R0, R1, R2              ; täytä [VRAM_START..VRAM_END] nollilla
+        RET
+
+; =============================================================================
+; _gfx_get_dims — Palauta aktiivisen grafiikkatilan mitat
+;
+; Sisään:  —
+; Ulos:    R10 = leveys, R11 = korkeus
+; Clobbers: R2–R3
+;
+; Huom: Laukaisee INT INT_BREAKPOINT jos näyttötila on A.
+; =============================================================================
+
+_gfx_get_dims:
+        READ  R2, [GFX_MODE_REG]
+        READ  R3, 0
+        CMP   R2, R3
+        JNZ   _gfx_dims_ok
+        INT   INT_BREAKPOINT
+_gfx_dims_ok:
+        READ  R3, GFX_MODE_B
+        CMP   R2, R3
+        JZ    _gfx_dims_b
+        READ  R10, 160
+        READ  R11, 96
+        RET
+_gfx_dims_b:
+        READ  R10, 80
+        READ  R11, 48
+        RET
+
+; =============================================================================
+; _gfx_get_pixel — Lue yksittainen pikseli (0/1) tilassa B tai C
+;
+; Sisään:  R0 = x, R1 = y
+; Ulos:    R0 = 0 tai 1
+; Clobbers: R2–R7
+; =============================================================================
+
+_gfx_get_pixel:
+        READ  R2, [GFX_MODE_REG]
+        READ  R3, GFX_MODE_B
+        CMP   R2, R3
+        JZ    _gfx_get_pixel_b
+
+        ; Tila C
+        READ  R2, 2
+        CPY   R3, R0
+        DIV   R3, R2                  ; char_col = x // 2
+        CPY   R4, R3
+        MUL   R4, R2
+        CPY   R5, R0
+        SUB   R5, R4                  ; pt_col = x mod 2
+
+        READ  R2, 4
+        CPY   R6, R1
+        DIV   R6, R2                  ; char_row = y // 4
+        CPY   R4, R6
+        MUL   R4, R2
+        CPY   R7, R1
+        SUB   R7, R4                  ; pt_row = y mod 4
+
+        READ  R2, 80
+        MUL   R6, R2
+        ADD   R6, R3
+        READ  R2, VRAM_START
+        ADD   R6, R2                  ; R6 = addr
+
+        READ  R2, 3
+        CMP   R7, R2
+        JZ    _gfx_get_c_row3
+        MUL   R5, R2
+        ADD   R5, R7                  ; bit_num = pt_col*3 + pt_row
+        JUMP  _gfx_get_c_mask
+_gfx_get_c_row3:
+        READ  R2, 6
+        ADD   R5, R2                  ; bit_num = 6 + pt_col
+_gfx_get_c_mask:
+        READ  R4, 1
+        SHL   R4, R5                  ; mask
+        READ  R3, [R6]
+        AND   R3, R4
+        READ  R0, 0
+        CMP   R3, R0
+        JZ    _gfx_get_ret
+        READ  R0, 1
+_gfx_get_ret:
+        RET
+
+_gfx_get_pixel_b:
+        ; Tila B
+        READ  R2, 2
+        CPY   R3, R1
+        DIV   R3, R2                  ; y // 2
+        READ  R4, 80
+        MUL   R3, R4
+        ADD   R3, R0
+        READ  R4, VRAM_START
+        ADD   R3, R4                  ; R3 = addr
+
+        CPY   R4, R1
+        CPY   R5, R1
+        DIV   R5, R2
+        MUL   R5, R2
+        SUB   R4, R5                  ; y mod 2
+        READ  R5, 0
+        CMP   R4, R5
+        JZ    _gfx_get_b_upper
+        READ  R5, 1
+        JUMP  _gfx_get_b_mask
+_gfx_get_b_upper:
+        READ  R5, 2
+_gfx_get_b_mask:
+        READ  R4, [R3]
+        AND   R4, R5
+        READ  R0, 0
+        CMP   R4, R0
+        JZ    _gfx_get_b_ret
+        READ  R0, 1
+_gfx_get_b_ret:
+        RET
+
+; =============================================================================
+; _gfx_put_pixel — Kirjoita yksittainen pikseli absoluuttisesti (0/1)
+;
+; Sisään:  R0 = x, R1 = y, R2 = arvo (0/1)
+; Ulos:    —
+; Clobbers: R3–R7
+; =============================================================================
+
+_gfx_put_pixel:
+        READ  R3, [GFX_MODE_REG]
+        READ  R4, GFX_MODE_B
+        CMP   R3, R4
+        JZ    _gfx_put_pixel_b
+
+        ; Tila C
+        READ  R3, 2
+        CPY   R4, R0
+        DIV   R4, R3                  ; char_col
+        CPY   R5, R4
+        MUL   R5, R3
+        CPY   R6, R0
+        SUB   R6, R5                  ; pt_col
+
+        READ  R3, 4
+        CPY   R7, R1
+        DIV   R7, R3                  ; char_row
+        CPY   R5, R7
+        MUL   R5, R3
+        CPY   R3, R1
+        SUB   R3, R5                  ; pt_row
+
+        READ  R5, 80
+        MUL   R7, R5
+        ADD   R7, R4
+        READ  R5, VRAM_START
+        ADD   R7, R5                  ; R7 = addr
+
+        READ  R5, 3
+        CMP   R3, R5
+        JZ    _gfx_put_c_row3
+        MUL   R6, R5
+        ADD   R6, R3
+        JUMP  _gfx_put_c_mask
+_gfx_put_c_row3:
+        READ  R5, 6
+        ADD   R6, R5
+_gfx_put_c_mask:
+        READ  R4, 1
+        SHL   R4, R6                  ; mask
+        READ  R6, [R7]
+        READ  R5, 0
+        CMP   R2, R5
+        JZ    _gfx_put_c_clear
+        OR    R6, R4
+        STORE [R7], R6
+        RET
+_gfx_put_c_clear:
+        NOT   R4
+        AND   R6, R4
+        STORE [R7], R6
+        RET
+
+_gfx_put_pixel_b:
+        ; Tila B
+        READ  R3, 2
+        CPY   R4, R1
+        DIV   R4, R3                  ; y // 2
+        READ  R5, 80
+        MUL   R4, R5
+        ADD   R4, R0
+        READ  R5, VRAM_START
+        ADD   R4, R5                  ; R4 = addr
+
+        CPY   R5, R1
+        CPY   R6, R1
+        DIV   R6, R3
+        MUL   R6, R3
+        SUB   R5, R6                  ; y mod 2
+        READ  R6, 0
+        CMP   R5, R6
+        JZ    _gfx_put_b_upper
+        READ  R5, 1
+        JUMP  _gfx_put_b_mask
+_gfx_put_b_upper:
+        READ  R5, 2
+_gfx_put_b_mask:
+        READ  R6, [R4]
+        READ  R7, 0
+        CMP   R2, R7
+        JZ    _gfx_put_b_clear
+        OR    R6, R5
+        STORE [R4], R6
+        RET
+_gfx_put_b_clear:
+        NOT   R5
+        AND   R6, R5
+        STORE [R4], R6
+        RET
+
+; =============================================================================
+; gfx_scroll_up/down/left/right — Scrollaus 1..15 pikselia
+;
+; Sisään:  R0 = siirtomaara pikseleina (1..15, >15 clampataan)
+; Ulos:    —
+; Clobbers: R0–R12
+; =============================================================================
+
+gfx_scroll_up:
+        CALL  _gfx_get_dims
+        READ  R1, 0
+        CMP   R0, R1
+        JLE   _gfx_scroll_up_done
+        READ  R1, 15
+        CMP   R0, R1
+        JLE   _gfx_scroll_up_amt_ok
+        CPY   R0, R1
+_gfx_scroll_up_amt_ok:
+        CPY   R12, R0                 ; amount
+        CMP   R12, R11
+        JLT   _gfx_scroll_up_loop
+        CALL  gfx_clear
+        RET
+
+_gfx_scroll_up_loop:
+        READ  R4, 0                   ; y
+_gfx_scroll_up_y:
+        CMP   R4, R11
+        JGE   _gfx_scroll_up_done
+        CPY   R6, R4
+        ADD   R6, R12                 ; src_y = y + amount
+        READ  R5, 0                   ; x
+_gfx_scroll_up_x:
+        CMP   R5, R10
+        JGE   _gfx_scroll_up_next_y
+        CPY   R1, R6
+        CMP   R1, R11
+        JGE   _gfx_scroll_up_clear
+
+        CPY   R0, R5
+        CPY   R1, R6
+        CALL  _gfx_get_pixel          ; R0 = src pixel
+        CPY   R2, R0
+        CPY   R0, R5
+        CPY   R1, R4
+        CALL  _gfx_put_pixel
+        JUMP  _gfx_scroll_up_inc_x
+
+_gfx_scroll_up_clear:
+        READ  R2, 0
+        CPY   R0, R5
+        CPY   R1, R4
+        CALL  _gfx_put_pixel
+
+_gfx_scroll_up_inc_x:
+        READ  R0, 1
+        ADD   R5, R0
+        JUMP  _gfx_scroll_up_x
+
+_gfx_scroll_up_next_y:
+        READ  R0, 1
+        ADD   R4, R0
+        JUMP  _gfx_scroll_up_y
+
+_gfx_scroll_up_done:
+        RET
+
+gfx_scroll_down:
+        CALL  _gfx_get_dims
+        READ  R1, 0
+        CMP   R0, R1
+        JLE   _gfx_scroll_down_done
+        READ  R1, 15
+        CMP   R0, R1
+        JLE   _gfx_scroll_down_amt_ok
+        CPY   R0, R1
+_gfx_scroll_down_amt_ok:
+        CPY   R12, R0                 ; amount
+        CMP   R12, R11
+        JLT   _gfx_scroll_down_loop
+        CALL  gfx_clear
+        RET
+
+_gfx_scroll_down_loop:
+        CPY   R4, R11
+        READ  R0, 1
+        SUB   R4, R0                  ; y = h - 1
+_gfx_scroll_down_y:
+        READ  R0, 0
+        CMP   R4, R0
+        JLT   _gfx_scroll_down_done
+        CPY   R6, R4
+        SUB   R6, R12                 ; src_y = y - amount
+        READ  R5, 0                   ; x
+_gfx_scroll_down_x:
+        CMP   R5, R10
+        JGE   _gfx_scroll_down_prev_y
+
+        READ  R0, 0
+        CMP   R6, R0
+        JLT   _gfx_scroll_down_clear
+
+        CPY   R0, R5
+        CPY   R1, R6
+        CALL  _gfx_get_pixel
+        CPY   R2, R0
+        CPY   R0, R5
+        CPY   R1, R4
+        CALL  _gfx_put_pixel
+        JUMP  _gfx_scroll_down_inc_x
+
+_gfx_scroll_down_clear:
+        READ  R2, 0
+        CPY   R0, R5
+        CPY   R1, R4
+        CALL  _gfx_put_pixel
+
+_gfx_scroll_down_inc_x:
+        READ  R0, 1
+        ADD   R5, R0
+        JUMP  _gfx_scroll_down_x
+
+_gfx_scroll_down_prev_y:
+        READ  R0, 1
+        SUB   R4, R0
+        JUMP  _gfx_scroll_down_y
+
+_gfx_scroll_down_done:
+        RET
+
+gfx_scroll_left:
+        CALL  _gfx_get_dims
+        READ  R1, 0
+        CMP   R0, R1
+        JLE   _gfx_scroll_left_done
+        READ  R1, 15
+        CMP   R0, R1
+        JLE   _gfx_scroll_left_amt_ok
+        CPY   R0, R1
+_gfx_scroll_left_amt_ok:
+        CPY   R12, R0                 ; amount
+        CMP   R12, R10
+        JLT   _gfx_scroll_left_loop
+        CALL  gfx_clear
+        RET
+
+_gfx_scroll_left_loop:
+        READ  R4, 0                   ; y
+_gfx_scroll_left_y:
+        CMP   R4, R11
+        JGE   _gfx_scroll_left_done
+        READ  R5, 0                   ; x
+_gfx_scroll_left_x:
+        CMP   R5, R10
+        JGE   _gfx_scroll_left_next_y
+        CPY   R6, R5
+        ADD   R6, R12                 ; src_x = x + amount
+        CPY   R1, R6
+        CMP   R1, R10
+        JGE   _gfx_scroll_left_clear
+
+        CPY   R0, R6
+        CPY   R1, R4
+        CALL  _gfx_get_pixel
+        CPY   R2, R0
+        CPY   R0, R5
+        CPY   R1, R4
+        CALL  _gfx_put_pixel
+        JUMP  _gfx_scroll_left_inc_x
+
+_gfx_scroll_left_clear:
+        READ  R2, 0
+        CPY   R0, R5
+        CPY   R1, R4
+        CALL  _gfx_put_pixel
+
+_gfx_scroll_left_inc_x:
+        READ  R0, 1
+        ADD   R5, R0
+        JUMP  _gfx_scroll_left_x
+
+_gfx_scroll_left_next_y:
+        READ  R0, 1
+        ADD   R4, R0
+        JUMP  _gfx_scroll_left_y
+
+_gfx_scroll_left_done:
+        RET
+
+gfx_scroll_right:
+        CALL  _gfx_get_dims
+        READ  R1, 0
+        CMP   R0, R1
+        JLE   _gfx_scroll_right_done
+        READ  R1, 15
+        CMP   R0, R1
+        JLE   _gfx_scroll_right_amt_ok
+        CPY   R0, R1
+_gfx_scroll_right_amt_ok:
+        CPY   R12, R0                 ; amount
+        CMP   R12, R10
+        JLT   _gfx_scroll_right_loop
+        CALL  gfx_clear
+        RET
+
+_gfx_scroll_right_loop:
+        READ  R4, 0                   ; y
+_gfx_scroll_right_y:
+        CMP   R4, R11
+        JGE   _gfx_scroll_right_done
+
+        CPY   R5, R10
+        READ  R0, 1
+        SUB   R5, R0                  ; x = w - 1
+_gfx_scroll_right_x:
+        READ  R0, 0
+        CMP   R5, R0
+        JLT   _gfx_scroll_right_next_y
+        CPY   R6, R5
+        SUB   R6, R12                 ; src_x = x - amount
+        READ  R0, 0
+        CMP   R6, R0
+        JLT   _gfx_scroll_right_clear
+
+        CPY   R0, R6
+        CPY   R1, R4
+        CALL  _gfx_get_pixel
+        CPY   R2, R0
+        CPY   R0, R5
+        CPY   R1, R4
+        CALL  _gfx_put_pixel
+        JUMP  _gfx_scroll_right_dec_x
+
+_gfx_scroll_right_clear:
+        READ  R2, 0
+        CPY   R0, R5
+        CPY   R1, R4
+        CALL  _gfx_put_pixel
+
+_gfx_scroll_right_dec_x:
+        READ  R0, 1
+        SUB   R5, R0
+        JUMP  _gfx_scroll_right_x
+
+_gfx_scroll_right_next_y:
+        READ  R0, 1
+        ADD   R4, R0
+        JUMP  _gfx_scroll_right_y
+
+_gfx_scroll_right_done:
         RET
 
 ; =============================================================================

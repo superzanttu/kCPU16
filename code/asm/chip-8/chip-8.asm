@@ -61,6 +61,9 @@ chip8_last_key:
         .db 0
 chip8_rpl:
         .db 0, 0, 0, 0, 0, 0, 0, 0
+chip8_sprite_tmp:
+        .db 0, 0, 0, 0, 0, 0, 0, 0
+        .db 0, 0, 0, 0, 0, 0, 0, 0
 
 chip8_stack:
         .db 0, 0, 0, 0, 0, 0, 0, 0
@@ -227,6 +230,132 @@ draw_done:
         STORE [GFX_FLIP_REG], 1
         RET
 
+; fb_scroll_down: scrollaa framebufferia alas R12 rivia
+fb_scroll_down:
+        READ  R0, 0
+        CMP   R12, R0
+        JZ    fb_scroll_down_done
+
+        READ  R0, CH8_FB_H
+        CMP   R12, R0
+        JLT   fb_scroll_down_rows
+
+        READ  R0, CH8_FB
+        READ  R1, CH8_FB_END
+        READ  R2, 0
+        FILL  R0, R1, R2
+        RET
+
+fb_scroll_down_rows:
+        ; row_ofs = N * 64
+        CPY   R3, R12
+        READ  R0, 6
+        SHL   R3, R0
+
+        ; COPY [CH8_FB .. CH8_FB_END-row_ofs] -> CH8_FB+row_ofs
+        READ  R0, CH8_FB
+        READ  R1, CH8_FB_END
+        SUB   R1, R3
+        READ  R2, CH8_FB
+        ADD   R2, R3
+        COPY  R0, R1, R2
+
+        ; Nollaa ylimmaiset N riviä
+        READ  R0, CH8_FB
+        READ  R1, CH8_FB
+        ADD   R1, R3
+        READ  R2, 1
+        SUB   R1, R2
+        READ  R2, 0
+        FILL  R0, R1, R2
+
+fb_scroll_down_done:
+        RET
+
+; fb_scroll_right4: scrollaa framebufferia oikealle 4 pikselia
+fb_scroll_right4:
+        READ  R8, 0                      ; y
+fb_sr_row:
+        READ  R0, CH8_FB_H
+        CMP   R8, R0
+        JGE   fb_scroll_right_done
+
+        ; row_start = CH8_FB + y*64
+        CPY   R3, R8
+        READ  R0, 6
+        SHL   R3, R0
+        READ  R4, CH8_FB
+        ADD   R4, R3
+
+        ; COPY [row_start .. row_start+59] -> row_start+4
+        CPY   R0, R4
+        CPY   R1, R4
+        READ  R2, 59
+        ADD   R1, R2
+        CPY   R2, R4
+        READ  R3, 4
+        ADD   R2, R3
+        COPY  R0, R1, R2
+
+        ; Nollaa sarakkeet 0..3
+        CPY   R0, R4
+        CPY   R1, R4
+        READ  R2, 3
+        ADD   R1, R2
+        READ  R2, 0
+        FILL  R0, R1, R2
+
+fb_sr_next_row:
+        READ  R0, 1
+        ADD   R8, R0
+        JUMP  fb_sr_row
+
+fb_scroll_right_done:
+        RET
+
+; fb_scroll_left4: scrollaa framebufferia vasemmalle 4 pikselia
+fb_scroll_left4:
+        READ  R8, 0                      ; y
+fb_sl_row:
+        READ  R0, CH8_FB_H
+        CMP   R8, R0
+        JGE   fb_scroll_left_done
+
+        ; row_start = CH8_FB + y*64
+        CPY   R3, R8
+        READ  R0, 6
+        SHL   R3, R0
+        READ  R4, CH8_FB
+        ADD   R4, R3
+
+        ; COPY [row_start+4 .. row_start+63] -> row_start
+        CPY   R0, R4
+        READ  R3, 4
+        ADD   R0, R3
+        CPY   R1, R4
+        READ  R2, 63
+        ADD   R1, R2
+        CPY   R2, R4
+        COPY  R0, R1, R2
+
+        ; Nollaa sarakkeet 60..63
+        CPY   R0, R4
+        READ  R3, 60
+        ADD   R0, R3
+        CPY   R1, R4
+        READ  R2, 63
+        ADD   R1, R2
+        READ  R2, 0
+        FILL  R0, R1, R2
+
+fb_sl_next_row:
+        READ  R0, 1
+        ADD   R8, R0
+        JUMP  fb_sl_row
+
+fb_scroll_left_done:
+        RET
+
 ; -----------------------------------------------------------------------------
 ; Keskeytykset
 ; -----------------------------------------------------------------------------
@@ -346,9 +475,54 @@ op_0xxx:
 op0_check_ret:
         READ  R0, 0xEE
         CMP   R13, R0
-        JNZ   op0_done
+        JNZ   op0_check_scroll
         CALL  stack_pop
         STORE [chip8_pc], R0
+        RET
+
+op0_check_scroll:
+        READ  R0, 0xFB
+        CMP   R13, R0
+        JNZ   op0_check_scroll_left
+        CALL  fb_scroll_right4
+        CALL  draw_screen
+        RET
+
+op0_check_scroll_left:
+        READ  R0, 0xFC
+        CMP   R13, R0
+        JNZ   op0_check_exit
+        CALL  fb_scroll_left4
+        CALL  draw_screen
+        RET
+
+op0_check_exit:
+        READ  R0, 0xFD
+        CMP   R13, R0
+        JNZ   op0_check_lowres
+        HALT
+
+op0_check_lowres:
+        READ  R0, 0xFE
+        CMP   R13, R0
+        JNZ   op0_check_hires
+        RET                               ; low-res on (already 64x32)
+
+op0_check_hires:
+        READ  R0, 0xFF
+        CMP   R13, R0
+        JNZ   op0_check_scrolldown
+        RET                               ; high-res on (not supported)
+
+op0_check_scrolldown:
+        CPY   R0, R13
+        READ  R1, 0x00F0
+        AND   R0, R1
+        READ  R1, 0x00C0
+        CMP   R0, R1
+        JNZ   op0_done
+        CALL  fb_scroll_down
+        CALL  draw_screen
 op0_done:
         RET
 
@@ -596,6 +770,21 @@ op_dxyn:
         READ  R1, CH8_MEM
         ADD   R6, R1                     ; R6 = sprite ptr
 
+        READ  R0, 0
+        CMP   R12, R0
+        JZ    opd_done
+
+        ; Käytä COPY:a sprite-rivien stageaukseen CHIP-8-muistista
+        CPY   R0, R6
+        CPY   R1, R6
+        ADD   R1, R12
+        READ  R2, 1
+        SUB   R1, R2
+        READ  R2, chip8_sprite_tmp
+        COPY  R0, R1, R2
+
+        READ  R6, chip8_sprite_tmp       ; R6 = staged sprite ptr
+
         READ  R9, 0                      ; row
 opd_row:
         CMP   R9, R12
@@ -715,6 +904,9 @@ op_fxxx:
         READ  R0, 0x29
         CMP   R13, R0
         JZ    fx_29
+        READ  R0, 0x30
+        CMP   R13, R0
+        JZ    fx_30
         READ  R0, 0x33
         CMP   R13, R0
         JZ    fx_33
@@ -765,6 +957,17 @@ fx_1E:
         RET
 
 fx_29:
+        CALL  get_v_ptr
+        READ  R0, [R0]
+        READ  R1, 0x000F
+        AND   R0, R1
+        READ  R1, 5
+        MUL   R0, R1
+        STORE [chip8_i], R0
+        RET
+
+fx_30:
+        ; SCHIP high-font ei ole kaytossa, fallback normaaliin 5-byte fonttiin
         CALL  get_v_ptr
         READ  R0, [R0]
         READ  R1, 0x000F
