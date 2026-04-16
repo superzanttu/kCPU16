@@ -1,22 +1,10 @@
 ; =============================================================================
-; demo_lib_gfx.asm — lib-gfx.asm kaikkien toimintojen esittely
+; demo_lib_gfx.asm ? lib-gfx.asm kaikkien toimintojen esittely
 ; =============================================================================
 ;
-; Jokainen vaihe kestaa 5 sekuntia (50 x 100 ms tikkia).
-; Vaiheet:
-;   0  gfx_clear
-;   1  gfx_pixel
-;   2  gfx_line
-;   3  gfx_set_draw_mode
-;   4  gfx_scroll_up
-;   5  gfx_scroll_down
-;   6  gfx_scroll_left
-;   7  gfx_scroll_right
-;   8  gfx_draw_text_small
-;   9  gfx_set_flip_enabled + gfx_flip
-;   10 gfx_chip8_sprite_xor
-;
-; Huom: demo pyorii ikuisesti.
+; Jokainen sis?lt?vaihe esitell??n molemmissa grafiikkatiloissa:
+;   ensin C, sitten B (yhteens? 22 vaihetta).
+; Jokainen vaihe kest?? 5 s (50 x 100 ms).
 ; =============================================================================
 
         .origin 0x0200
@@ -25,10 +13,11 @@
 
         .include "../lib/lib-gfx.asm"
 
-.const PHASE_COUNT, 11
-.const CH8_FB_BASE, 0x3000
+.const BASE_PHASE_COUNT, 11
+.const PHASE_COUNT, 22
 .const TICK_MS, 100
 .const PHASE_TICKS, 50
+.const CH8_FB_BASE, 0x3000
 
 .state_text 0, 0, "gfx_clear"
 .state_text 1, 0, "gfx_pixel"
@@ -50,6 +39,8 @@ phase_subticks:
         .db 0
 anim_step:
         .db 0
+current_mode:
+        .db 0
 chip8_col2:
         .db 0
 
@@ -70,13 +61,11 @@ clock_handler:
         PUSH  R1
         PUSH  R2
 
-        ; Globaali animaatiolaskuri kasvaa joka 100 ms.
         READ  R0, [anim_step]
         READ  R1, 1
         ADD   R0, R1
         STORE [anim_step], R0
 
-        ; Vaihda vaihetta 50 tikin (5 s) valein.
         READ  R0, [phase_subticks]
         ADD   R0, R1
         STORE [phase_subticks], R0
@@ -106,29 +95,52 @@ _ch_rearm:
         POP   R0
         IRET
 
-_draw_common_mode_c:
-        READ  R0, GFX_MODE_C
+_set_mode_only:
+        READ  R0, [current_mode]
         READ  R1, GFX_MODE_REG
         STORE [R1], R0
+        RET
+
+_draw_common_mode:
+        CALL  _set_mode_only
         CALL  gfx_clear
         RET
 
-_draw_common_mode_b:
-        READ  R0, GFX_MODE_B
-        READ  R1, GFX_MODE_REG
-        STORE [R1], R0
-        CALL  gfx_clear
+_get_demo_bounds:
+        READ  R0, [current_mode]
+        READ  R1, GFX_MODE_C
+        CMP   R0, R1
+        JZ    _gdb_mode_c
+        READ  R2, 79
+        READ  R3, 47
+        RET
+_gdb_mode_c:
+        READ  R2, 159
+        READ  R3, 95
+        RET
+
+_set_mode_and_base_phase:
+        READ  R1, BASE_PHASE_COUNT
+        CMP   R0, R1
+        JLT   _smbp_c
+        SUB   R0, R1
+        READ  R1, GFX_MODE_B
+        STORE [current_mode], R1
+        RET
+_smbp_c:
+        READ  R1, GFX_MODE_C
+        STORE [current_mode], R1
         RET
 
 demo_clear:
-        CALL  _draw_common_mode_c
+        CALL  _draw_common_mode
         READ  R4, [anim_step]
-        READ  R0, 0x007F
+        READ  R0, 0x003F
         AND   R0, R4
         READ  R1, [anim_step]
-        READ  R2, 2
+        READ  R2, 1
         SHR   R1, R2
-        READ  R2, 0x003F
+        READ  R2, 0x001F
         AND   R1, R2
         READ  R2, 8
         ADD   R0, R2
@@ -141,76 +153,81 @@ demo_clear:
         RET
 
 demo_pixel:
-        CALL  _draw_common_mode_c
-        READ  R0, GFX_DRAW_FG
-        CALL  gfx_set_draw_mode
-        READ  R0, [anim_step]
-        READ  R1, 0x009F
-        AND   R0, R1
-        READ  R1, [anim_step]
-        READ  R2, 1
-        SHR   R1, R2
-        READ  R2, 0x005F
-        AND   R1, R2
-        CALL  gfx_pixel
-        READ  R0, [anim_step]
-        READ  R2, 53
-        ADD   R0, R2
-        READ  R1, 0x009F
-        AND   R0, R1
-        READ  R1, [anim_step]
-        READ  R2, 2
-        SHR   R1, R2
-        READ  R2, 29
-        ADD   R1, R2
-        READ  R2, 0x005F
-        AND   R1, R2
-        CALL  gfx_pixel
-        READ  R0, [anim_step]
-        READ  R2, 101
-        ADD   R0, R2
-        READ  R1, 0x009F
-        AND   R0, R1
-        READ  R1, [anim_step]
-        READ  R2, 3
-        SHR   R1, R2
-        READ  R2, 61
-        ADD   R1, R2
-        READ  R2, 0x005F
-        AND   R1, R2
-        CALL  gfx_pixel
-        CALL  gfx_flip
-        RET
-
-demo_line:
-        CALL  _draw_common_mode_c
+        CALL  _draw_common_mode
         READ  R0, GFX_DRAW_FG
         CALL  gfx_set_draw_mode
 
         READ  R0, [anim_step]
         READ  R1, 0x003F
-        AND   R1, R0
-        READ  R2, 159
-        READ  R3, 95
-        SUB   R3, R1
+        AND   R0, R1
+        READ  R1, [anim_step]
+        READ  R2, 1
+        SHR   R1, R2
+        READ  R2, 0x001F
+        AND   R1, R2
+        CALL  gfx_pixel
+
+        READ  R0, [anim_step]
+        READ  R2, 21
+        ADD   R0, R2
+        READ  R1, 0x003F
+        AND   R0, R1
+        READ  R1, [anim_step]
+        READ  R2, 2
+        SHR   R1, R2
+        READ  R2, 7
+        ADD   R1, R2
+        READ  R2, 0x001F
+        AND   R1, R2
+        CALL  gfx_pixel
+
+        READ  R0, [anim_step]
+        READ  R2, 41
+        ADD   R0, R2
+        READ  R1, 0x003F
+        AND   R0, R1
+        READ  R1, [anim_step]
+        READ  R2, 3
+        SHR   R1, R2
+        READ  R2, 13
+        ADD   R1, R2
+        READ  R2, 0x001F
+        AND   R1, R2
+        CALL  gfx_pixel
+
+        CALL  gfx_flip
+        RET
+
+demo_line:
+        CALL  _draw_common_mode
+        READ  R0, GFX_DRAW_FG
+        CALL  gfx_set_draw_mode
+        CALL  _get_demo_bounds
+        CPY   R6, R2
+        CPY   R7, R3
+
+        READ  R5, [anim_step]
+        READ  R2, 0x001F
+        AND   R5, R2
+
+        READ  R0, 0
+        CPY   R1, R5
+        CPY   R2, R6
+        CPY   R3, R7
+        SUB   R3, R5
         CALL  gfx_line
 
-        READ  R0, 159
-        READ  R1, [anim_step]
-        READ  R2, 0x003F
-        AND   R1, R2
+        CPY   R0, R6
+        CPY   R1, R5
         READ  R2, 0
-        READ  R3, 95
-        SUB   R3, R1
+        CPY   R3, R7
+        SUB   R3, R5
         CALL  gfx_line
 
         READ  R0, 0
-        READ  R1, [anim_step]
-        READ  R2, 0x001F
-        AND   R1, R2
-        READ  R2, 32
-        ADD   R1, R2
-        READ  R2, 159
+        READ  R1, 8
+        ADD   R1, R5
+        CPY   R2, R6
         CPY   R3, R1
         CALL  gfx_line
 
@@ -218,36 +235,44 @@ demo_line:
         RET
 
 demo_draw_mode:
-        CALL  _draw_common_mode_c
+        CALL  _draw_common_mode
+        CALL  _get_demo_bounds
+        CPY   R6, R2
 
         READ  R5, [anim_step]
-        READ  R6, 0x003F
-        AND   R5, R6
+        READ  R2, 0x000F
+        AND   R5, R2
 
         READ  R0, GFX_DRAW_FG
         CALL  gfx_set_draw_mode
-        READ  R0, 20
-        READ  R1, 20
+        READ  R0, 4
+        READ  R1, 8
         ADD   R1, R5
-        READ  R2, 140
+        CPY   R2, R6
+        READ  R3, 4
+        SUB   R2, R3
         CPY   R3, R1
         CALL  gfx_line
 
         READ  R0, GFX_DRAW_XOR
         CALL  gfx_set_draw_mode
-        READ  R0, 20
-        READ  R1, 45
+        READ  R0, 4
+        READ  R1, 18
         ADD   R1, R5
-        READ  R2, 140
+        CPY   R2, R6
+        READ  R3, 4
+        SUB   R2, R3
         CPY   R3, R1
         CALL  gfx_line
 
         READ  R0, GFX_DRAW_BG
         CALL  gfx_set_draw_mode
-        READ  R0, 30
-        READ  R1, 70
+        READ  R0, 4
+        READ  R1, 28
         ADD   R1, R5
-        READ  R2, 130
+        CPY   R2, R6
+        READ  R3, 4
+        SUB   R2, R3
         CPY   R3, R1
         CALL  gfx_line
 
@@ -257,57 +282,51 @@ demo_draw_mode:
         RET
 
 demo_scroll_up:
-        READ  R0, GFX_MODE_C
-        READ  R1, GFX_MODE_REG
-        STORE [R1], R0
+        CALL  _set_mode_only
         READ  R0, GFX_DRAW_FG
         CALL  gfx_set_draw_mode
         READ  R0, 1
         CALL  gfx_scroll_up
         READ  R0, 0
-        READ  R1, 95
-        READ  R2, 159
-        READ  R3, 95
+        CALL  _get_demo_bounds
+        CPY   R1, R3
+        CPY   R2, R2
+        CPY   R3, R1
         CALL  gfx_line
         CALL  gfx_flip
         RET
 
 demo_scroll_down:
-        READ  R0, GFX_MODE_C
-        READ  R1, GFX_MODE_REG
-        STORE [R1], R0
+        CALL  _set_mode_only
         READ  R0, GFX_DRAW_FG
         CALL  gfx_set_draw_mode
         READ  R0, 1
         CALL  gfx_scroll_down
         READ  R0, 0
         READ  R1, 0
-        READ  R2, 159
+        CALL  _get_demo_bounds
         READ  R3, 0
         CALL  gfx_line
         CALL  gfx_flip
         RET
 
 demo_scroll_left:
-        READ  R0, GFX_MODE_C
-        READ  R1, GFX_MODE_REG
-        STORE [R1], R0
+        CALL  _set_mode_only
         READ  R0, GFX_DRAW_FG
         CALL  gfx_set_draw_mode
         READ  R0, 1
         CALL  gfx_scroll_left
-        READ  R0, 159
+        CALL  _get_demo_bounds
+        CPY   R0, R2
         READ  R1, 0
-        READ  R2, 159
-        READ  R3, 95
+        CPY   R2, R0
+        CPY   R3, R3
         CALL  gfx_line
         CALL  gfx_flip
         RET
 
 demo_scroll_right:
-        READ  R0, GFX_MODE_C
-        READ  R1, GFX_MODE_REG
-        STORE [R1], R0
+        CALL  _set_mode_only
         READ  R0, GFX_DRAW_FG
         CALL  gfx_set_draw_mode
         READ  R0, 1
@@ -315,26 +334,33 @@ demo_scroll_right:
         READ  R0, 0
         READ  R1, 0
         READ  R2, 0
-        READ  R3, 95
+        CALL  _get_demo_bounds
         CALL  gfx_line
         CALL  gfx_flip
         RET
 
 demo_text_small:
-        CALL  _draw_common_mode_c
+        CALL  _draw_common_mode
         READ  R0, GFX_DRAW_FG
         CALL  gfx_set_draw_mode
         READ  R0, msg_hex
         READ  R1, [anim_step]
         READ  R2, 0x003F
         AND   R1, R2
-        READ  R2, 8
+        READ  R2, [anim_step]
+        READ  R3, 1
+        SHR   R2, R3
+        READ  R3, 0x001F
+        AND   R2, R3
         CALL  gfx_draw_text_small
         CALL  gfx_flip
         RET
 
 demo_flip_enabled:
-        CALL  _draw_common_mode_b
+        CALL  _draw_common_mode
+        CALL  _get_demo_bounds
+        CPY   R6, R2
+        CPY   R7, R3
 
         READ  R4, [anim_step]
         READ  R5, 1
@@ -347,11 +373,11 @@ _dfe_set_mode:
         CALL  gfx_set_flip_enabled
 
         READ  R0, [anim_step]
-        READ  R1, 0x003F
+        READ  R1, 0x001F
         AND   R0, R1
         READ  R1, 0
-        READ  R2, 79
-        READ  R3, 47
+        CPY   R2, R6
+        CPY   R3, R7
         SUB   R3, R0
         CALL  gfx_line
         CALL  gfx_flip
@@ -364,7 +390,7 @@ _dfe_set_mode:
         RET
 
 demo_chip8_sprite:
-        CALL  _draw_common_mode_c
+        CALL  _draw_common_mode
 
         READ  R1, [anim_step]
         READ  R2, 0x001F
@@ -384,7 +410,6 @@ demo_chip8_sprite:
         READ  R4, 5
         CALL  gfx_chip8_sprite_xor
 
-        ; Törmäysstatus vilkkuu: parittomilla frameilla piirretään kahdesti.
         READ  R4, [anim_step]
         READ  R5, 1
         AND   R4, R5
@@ -404,7 +429,6 @@ _dcs_single:
         STORE [chip8_col2], R0
 
 _dcs_status:
-
         READ  R1, [chip8_col2]
         READ  R2, 0
         CMP   R1, R2
@@ -522,6 +546,15 @@ main:
         READ  R0, clock_handler
         STORE [INT_CLOCK], R0
 
+        READ  R0, 0
+        STORE [phase], R0
+        STORE [phase_subticks], R0
+        STORE [anim_step], R0
+        STORE [drawn_phase], 0xFFFF
+
+        READ  R0, GFX_MODE_C
+        STORE [current_mode], R0
+
         READ  R0, 1
         CALL  gfx_set_flip_enabled
 
@@ -536,9 +569,13 @@ main_loop:
         JZ    _draw_frame
 
         STORE [drawn_phase], R0
+        CALL  _set_mode_and_base_phase
+        CALL  _draw_common_mode
         CALL  _emit_state_for_phase
 
 _draw_frame:
         READ  R0, [phase]
+        CALL  _set_mode_and_base_phase
         CALL  _dispatch_phase
         JUMP  main_loop
+
