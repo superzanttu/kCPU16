@@ -6,8 +6,67 @@
 ;   ensin C, sitten B (yhteens? 22 vaihetta).
 ; Jokainen vaihe kest?? 5 s (50 x 100 ms).
 ; =============================================================================
+; 
+; GRAFIIKKATILAVAIHEET:
+;   1) Kaikki demovaiheet ajetaan grafiikkatilassa B.
+;   2) Kaikki demovaiheet ajetaan grafiikkatilassa C.
+;   3) Aloitetaan uudelleen kohdasta 1.
 
-        .origin 0x0200
+; DEMOVAIHEET:
+; Vaihe 1
+;    Nimi: ruudun välkytys
+;    Kesto: 3 sekuntia
+;    Toiminta: ruutu tyhjennetään ja täytetään uudestaan kaksoispuskurointia käyttäen
+;
+; Vaihe 2
+;    Nimi: satunnaiset pikselit
+;    Kesto: 5 sekuntia
+;    Toiminta: ruutuun lisätään yksittäisiä pisteitä satunnaisiin koordinaatteihin.
+;
+; Vaihe 3
+;    Nimi: satunnaiset viivat
+;    Kesto: 5 sekuntia
+;    Toiminta: ruutuun lisätään satunnaisia viivoja satunnaisiin koordinaatteihin.
+;
+; Vaihe 4
+;    Nimi: skrollaus oikealle
+;    Kesto: 5 sekuntia
+;    Toiminta: piirrä näytölle satunnaisia viivoja, skrollaa oikealle, piirrä uudestaan ja skrollaa uudestaan.
+; Vaihe 5
+;    Nimi: skrollaus vasemmalle
+;    Kesto: 5 sekuntia
+;    Toiminta: piirrä näytölle satunnaisia viivoja, skrollaa vasemmalle, piirrä uudestaan ja skrollaa uudestaan.
+; Vaihe 6
+;    Nimi: skrollaus ylös
+;    Kesto: 5 sekuntia
+;    Toiminta: piirrä näytölle satunnaisia viivoja, skrollaa ylös, piirrä uudestaan ja skrollaa uudestaan.
+; Vaihe 7
+;    Nimi: skrollaus alas
+;    Kesto: 5 sekuntia
+;    Toiminta: piirrä näytölle satunnaisia viivoja, skrollaa alas, piirrä uudestaan ja skrollaa uudestaan.
+;
+; Vaihe 8
+;    Nimi: pientä tekstiä
+;    Kesto: 5 sekuntia
+;    Toiminta: piirrä kaikki lib-font_small.asm:n merkit näytölle yksitellen.
+;
+; Vaihe 9
+;    Nimi: isoa tekstiä
+;    Kesto: 5 sekuntia
+;    Toiminta: piirrä kaikki lib-font_big.asm:n merkit näytölle yksitellen.
+;
+; Vaihe 10
+;    Nimi: pacman sprite
+;    Kesto: 5 sekuntia
+;    Toiminta: piirrä näytölle PACMAN-tyylinen 8x8 sprite, joka liikkuu satunnaisiin koordinaatteisin ja toistaa tätä koko ajan.
+;
+; Vaihe 11
+;    Nimi: sprite törmäys
+;    Kesto: 30 sekuntia
+;    Toiminta: piirrä näytön keskelle PACMAN-tyylinen  8x8 sprite. Joka liikkuu satunnaisiin kohtiin näytöllä, kuten vaiheessa 10. Piirrä näytön jokaiseen kulmaan HAAMU-sprite (yhteensä 4 kpl), jotka liikkuvat kohti PACMAN-spriteä. Mikä PACMAN-spriteen osuu HAAMU-sprite, HAAMU-sprite siirtyy aloituskulmaansa ja jatkaa liikkuakseen kohti PACMAN-spriteä. Näytön keskellä näkyy teksti "C0", "C1" tai "C2" sen mukaan.
+;
+
+       .origin 0x0200
 
         JUMP  main
 
@@ -17,7 +76,7 @@
 .const PHASE_COUNT, 22
 .const TICK_MS, 100
 .const PHASE_TICKS, 50
-.const CH8_FB_BASE, 0x3000
+.const SPRITE_FB_BASE_64X32, 0x3000
 
 .state_text 0, 0, "gfx_clear"
 .state_text 1, 0, "gfx_pixel"
@@ -29,7 +88,7 @@
 .state_text 7, 0, "gfx_scroll_right"
 .state_text 8, 0, "gfx_draw_text_small"
 .state_text 9, 0, "gfx_set_flip_enabled + gfx_flip"
-.state_text 10, 0, "gfx_chip8_sprite_xor"
+.state_text 10, 0, "gfx_sprite_xor_1bpp_64x32"
 
 phase:
         .db 0
@@ -41,7 +100,7 @@ anim_step:
         .db 0
 current_mode:
         .db 0
-chip8_col2:
+sprite_collision_second:
         .db 0
 
 msg_hex:
@@ -53,7 +112,7 @@ msg_col0:
 msg_col1:
         .dstr "C1"
 
-chip8_sprite_demo:
+sprite_demo_5x5:
         .db 0xF0, 0x90, 0x90, 0x90, 0xF0
 
 clock_handler:
@@ -389,7 +448,7 @@ _dfe_set_mode:
         CALL  gfx_flip
         RET
 
-demo_chip8_sprite:
+demo_sprite_xor_1bpp:
         CALL  _draw_common_mode
 
         READ  R1, [anim_step]
@@ -405,10 +464,10 @@ demo_chip8_sprite:
         READ  R3, 8
         ADD   R2, R3
 
-        READ  R0, CH8_FB_BASE
-        READ  R3, chip8_sprite_demo
+        READ  R0, SPRITE_FB_BASE_64X32
+        READ  R3, sprite_demo_5x5
         READ  R4, 5
-        CALL  gfx_chip8_sprite_xor
+        CALL  gfx_sprite_xor_1bpp_64x32
 
         READ  R4, [anim_step]
         READ  R5, 1
@@ -417,19 +476,19 @@ demo_chip8_sprite:
         CMP   R4, R6
         JZ    _dcs_single
 
-        READ  R0, CH8_FB_BASE
-        READ  R3, chip8_sprite_demo
+        READ  R0, SPRITE_FB_BASE_64X32
+        READ  R3, sprite_demo_5x5
         READ  R4, 5
-        CALL  gfx_chip8_sprite_xor
-        STORE [chip8_col2], R0
+        CALL  gfx_sprite_xor_1bpp_64x32
+        STORE [sprite_collision_second], R0
         JUMP  _dcs_status
 
 _dcs_single:
         READ  R0, 0
-        STORE [chip8_col2], R0
+        STORE [sprite_collision_second], R0
 
 _dcs_status:
-        READ  R1, [chip8_col2]
+        READ  R1, [sprite_collision_second]
         READ  R2, 0
         CMP   R1, R2
         JZ    _dcs_msg0
@@ -539,7 +598,7 @@ _dispatch_phase:
         READ  R1, 9
         CMP   R0, R1
         JZ    demo_flip_enabled
-        CALL  demo_chip8_sprite
+        CALL  demo_sprite_xor_1bpp
         RET
 
 main:

@@ -778,7 +778,7 @@ op_dxyn:
         CPY   R2, R5
         READ  R3, chip8_sprite_tmp
         CPY   R4, R12
-        CALL  gfx_chip8_sprite_xor
+        CALL  gfx_sprite_xor_1bpp_64x32
         CALL  set_vf
 
 opd_done:

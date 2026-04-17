@@ -20,6 +20,7 @@
 ;   gfx_scroll_right  — Scrollaa kuvaa oikealle (R0 = 1..15 px)
 ;   gfx_pixel         — Piirra pikseli (R0=x, R1=y)
 ;   gfx_line          — Piirrä viiva (R0=x0, R1=y0, R2=x1, R3=y1)
+;   gfx_sprite_xor_1bpp_64x32 — XOR-piirto 64x32 1bpp framebufferiin
 ;
 ; PIIRTOTILAT (gfx_set_draw_mode:n R0-arvo):
 ;   GFX_DRAW_XOR (0) — XOR-tila: vaihtaa pikselin tilaa (oletus)
@@ -1306,7 +1307,7 @@ _gdt_done:
         RET
 
 ; =============================================================================
-; gfx_chip8_sprite_xor — XOR-piirto CHIP-8 64x32 framebufferiin
+; gfx_sprite_xor_1bpp_64x32 — XOR-piirto 64x32 1bpp framebufferiin
 ;
 ; Sisään:  R0 = fb_base (64x32, 1 sana / pikseli)
 ;          R1 = x (0..63)
@@ -1317,7 +1318,7 @@ _gdt_done:
 ; Clobbers: R0–R12
 ; =============================================================================
 
-gfx_chip8_sprite_xor:
+gfx_sprite_xor_1bpp_64x32:
         CPY   R12, R0                 ; fb base
         READ  R10, 0x003F
         AND   R1, R10
