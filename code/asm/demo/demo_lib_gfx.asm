@@ -57,7 +57,7 @@
 ;
 ; Vaihe 10
 ;    Nimi: pacman sprite
-;    Kesto: 5 sekuntia
+;    Kesto: 10 sekuntia
 ;    Toiminta: piirrä näytölle PACMAN-tyylinen 8x8 sprite, joka liikkuu satunnaisiin koordinaatteisin ja toistaa tätä koko ajan.
 ;
 ; Vaihe 11
