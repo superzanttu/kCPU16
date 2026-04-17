@@ -272,25 +272,23 @@ scr_cls:
 
 _scr_scroll:
         PUSH  R3
-        PUSH  R4
         READ  R0, VRAM_START        ; R0 = kohdeosoite (rivi 0 alku)
         READ  R1, VRAM_START        ; R1 = lähdeosoite
         READ  R2, SCREEN_COLS       ; R2 = 80
         ADD   R1, R2                ; R1 = VRAM_START + 80 (rivi 1 alku = 0xF850)
-        READ  R2, 1840              ; R2 = laskuri (23 × 80 = 1840 sanaa)
-        READ  R4, 1                 ; R4 = askellusarvo
-_scr_scroll_copy:
-        READ  R3, [R1]              ; R3 = *lähde
-        STORE [R0], R3              ; *kohde = R3
-        ADD   R0, R4                ; kohde++
-        ADD   R1, R4                ; lähde++
-        SUB   R2, R4                ; laskuri--
-        JNZ   _scr_scroll_copy      ; silmukka kunnes laskuri = 0
+        READ  R2, 1839              ; R2 = lähteen loppu (rivi 23 loppu)
+        ADD   R2, R1                ; R2 = 0xFF2F
+        ; COPY käyttää CPU:n optimoitua bulk-polkuja ja on selvästi nopeampi
+        ; kuin 1840 sanan manuaalinen READ/STORE-silmukka.
+        COPY  R0, R1, R2
         ; R0 = VRAM_START + 1840 = 0xFF30 (rivin 23 ensimmäinen solu)
         ; R2 = 0 (käytetään täyttöarvona)
+        READ  R0, VRAM_END
+        READ  R2, 79
+        SUB   R0, R2                ; R0 = 0xFF30
+        READ  R2, 0
         READ  R1, VRAM_END          ; R1 = 0xFF7F (VRAM loppu)
         FILL  R0, R1, R2            ; tyhjennä rivi 23 (0xFF30–0xFF7F) arvolla 0
-        POP   R4
         POP   R3
         RET
 
@@ -459,12 +457,12 @@ _scr_write_noadvance:
 ;   0x0D (\r) — ohitetaan
 ;   0x09 (\t) — tabulaattori: kirjoittaa välilyöntejä seuraavaan 8:n
 ;               sarakemonikertaan (esim. sarake 5 → 3 välilyöntiä → sarake 8)
-;   Muut      — kirjoittaa merkin VRAM:iin (kutsuu _scr_putchar)
+;   Muut      — kirjoittaa merkin VRAM:iin suoraan (ei per-merkki alikutsua)
 ;
 ; Rekisteriasetus silmukan aikana:
-;   R1 = merkkijono-osoitin (säilyy _scr_putchar:n push/pop:lla)
+;   R1 = merkkijono-osoitin
 ;   R2 = vakio/tarkistusarvo (luetaan uudelleen joka iteraatiossa)
-;   R3 = tabulaattorilaskuri (säilyy _scr_putchar:n push/pop:lla)
+;   R3 = tabulaattorilaskuri / väliaikainen
 ; =============================================================================
 
 scr_print:
@@ -486,8 +484,32 @@ _sp_loop:
         READ  R2, 9                 ; '\t'
         CMP   R0, R2
         JZ    _sp_tab
-        ; Tulostettava merkki
-        CALL  _scr_putchar          ; R0=merkki; säilyttää R1,R2,R3
+        ; Tulostettava merkki (inline-putchar, nopeampi hot loopissa)
+        ; Laske VRAM-osoite: VRAM_START + row*SCREEN_COLS + col
+        READ  R2, [scr_cursor_row]
+        READ  R3, SCREEN_COLS
+        MUL   R2, R3
+        READ  R3, [scr_cursor_col]
+        ADD   R2, R3
+        READ  R3, VRAM_START
+        ADD   R2, R3
+        ; Yhdistä väri ja kirjoita
+        READ  R3, [scr_color]
+        OR    R0, R3
+        STORE [R2], R0
+        ; Etene sarakkeessa
+        READ  R2, [scr_cursor_col]
+        READ  R3, 1
+        ADD   R2, R3
+        READ  R3, SCREEN_COLS
+        CMP   R2, R3
+        JLT   _sp_store_col
+        READ  R2, 0
+        STORE [scr_cursor_col], R2
+        CALL  _scr_newline
+        JUMP  _sp_skip
+_sp_store_col:
+        STORE [scr_cursor_col], R2
         JUMP  _sp_skip              ; etene osoittimessa
 _sp_nl:
         CALL  _scr_newline          ; säilyttää R1 (push/pop sisäisesti)

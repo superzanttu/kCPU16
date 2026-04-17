@@ -160,12 +160,70 @@ Muut alihakemistot:
 
 ---
 
+---
+
+## ASM-tiedostojen nimeämiskäytäntö
+
+### Kirjastot (`code/asm/lib/`)
+
+Kaikki tiedostot `lib/`-hakemistossa ovat jaettuja kirjastoja. Niiden nimi
+noudattaa muotoa `lib-NIMI.asm` — siis `lib-`-etuliite ja väliviiva:
+
+| Tiedosto             | Kuvaus                                    |
+| -------------------- | ----------------------------------------- |
+| `lib-gfx.asm`        | Grafiikkatoiminnot (piirtäminen, flip)    |
+| `lib-screen.asm`     | Tekstiterminaali (print, input, scroll)   |
+| `lib-disk.asm`       | Levytoiminnot (format, create, read jne.) |
+| `lib-font_small.asm` | 4×5 ASCII-fontti (CHIP-8-yhteensopiva)    |
+| `lib-font_big.asm`   | Suuri segmenttinäyttöfontti               |
+| `lib-3dobjects.asm`  | 3D-objektidata ja apufunktiot             |
+
+**Säännöt kirjastoille:**
+- Etuliite on aina `lib-` (väliviiva, ei alaviiva).
+- Tiedoston on sijaittava `code/asm/lib/`-hakemistossa.
+- Kirjasto ei saa olla itsenäinen suoritettava ohjelma (ei `.origin 0x0200`
+  + `JUMP main` -aloitusta ilman, että se on suunniteltu suoritettavaksi
+  `.include`-mekanismin kautta).
+
+### Ohjelmat ja demot (`code/asm/demo/`, `tut/`, `kdos/`, `chip-8/`)
+
+Ohjelmat, demot, tutoriaalit ja sovellukset **eivät** käytä `lib-`-
+tai `lib_`-etuliitettä nimessään. Tämä estää sekaannuksen kirjastojen kanssa.
+
+Demo-ohjelma, joka esittelee tietyn kirjaston toimintoja, nimetään muodolla
+`demo_NIMI.asm`, jossa `NIMI` vastaa kirjaston nimeä ilman `lib-`-etuliitettä:
+
+| Vanha nimi (virheellinen) | Oikea nimi              | Kuvaus                          |
+| ------------------------- | ----------------------- | ------------------------------- |
+| `demo/lib_gfx.asm`        | `demo/demo_lib_gfx.asm` | Esittelee `lib-gfx.asm`:n API:n |
+
+**Säännöt ohjelmille:**
+- Nimi ei aloita `lib-` eikä `lib_`.
+- Kirjastoa esittelevä demo nimetään `demo_KIRJASTO.asm`
+  (esim. `demo_lib_gfx.asm`, ei `lib_gfx.asm`).
+- Ohjelmat voivat vapaasti käyttää muita nimeämistapoja
+  (`3dcube.asm`, `clock_text.asm`, `algo_factorial.asm` jne.).
+
+### Yhteenveto
+
+| Hakemisto          | Etuliite/muoto   | Esimerkki          |
+| ------------------ | ---------------- | ------------------ |
+| `code/asm/lib/`    | `lib-NIMI.asm`   | `lib-gfx.asm`      |
+| `code/asm/demo/`   | ei `lib-`/`lib_` | `demo_lib_gfx.asm` |
+| `code/asm/tut/`    | ei `lib-`/`lib_` | `arithmetic.asm`   |
+| `code/asm/chip-8/` | ei `lib-`/`lib_` | `chip-8.asm`       |
+| `code/asm/kdos/`   | ei `lib-`/`lib_` | `kdos.asm`         |
+
+---
+
 ## Huomio päivityksistä
 
 Rakenne on muuttunut aiemmasta merkittävästi erityisesti kahdessa kohdassa:
 
 - TUI on jaettu moduuleihin (tui.py + tui_render.py + tui_commands.py + tui_state.py)
 - CPU on jaettu hardware-kerroksessa useaan osaan (cpu_core, cpu_exec, cpu_memcheck, cpu_mmio)
+- ASM-tiedostojen nimeämiskäytäntö on dokumentoitu (ks. yllä);
+  `demo/lib_gfx.asm` on nimetty uudelleen `demo/demo_lib_gfx.asm`:ksi.
 
 Tämä dokumentti kuvaa nykyisen rakenteen ja korvaa aiemmat vanhentuneet
 listaukset.

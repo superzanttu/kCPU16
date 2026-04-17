@@ -262,8 +262,26 @@ cmd_star:
 cmd_format_zero:
         .dstr "/z"
 
-str_help:
-        .dstr "Commands:\n  help fdisk format check sync ls dir\n  find stat mkdir cd rmdir touch rm del\n  copy lorem more run\nUse 'help' for quick list.\n"
+str_help_hdr:
+        .dstr "KDOS commands and syntax:\n"
+
+str_help_storage:
+        .dstr "  help\n  fdisk\n  format [/z]\n  check\n  sync\n"
+
+str_help_nav:
+        .dstr "  ls | dir\n  find <name>\n  stat <name>\n  mkdir <dir>\n  cd <dir|..>\n  rmdir <dir>\n"
+
+str_help_files:
+        .dstr "  touch <file>\n  rm <file> | del <file>\n  lorem <file> <word_count>\n  more <file>\n  run <file>\n"
+
+str_help_copy:
+        .dstr "  copy <src> <dst>\n  copy * <dst_dir>\n"
+
+str_help_misc:
+        .dstr "\nOptions:\n  format /z   format + zero all free data blocks\n"
+
+str_help_notes:
+        .dstr "Notes:\n  - Names/paths are max 15 chars on disk.\n  - copy wildcard supports only '*'.\n  - Commands are case-insensitive.\n"
 
 lorem_seed:
         .dstr "lorem ipsum "
@@ -1097,6 +1115,17 @@ ensure_storage_ready:
         READ  R2, 0
         CMP   R1, R2
         JNZ   _esr_chk_fmt
+        ; Levy voi olla ladattu ulkoisesti (disk load), jolloin RAM-liput
+        ; ovat nollassa vaikka tiedostojärjestelmä on kunnossa.
+        CALL  disk_check
+        READ  R1, DISK_OK
+        CMP   R0, R1
+        JNZ   _esr_need_fdisk
+        READ  R0, 1
+        STORE [fdisk_done], R0
+        STORE [format_done], R0
+        RET
+_esr_need_fdisk:
         READ  R0, str_need_fdisk
         CALL  print_str
         READ  R0, 0
@@ -1106,6 +1135,15 @@ _esr_chk_fmt:
         READ  R2, 0
         CMP   R1, R2
         JNZ   _esr_chk_fs
+        ; Sama ilmiö kuin fdisk-lipussa: varmista todellinen tila levyltä.
+        CALL  disk_check
+        READ  R1, DISK_OK
+        CMP   R0, R1
+        JNZ   _esr_need_format
+        READ  R0, 1
+        STORE [format_done], R0
+        RET
+_esr_need_format:
         READ  R0, str_need_format
         CALL  print_str
         READ  R0, 0
@@ -1844,7 +1882,19 @@ main_loop:
         READ  R1, 1
         CMP   R0, R1
         JNZ   _cmd_fdisk
-        READ  R0, str_help
+        READ  R0, str_help_hdr
+        CALL  print_str
+        READ  R0, str_help_storage
+        CALL  print_str
+        READ  R0, str_help_nav
+        CALL  print_str
+        READ  R0, str_help_files
+        CALL  print_str
+        READ  R0, str_help_copy
+        CALL  print_str
+        READ  R0, str_help_misc
+        CALL  print_str
+        READ  R0, str_help_notes
         CALL  print_str
         JUMP  main_loop
 

@@ -3,6 +3,7 @@
         "*.asm": "kcpu16-asm",
         "*.k16": "kcpu16-asm"
     },
+    "python.defaultInterpreterPath": "${workspaceFolder}\\.venv\\Scripts\\python.exe",
     "editor.comments.insertSpace": true,
     "[kcpu16-asm]": {
         "editor.tabSize": 8,

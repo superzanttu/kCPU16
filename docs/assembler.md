@@ -54,6 +54,8 @@ Rekisterit: `R0`–`R15` (yleiskäyttöiset), `FP` (frame pointer), `SP` (stack 
 | `.dw val, val, …`                                | Tallenna 16-bittisiä sanoja muistiin; kukin arvo maskataan arvolla 0xFFFF   |
 | `.db val, val, …`                                | Tallenna 8-bittisiä arvoja muistiin; kukin arvo maskataan arvolla 0xFF      |
 | `.dstr "teksti"` / `.dstr 'teksti'`              | Tallenna null-terminoitu merkkijono; escape: `\\` `\"` `\'` `\n` `\t` `\0`  |
+| `.state_text N, "teksti"`                        | Liitä `STATE N` -käskylle lokiin tulostettava teksti                        |
+| `.state_text N, delay_secs, "teksti"`            | Kuten yllä, mutta lisää `STATE N` -tilalle viive sekunteina                 |
 | `.diskblock N`                                   | Assemblauksen jälkeen tallenna konekieli tallennuslaitteen blokkiin N       |
 | `.bootblock "levykuva", overwrite=0/1, boot=0/1` | Aloita bootsektoriin kirjoitettava osuus ja määritä kohdelevykuva           |
 | `.endbootblock`                                  | Päätä `.bootblock`-osuus                                                    |
@@ -108,7 +110,24 @@ Säännöt:
 - Bootblockin kokorajoitus koskee vain `.bootblock`-osuuden omaa konekieltä, ei koko tiedoston muuta ohjelmaa.
 - Levykuvan polku tulkitaan suhteessa nykyiseen `.asm`-tiedostoon.
 
-## 3.2 Datadirektiiviit: .dw ja .db
+## 3.2 STATE-tekstidirektiivi: `.state_text`
+
+Assembler tukee seuraavia muotoja:
+
+```asm
+.state_text 3, "Loading assets"
+.state_text 4, 2, "Init done"
+```
+
+Säännöt:
+
+- `N` on `STATE`-id ja sen on oltava välillä `0..15`.
+- `delay_secs` on kokonaisluku sekunteina (`>= 0`).
+- Teksti on lainausmerkeissä (`"..."` tai `'...'`) ja tukee samoja escapeja kuin `.dstr`.
+- Sama `N` voidaan määritellä uudelleen; viimeisin määrittely jää voimaan.
+- Direktiivi ei tuota konekielisanoja, vaan metadataa TUI:n state-lokia varten.
+
+## 3.3 Datadirektiiviit: .dw ja .db
 
 Molemmat direktiivit tallentavat sarjan literaaliarvoja peräkkäisiin muistipaikkoihin.
 Koska kCPU16 on **sanakohtaisesti osoitettu** (word-addressed), jokainen arvo

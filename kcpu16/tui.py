@@ -3244,6 +3244,7 @@ class KCPU16TUI(App[None], TUIRenderMixin, TUICommandsMixin):
                 path = self.storage_dir / path
             self.machine.storage.load_from_file(path)
             self.current_disk_file = path
+            self._disk_dirty = False
             self.workers.cancel_all()
             self._exec_mode = "stopped"
             self._update_run_mode_ui()
