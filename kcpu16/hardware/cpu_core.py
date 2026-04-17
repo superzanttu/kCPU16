@@ -120,6 +120,7 @@ class CPUCoreMixin:
             "DREAD": self._exec_dread,
             "DWRITE": self._exec_dwrite,
             "TSL": self._exec_tsl,
+            "STATE": self._exec_state,
             "NOP": self._exec_nop,
         }
         mem_check_map = {

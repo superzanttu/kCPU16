@@ -615,6 +615,7 @@ Assembly-kielen syntaksi, direktiivit, arkkitehtuurivakiot ja käyttöesimerkit 
 | 0xE300  | CLI        | 1     | Estä keskeytykset (I = 0, Kernel-tila)              |
 | 0x2480  | CMP        | 3     | Vertailu: aseta liput regA - regB:n perusteella     |
 | 0x1180  | CPY        | 3     | Kopioi rekisterien arvot keskenään                  |
+| 0x1CC0  | COPY       | 4     | Kopioi muistialue [rS..rE] osoitteeseen rD          |
 | 0xF180  | DREAD      | 3     | Lue tallennuslaitteelta (Kernel-tila)               |
 | 0xF280  | DWRITE     | 3     | Kirjoita tallennuslaitteelle (Kernel-tila)          |
 | 0x2380  | DIV        | 3     | Kokonaislukujako: regD = regD ÷ regS                |
@@ -677,6 +678,7 @@ Assembly-kielen syntaksi, direktiivit, arkkitehtuurivakiot ja käyttöesimerkit 
 | STOREI_IND | 0x1980 | Kirjoita välitön arvo epäsuoraan osoitteeseen (rekisterin kautta)  |
 | STOREI_REL | 0x1A80 | Kirjoita välitön arvo FP-suhteelliseen osoitteeseen                |
 | FILL       | 0x1BC0 | Täytä muistialue [rS..rE] inklusiivisesti arvolla rV               |
+| COPY       | 0x1CC0 | Kopioi muistialue [rS..rE] inklusiivisesti kohteeseen rD           |
 
 ### Aritmetiikka
 

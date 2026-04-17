@@ -27,6 +27,8 @@ from __future__ import annotations
 from .instruction import OPCODE_TABLE, format_disasm_memory_syntax
 from .constants import WORD_MASK
 
+_STATE_ID_MASK = 0x000F
+
 # Kaanteinen hakutaulukko: opcode -> (mnemonic, operand_count, privileged)
 # Kaytamme samaa formaattia kuin OPCODE_TABLE
 REVERSE_TABLE = {opcode: meta for opcode, meta in OPCODE_TABLE.items()}
@@ -135,6 +137,13 @@ class Disassembler:
                 if i + 1 + j >= len(words):
                     break
                 op_vals.append(words[i + 1 + j] & WORD_MASK)
+
+            if mnemonic == "STATE":
+                state_id = opcode & _STATE_ID_MASK
+                lines.append(f"{pc:04X}: STATE {state_id}")
+                i += 1
+                pc += 1
+                continue
 
             # Rakenna tulostusrivi — muistioperaatiot uudella [..] syntaksilla
             mem_fmt = format_disasm_memory_syntax(mnemonic, op_vals, _REG_NAMES)

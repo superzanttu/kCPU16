@@ -37,6 +37,14 @@
 .const SCR_OFS_Y,    8
 .const CH8_RPL_LAST, 7
 
+.state_text 0, 0, "chip8: boot"
+.state_text 1, 0, "chip8: clear state"
+.state_text 2, 0, "chip8: load font"
+.state_text 3, 0, "chip8: load module"
+.state_text 4, 0, "chip8: init graphics"
+.state_text 5, 0, "chip8: running"
+.state_text 6, 0, "chip8: wait key"
+
 ; -----------------------------------------------------------------------------
 ; Emulaattorin tila
 ; -----------------------------------------------------------------------------
@@ -61,6 +69,11 @@ chip8_last_key:
         .db 0
 chip8_rpl:
         .db 0, 0, 0, 0, 0, 0, 0, 0
+chip8_sprite_tmp:
+        .db 0, 0, 0, 0, 0, 0, 0, 0
+        .db 0, 0, 0, 0, 0, 0, 0, 0
+chip8_boot_text:
+        .dstr "CHIP-8 booted"
 
 chip8_stack:
         .db 0, 0, 0, 0, 0, 0, 0, 0
@@ -154,10 +167,9 @@ stack_pop_empty:
 
 ; draw_screen: piirtää 64x32 CH8_FB -> tila B (80x48)
 draw_screen:
-        READ  R0, VRAM_START
-        READ  R1, VRAM_END
-        READ  R2, 0
-        FILL  R0, R1, R2
+        CALL  gfx_clear
+        READ  R0, GFX_DRAW_FG
+        CALL  gfx_set_draw_mode
 
         READ  R8, 0
 draw_y:
@@ -181,37 +193,13 @@ draw_x:
         CMP   R0, R6
         JZ    draw_next
 
-        CPY   R3, R8
+        CPY   R1, R8
         READ  R0, SCR_OFS_Y
-        ADD   R3, R0
-        CPY   R4, R7
+        ADD   R1, R0
+        CPY   R0, R7
         READ  R0, SCR_OFS_X
-        ADD   R4, R0
-
-        CPY   R5, R3
-        READ  R0, 1
-        SHR   R5, R0
-        READ  R0, 80
-        MUL   R5, R0
-        ADD   R5, R4
-        READ  R0, VRAM_START
-        ADD   R5, R0
-
-        READ  R6, 1
-        AND   R6, R3
-        READ  R1, 0
-        CMP   R6, R1
-        JNZ   draw_lower
-        READ  R6, 2
-        JUMP  draw_plot
-
-draw_lower:
-        READ  R6, 1
-
-draw_plot:
-        READ  R0, [R5]
-        OR    R0, R6
-        STORE [R5], R0
+        ADD   R0, R7
+        CALL  gfx_pixel
 
 draw_next:
         READ  R0, 1
@@ -224,7 +212,138 @@ draw_row_done:
         JUMP  draw_y
 
 draw_done:
-        STORE [GFX_FLIP_REG], 1
+        ; Näytä pieni boot-status-teksti kulmassa
+        READ  R0, chip8_boot_text
+        READ  R1, 0
+        READ  R2, 0
+        CALL  gfx_draw_text_small
+        CALL  gfx_flip
+        RET
+
+; fb_scroll_down: scrollaa framebufferia alas R12 rivia
+fb_scroll_down:
+        READ  R0, 0
+        CMP   R12, R0
+        JZ    fb_scroll_down_done
+
+        READ  R0, CH8_FB_H
+        CMP   R12, R0
+        JLT   fb_scroll_down_rows
+
+        READ  R0, CH8_FB
+        READ  R1, CH8_FB_END
+        READ  R2, 0
+        FILL  R0, R1, R2
+        RET
+
+fb_scroll_down_rows:
+        ; row_ofs = N * 64
+        CPY   R3, R12
+        READ  R0, 6
+        SHL   R3, R0
+
+        ; COPY [CH8_FB .. CH8_FB_END-row_ofs] -> CH8_FB+row_ofs
+        READ  R0, CH8_FB
+        READ  R1, CH8_FB_END
+        SUB   R1, R3
+        READ  R2, CH8_FB
+        ADD   R2, R3
+        COPY  R0, R1, R2
+
+        ; Nollaa ylimmaiset N riviä
+        READ  R0, CH8_FB
+        READ  R1, CH8_FB
+        ADD   R1, R3
+        READ  R2, 1
+        SUB   R1, R2
+        READ  R2, 0
+        FILL  R0, R1, R2
+
+fb_scroll_down_done:
+        RET
+
+; fb_scroll_right4: scrollaa framebufferia oikealle 4 pikselia
+fb_scroll_right4:
+        READ  R8, 0                      ; y
+fb_sr_row:
+        READ  R0, CH8_FB_H
+        CMP   R8, R0
+        JGE   fb_scroll_right_done
+
+        ; row_start = CH8_FB + y*64
+        CPY   R3, R8
+        READ  R0, 6
+        SHL   R3, R0
+        READ  R4, CH8_FB
+        ADD   R4, R3
+
+        ; COPY [row_start .. row_start+59] -> row_start+4
+        CPY   R0, R4
+        CPY   R1, R4
+        READ  R2, 59
+        ADD   R1, R2
+        CPY   R2, R4
+        READ  R3, 4
+        ADD   R2, R3
+        COPY  R0, R1, R2
+
+        ; Nollaa sarakkeet 0..3
+        CPY   R0, R4
+        CPY   R1, R4
+        READ  R2, 3
+        ADD   R1, R2
+        READ  R2, 0
+        FILL  R0, R1, R2
+
+fb_sr_next_row:
+        READ  R0, 1
+        ADD   R8, R0
+        JUMP  fb_sr_row
+
+fb_scroll_right_done:
+        RET
+
+; fb_scroll_left4: scrollaa framebufferia vasemmalle 4 pikselia
+fb_scroll_left4:
+        READ  R8, 0                      ; y
+fb_sl_row:
+        READ  R0, CH8_FB_H
+        CMP   R8, R0
+        JGE   fb_scroll_left_done
+
+        ; row_start = CH8_FB + y*64
+        CPY   R3, R8
+        READ  R0, 6
+        SHL   R3, R0
+        READ  R4, CH8_FB
+        ADD   R4, R3
+
+        ; COPY [row_start+4 .. row_start+63] -> row_start
+        CPY   R0, R4
+        READ  R3, 4
+        ADD   R0, R3
+        CPY   R1, R4
+        READ  R2, 63
+        ADD   R1, R2
+        CPY   R2, R4
+        COPY  R0, R1, R2
+
+        ; Nollaa sarakkeet 60..63
+        CPY   R0, R4
+        READ  R3, 60
+        ADD   R0, R3
+        CPY   R1, R4
+        READ  R2, 63
+        ADD   R1, R2
+        READ  R2, 0
+        FILL  R0, R1, R2
+
+fb_sl_next_row:
+        READ  R0, 1
+        ADD   R8, R0
+        JUMP  fb_sl_row
+
+fb_scroll_left_done:
         RET
 
 ; -----------------------------------------------------------------------------
@@ -346,9 +465,54 @@ op_0xxx:
 op0_check_ret:
         READ  R0, 0xEE
         CMP   R13, R0
-        JNZ   op0_done
+        JNZ   op0_check_scroll
         CALL  stack_pop
         STORE [chip8_pc], R0
+        RET
+
+op0_check_scroll:
+        READ  R0, 0xFB
+        CMP   R13, R0
+        JNZ   op0_check_scroll_left
+        CALL  fb_scroll_right4
+        CALL  draw_screen
+        RET
+
+op0_check_scroll_left:
+        READ  R0, 0xFC
+        CMP   R13, R0
+        JNZ   op0_check_exit
+        CALL  fb_scroll_left4
+        CALL  draw_screen
+        RET
+
+op0_check_exit:
+        READ  R0, 0xFD
+        CMP   R13, R0
+        JNZ   op0_check_lowres
+        HALT
+
+op0_check_lowres:
+        READ  R0, 0xFE
+        CMP   R13, R0
+        JNZ   op0_check_hires
+        RET                               ; low-res on (already 64x32)
+
+op0_check_hires:
+        READ  R0, 0xFF
+        CMP   R13, R0
+        JNZ   op0_check_scrolldown
+        RET                               ; high-res on (not supported)
+
+op0_check_scrolldown:
+        CPY   R0, R13
+        READ  R1, 0x00F0
+        AND   R0, R1
+        READ  R1, 0x00C0
+        CMP   R0, R1
+        JNZ   op0_done
+        CALL  fb_scroll_down
+        CALL  draw_screen
 op0_done:
         RET
 
@@ -596,69 +760,26 @@ op_dxyn:
         READ  R1, CH8_MEM
         ADD   R6, R1                     ; R6 = sprite ptr
 
-        READ  R9, 0                      ; row
-opd_row:
-        CMP   R9, R12
-        JGE   opd_done
-
-        READ  R3, [R6]
-        READ  R0, 1
-        ADD   R6, R0
-
-        CPY   R8, R5
-        ADD   R8, R9
-        READ  R1, 0x001F
-        AND   R8, R1
-
-        READ  R7, 0                      ; bit 0..7
-opd_bit:
-        READ  R0, 8
-        CMP   R7, R0
-        JGE   opd_next_row
-
-        READ  R0, 0x0080
-        SHR   R0, R7
-        CPY   R1, R3
-        AND   R1, R0
         READ  R0, 0
-        CMP   R1, R0
-        JZ    opd_skip
+        CMP   R12, R0
+        JZ    opd_done
 
-        CPY   R1, R4
-        ADD   R1, R7
-        READ  R2, 0x003F
-        AND   R1, R2
+        ; Käytä COPY:a sprite-rivien stageaukseen CHIP-8-muistista
+        CPY   R0, R6
+        CPY   R1, R6
+        ADD   R1, R12
+        READ  R2, 1
+        SUB   R1, R2
+        READ  R2, chip8_sprite_tmp
+        COPY  R0, R1, R2
 
-        CPY   R2, R8
-        READ  R0, 6
-        SHL   R2, R0
-        ADD   R2, R1
         READ  R0, CH8_FB
-        ADD   R2, R0
-
-        READ  R0, [R2]
-        READ  R1, 1
-        CMP   R0, R1
-        JNZ   opd_xor
-        READ  R0, 1
+        CPY   R1, R4
+        CPY   R2, R5
+        READ  R3, chip8_sprite_tmp
+        CPY   R4, R12
+        CALL  gfx_chip8_sprite_xor
         CALL  set_vf
-        ; set_vf käyttää R0 palautusarvona, joten hae pikseli uudestaan
-        READ  R0, [R2]
-
-opd_xor:
-        READ  R1, 1
-        XOR   R0, R1
-        STORE [R2], R0
-
-opd_skip:
-        READ  R0, 1
-        ADD   R7, R0
-        JUMP  opd_bit
-
-opd_next_row:
-        READ  R0, 1
-        ADD   R9, R0
-        JUMP  opd_row
 
 opd_done:
         CALL  draw_screen
@@ -715,6 +836,9 @@ op_fxxx:
         READ  R0, 0x29
         CMP   R13, R0
         JZ    fx_29
+        READ  R0, 0x30
+        CMP   R13, R0
+        JZ    fx_30
         READ  R0, 0x33
         CMP   R13, R0
         JZ    fx_33
@@ -765,6 +889,17 @@ fx_1E:
         RET
 
 fx_29:
+        CALL  get_v_ptr
+        READ  R0, [R0]
+        READ  R1, 0x000F
+        AND   R0, R1
+        READ  R1, 5
+        MUL   R0, R1
+        STORE [chip8_i], R0
+        RET
+
+fx_30:
+        ; SCHIP high-font ei ole kaytossa, fallback normaaliin 5-byte fonttiin
         CALL  get_v_ptr
         READ  R0, [R0]
         READ  R1, 0x000F
@@ -889,10 +1024,12 @@ fx85_done:
 ; Main
 ; -----------------------------------------------------------------------------
 main:
+        STATE 0
         STORE [INT_KEYBOARD], kbd_handler
         STORE [INT_CLOCK], clk_handler
 
         ; Nollaa emulaattorin tila
+        STATE 1
         READ  R0, chip8_v
         READ  R1, chip8_v
         READ  R3, 15
@@ -927,6 +1064,7 @@ main:
         FILL  R0, R1, R2
 
         ; Kopioi fontti CH8_MEM[0..79]
+        STATE 2
         READ  R0, chip8_font
         READ  R1, CH8_MEM
         READ  R2, 80
@@ -981,6 +1119,7 @@ font_copy_done:
         STORE [0x4056], 15   ; V
 
         ; Lataa chip2asm-moduuli CH8_MEM + module_load_addr
+        STATE 3
         READ  R0, [chip8_mod_snake_load_addr]
         READ  R1, CH8_MEM
         ADD   R1, R0
@@ -1005,7 +1144,10 @@ module_copy_done:
         STORE [chip8_pc], R0
 
         ; Aseta grafiikkatila B
+        STATE 4
         STORE [GFX_MODE_REG], GFX_MODE_B
+        READ  R0, 1
+        CALL  gfx_set_flip_enabled
         CALL  draw_screen
 
         ; Käynnistä 60 Hz ajastin + keskeytykset
@@ -1015,6 +1157,7 @@ module_copy_done:
         READ  R0, 0
         STMR  R0
         STI
+        STATE 5
 
 ; -----------------------------------------------------------------------------
 ; Emulointisilmukka
@@ -1024,8 +1167,19 @@ emu_loop:
         READ  R0, [chip8_wait_vx]
         READ  R1, 0xFFFF
         CMP   R0, R1
-        JNZ   emu_loop
+        JNZ   emu_wait_key
+        JUMP  emu_fetch
 
+emu_wait_key:
+        STATE 6
+emu_wait_key_loop:
+        READ  R0, [chip8_wait_vx]
+        READ  R1, 0xFFFF
+        CMP   R0, R1
+        JNZ   emu_wait_key_loop
+        STATE 5
+
+emu_fetch:
         ; Fetch opcode
         READ  R0, [chip8_pc]
         READ  R1, CH8_MEM
@@ -1083,4 +1237,5 @@ emu_loop:
 ; -----------------------------------------------------------------------------
 ; CHIP-8 ROM-moduuli (tuotettu chip2asm.py:llä)
 ; -----------------------------------------------------------------------------
+        .include "../lib/lib-gfx.asm"
         .include "chip8-snake.asm"

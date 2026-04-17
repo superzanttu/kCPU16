@@ -49,6 +49,7 @@ Layout:
 from __future__ import annotations
 
 import re
+import threading
 import time
 from pathlib import Path
 from rich.text import Text
@@ -829,6 +830,7 @@ class KCPU16TUI(App[None], TUIRenderMixin, TUICommandsMixin):
         """
         super().__init__()
         self.machine = KCPU16Machine()
+        self.machine.cpu.state_callback = self._on_state_signal
         self.assembler = Assembler()
         self.disassembler = Disassembler()
         self.dbg = DebugState()
@@ -859,6 +861,11 @@ class KCPU16TUI(App[None], TUIRenderMixin, TUICommandsMixin):
         self._w_stack_view: Static | None = None
         self._w_game_input_indicator: Button | None = None
         self._output_buffer: list[str] = []
+        self._state_texts: dict[int, str] = {}
+        self._state_delays: dict[int, int] = {}
+        # Varmista, että vain yksi CPU-run worker ajaa kerrallaan.
+        # Ilman tätä nopea MAX->FAST -vaihto voi käynnistää rinnakkaiset workerit.
+        self._cpu_run_lock = threading.Lock()
         self._boot_status_text: str | None = None
         self._disk_dirty: bool = False
         self._watched_mtime: int | None = None  # st_mtime_ns (kokonaisluku)
@@ -1764,6 +1771,8 @@ class KCPU16TUI(App[None], TUIRenderMixin, TUICommandsMixin):
             self._boot_status_text = None
             self._log("[dim]Assemble: translating source to machine code[/dim]")
             segments = self.assembler.assemble(source, source_path=self.current_file)
+            self._state_texts = self.assembler.state_texts
+            self._state_delays = self.assembler.state_delays
             bootblock_words: list[int] | None = None
             bootblock_used_words = 0
             bootblock_config = self.assembler.bootblock_directive
@@ -1874,6 +1883,8 @@ class KCPU16TUI(App[None], TUIRenderMixin, TUICommandsMixin):
             self._log(
                 "[red]Program is not runnable until assembly succeeds. Fix the error and load/assemble again.[/red]"
             )
+            self._state_texts = {}
+            self._state_delays = {}
             self.is_assembled = False
             self._exec_mode = "stopped"
             self._update_run_mode_ui()
@@ -2096,159 +2107,130 @@ class KCPU16TUI(App[None], TUIRenderMixin, TUICommandsMixin):
         - Worker peruutetaan (Stop/Reset)
         """
         worker = get_current_worker()
-        cpu = self.machine.cpu
-        total_cycles = 0
-
-        def _done(msg: str) -> None:
-            """Kutsutaan pääsäikeessä suorituksen päättyessä."""
-            # Ignore stale callbacks from an older worker if run mode has
-            # already changed (e.g. fast -> max -> stop in quick succession).
-            if self._exec_mode != mode:
+        # Odota yksinoikeus CPU-ajoon. Jos worker perutaan odotuksen aikana,
+        # lopetetaan siististi ilman että uusi ajo käynnistyy turhaan.
+        acquired = False
+        while not acquired:
+            if worker.is_cancelled:
                 return
-            self._exec_mode = "stopped"
-            self._update_run_mode_ui()
-            if msg:
-                self._log(msg)
-            self._refresh_all(include_screen=True, force_screen=True)
+            acquired = self._cpu_run_lock.acquire(timeout=0.05)
 
-        if mode == "slow":
-            # Hidas suoritus: yksi käsky kerrallaan, UI-päivitys joka käskyn jälkeen
-            while not worker.is_cancelled:
-                if cpu.halted or cpu.process_exit_requested:
-                    break
-                try:
-                    self.machine.step()
-                except Exception as exc:
-                    self.call_from_thread(self._show_cpu_crash, exc)
-                    return
-                total_cycles += 1
-                if cpu.halted:
-                    self.call_from_thread(
-                        _done, f"[red]HALTED after {total_cycles} cycles.[/red]"
-                    )
-                    return
-                if cpu.process_exit_requested:
-                    self.call_from_thread(
-                        _done, f"[yellow]EXIT after {total_cycles} cycles.[/yellow]"
-                    )
-                    return
-                if self.dbg.has_breakpoint(self.machine.regs.pc):
-                    addr = self.machine.regs.pc
-                    self.call_from_thread(
-                        _done,
-                        f"[red]Breakpoint at 0x{addr:04X} after {total_cycles} cycles.[/red]",
-                    )
-                    return
-                self.call_from_thread(self._refresh_all, True, True)
-                time.sleep(1.0 / max(1, self._slow_ips * self._slow_multiplier))
-        if mode in ("fast", "max"):
-            # Täysi nopeus: eräsuoritus, UI päivittyy ~200ms välein
-            # MAX-tilassa näyttöä (VRAM) ei päivitetä ajon aikana
-            BATCH = 5000
-            REFRESH_INTERVAL = 0.2  # sekuntia
-            last_refresh = time.monotonic()
-            while not worker.is_cancelled:
-                if cpu.halted or cpu.process_exit_requested:
-                    break
+        try:
+            cpu = self.machine.cpu
+            total_cycles = 0
 
-                if self.dbg.breakpoints:
+            def _done(msg: str) -> None:
+                """Kutsutaan pääsäikeessä suorituksen päättyessä."""
+                # Ignore stale callbacks from an older worker if run mode has
+                # already changed (e.g. fast -> max -> stop in quick succession).
+                if self._exec_mode != mode:
+                    return
+                self._exec_mode = "stopped"
+                self._update_run_mode_ui()
+                if msg:
+                    self._log(msg)
+                self._refresh_all(include_screen=True, force_screen=True)
+
+            if mode == "slow":
+                # Hidas suoritus: yksi käsky kerrallaan, UI-päivitys joka käskyn jälkeen
+                while not worker.is_cancelled:
+                    if cpu.halted or cpu.process_exit_requested:
+                        break
                     try:
-                        batch_cycles, stop_reason = cpu.run_until_breakpoint_or_cycles(
-                            max_cycles=BATCH,
-                            breakpoints=self.dbg.breakpoints,
-                        )
+                        self.machine.step()
                     except Exception as exc:
                         self.call_from_thread(self._show_cpu_crash, exc)
                         return
-                    total_cycles += batch_cycles
-                    if stop_reason == "breakpoint":
+                    total_cycles += 1
+                    if cpu.halted:
+                        self.call_from_thread(
+                            _done, f"[red]HALTED after {total_cycles} cycles.[/red]"
+                        )
+                        return
+                    if cpu.process_exit_requested:
+                        self.call_from_thread(
+                            _done, f"[yellow]EXIT after {total_cycles} cycles.[/yellow]"
+                        )
+                        return
+                    if self.dbg.has_breakpoint(self.machine.regs.pc):
                         addr = self.machine.regs.pc
                         self.call_from_thread(
                             _done,
                             f"[red]Breakpoint at 0x{addr:04X} after {total_cycles} cycles.[/red]",
                         )
                         return
-                else:
-                    try:
-                        batch_cycles, _stop_reason = cpu.run_until_breakpoint_or_cycles(
-                            max_cycles=BATCH,
-                            breakpoints=None,
-                        )
-                    except Exception as exc:
-                        self.call_from_thread(self._show_cpu_crash, exc)
-                        return
-                    total_cycles += batch_cycles
+                    self.call_from_thread(self._refresh_all, True, True)
+                    time.sleep(1.0 / max(1, self._slow_ips * self._slow_multiplier))
 
-                # Päivitä UI ~200ms välein
-                now = time.monotonic()
-                if now - last_refresh >= REFRESH_INTERVAL:
-                    last_refresh = now
-                    if mode == "max":
-                        # MAX-tilassa päivitetään vain Screen (VRAM), ei debug-paneeleja
-                        self.call_from_thread(self._refresh_screen_tab)
+            if mode in ("fast", "max"):
+                # Täysi nopeus: eräsuoritus, UI päivittyy ~200ms välein
+                # MAX-tilassa näyttöä (VRAM) ei päivitetä ajon aikana
+                BATCH = 5000
+                REFRESH_INTERVAL = 0.2  # sekuntia
+                last_refresh = time.monotonic()
+                while not worker.is_cancelled:
+                    if cpu.halted or cpu.process_exit_requested:
+                        break
+
+                    if self.dbg.breakpoints:
+                        try:
+                            batch_cycles, stop_reason = cpu.run_until_breakpoint_or_cycles(
+                                max_cycles=BATCH,
+                                breakpoints=self.dbg.breakpoints,
+                            )
+                        except Exception as exc:
+                            self.call_from_thread(self._show_cpu_crash, exc)
+                            return
+                        total_cycles += batch_cycles
+                        if stop_reason == "breakpoint":
+                            addr = self.machine.regs.pc
+                            self.call_from_thread(
+                                _done,
+                                f"[red]Breakpoint at 0x{addr:04X} after {total_cycles} cycles.[/red]",
+                            )
+                            return
                     else:
-                        self.call_from_thread(self._refresh_all, True)
-                if cpu.halted:
-                    self.call_from_thread(
-                        _done, f"[red]HALTED after {total_cycles} cycles.[/red]"
-                    )
-                    return
-                if cpu.process_exit_requested:
-                    self.call_from_thread(
-                        _done, f"[yellow]EXIT after {total_cycles} cycles.[/yellow]"
-                    )
-                    return
+                        try:
+                            batch_cycles, _stop_reason = cpu.run_until_breakpoint_or_cycles(
+                                max_cycles=BATCH,
+                                breakpoints=None,
+                            )
+                        except Exception as exc:
+                            self.call_from_thread(self._show_cpu_crash, exc)
+                            return
+                        total_cycles += batch_cycles
 
-        # Worker peruutettu (Stop / Reset)
-        self.call_from_thread(_done, "")
+                    # Päivitä UI ~200ms välein
+                    now = time.monotonic()
+                    if now - last_refresh >= REFRESH_INTERVAL:
+                        last_refresh = now
+                        if mode == "max":
+                            # MAX-tilassa päivitetään vain Screen (VRAM), ei debug-paneeleja
+                            self.call_from_thread(self._refresh_screen_tab)
+                        else:
+                            self.call_from_thread(self._refresh_all, True)
+                    if cpu.halted:
+                        self.call_from_thread(
+                            _done, f"[red]HALTED after {total_cycles} cycles.[/red]"
+                        )
+                        return
+                    if cpu.process_exit_requested:
+                        self.call_from_thread(
+                            _done, f"[yellow]EXIT after {total_cycles} cycles.[/yellow]"
+                        )
+                        return
 
-    # ------------------------------------------------------------------
-    # Näkymien päivitys
-    # ------------------------------------------------------------------
-
-    def _refresh_all(
-        self, include_screen: bool = False, force_screen: bool = False
-    ) -> None:
-        """Päivitä kaikki näkymäpaneelit kerralla.
-
-        Kutsutaan jokaisen tilan muutoksen jälkeen (step, run, reset,
-        assemble, komentosyöte).
-
-        Parametrit:
-            include_screen: Jos True, päivittää myös VRAM-näytön (Screen-tab).
-                            Käytä True stepissä ja suoritustilan vaihtuessa.
-            force_screen:   Jos True, ohitetaan kaksoisbufferointi ja renderöidään
-                            suoraan VRAMista (käytetään step/done/stop-tiloissa).
-        """
-        self._refresh_disassembly()
-        self._refresh_registers()
-        self._refresh_flags()
-        self._refresh_cpu_status()
-        if include_screen:
-            self._refresh_screen_tab(force=force_screen)
-        self._refresh_memory()
-        self._refresh_stack()
+            # Worker peruutettu (Stop / Reset)
+            self.call_from_thread(_done, "")
+        finally:
+            self._cpu_run_lock.release()
 
     def _refresh_disassembly(self) -> None:
-        """Päivitä disassembly-paneeli PC:n ympäriltä (--asm-formaatti).
+        """Päivitä disassembly-paneelin sisältö nykyisen PC:n ympäriltä.
 
-        Näyttöikkuna:
-            - Skannaa taaksepäin PC:stä max 15 osoitetta.
-            - Eteenpäin max 80 osoitetta PC:n jälkeen.
-            - Ohittaa tyhjät muistipaikat paitsi PC:n lähellä tai BP:ssa.
-
-        Joka käskyrivillä näytetään:
-            ● ▶ ADDR: HEX_SANAT   MNEMONIC OPERANDIT   ; lähdekoodi
-
-            ● = breakpoint (punainen)   ▶ = nykyinen PC (korostettu tausta)
-            ADDR syaanilla, mnemoniikki keltaisella, rekisterit sinisellä,
-            välittömät arvot vihreällä, lähdekomentit himmennettyinä.
-
-        Jump target -merkit (label-nimi) näytetään ennen hyppykohdetä olevaa
-        käskyriviä.
-
-        Optimointi: Disassembler-kutsut cachetan. Cache invalidoidaan ohjelman
-        latauksen yhteydessä (_do_assemble).
+        Ohittaa tyhjät muistipaikat paitsi PC:n lähellä tai breakpoint-kohdissa
+        ja näyttää jokaiselle riville osoitteen, sanat, disassemblyn sekä
+        mahdollisen lähdekoodikommentin.
         """
         pc = self.machine.regs.pc
 
@@ -3262,6 +3244,7 @@ class KCPU16TUI(App[None], TUIRenderMixin, TUICommandsMixin):
                 path = self.storage_dir / path
             self.machine.storage.load_from_file(path)
             self.current_disk_file = path
+            self._disk_dirty = False
             self.workers.cancel_all()
             self._exec_mode = "stopped"
             self._update_run_mode_ui()
@@ -3374,6 +3357,8 @@ class KCPU16TUI(App[None], TUIRenderMixin, TUICommandsMixin):
             self._asm_addr_to_label = {}
             self._asm_jump_targets = {}
             self._disasm_cache = {}
+            self._state_texts = {}
+            self._state_delays = {}
             self.dbg.snapshot_registers(self.machine.dump_registers())
             self._update_program_title()
             self._update_disk_title()
@@ -3391,6 +3376,8 @@ class KCPU16TUI(App[None], TUIRenderMixin, TUICommandsMixin):
             self._asm_addr_to_label = {}
             self._asm_jump_targets = {}
             self._disasm_cache = {}
+            self._state_texts = {}
+            self._state_delays = {}
             self.dbg.snapshot_registers(self.machine.dump_registers())
             self._disk_dirty = False
             self._update_program_title()
@@ -3407,6 +3394,31 @@ class KCPU16TUI(App[None], TUIRenderMixin, TUICommandsMixin):
     # ------------------------------------------------------------------
     # Apumetodit
     # ------------------------------------------------------------------
+
+    def _on_state_signal(self, state_id: int) -> float:
+        """Käsittele CPU:n STATE-käsky, kirjaa viesti ja palauta viivesekunnit.
+
+        Paluuarvoa käyttää CPU._exec_state() suorituksen mahdolliseen pysäytykseen.
+        MAX-tilassa palautetaan aina 0.0 ja lokikirjaus ohitetaan suorituskyvyn vuoksi.
+        """
+        if self._exec_mode == "max":
+            return 0.0
+
+        text = self._state_texts.get(state_id, f"STATE {state_id}")
+        delay_secs = max(0, int(self._state_delays.get(state_id, 0)))
+        msg = f"[cyan]STATE {state_id}: {text}[/cyan]"
+        if delay_secs > 0:
+            msg = f"[cyan]STATE {state_id}: {text} (pause {delay_secs}s)[/cyan]"
+
+        if threading.current_thread() is threading.main_thread():
+            self._log(msg)
+        else:
+            try:
+                self.call_from_thread(self._log, msg)
+            except Exception:
+                pass
+
+        return float(delay_secs)
 
     def _log(self, message: str) -> None:
         """Kirjoita viesti output-paneelin RichLog-widgettiin.
