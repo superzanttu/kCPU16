@@ -230,7 +230,14 @@ _gfx_get_pixel:
         READ  R2, [GFX_MODE_REG]
         READ  R3, GFX_MODE_B
         CMP   R2, R3
-        JZ    _gfx_get_pixel_b
+        JZ    _gfx_get_pixel_b_bounds
+
+        READ  R3, 160
+        CMP   R0, R3
+        JGE   _gfx_get_oob
+        READ  R3, 96
+        CMP   R1, R3
+        JGE   _gfx_get_oob
 
         ; Tila C
         READ  R2, 2
@@ -274,6 +281,19 @@ _gfx_get_c_mask:
         JZ    _gfx_get_ret
         READ  R0, 1
 _gfx_get_ret:
+        RET
+
+_gfx_get_pixel_b_bounds:
+        READ  R3, 80
+        CMP   R0, R3
+        JGE   _gfx_get_oob
+        READ  R3, 48
+        CMP   R1, R3
+        JGE   _gfx_get_oob
+        JUMP  _gfx_get_pixel_b
+
+_gfx_get_oob:
+        READ  R0, 0
         RET
 
 _gfx_get_pixel_b:
@@ -321,7 +341,14 @@ _gfx_put_pixel:
         READ  R3, [GFX_MODE_REG]
         READ  R4, GFX_MODE_B
         CMP   R3, R4
-        JZ    _gfx_put_pixel_b
+        JZ    _gfx_put_pixel_b_bounds
+
+        READ  R4, 160
+        CMP   R0, R4
+        JGE   _gfx_put_oob
+        READ  R4, 96
+        CMP   R1, R4
+        JGE   _gfx_put_oob
 
         ; Tila C
         READ  R3, 2
@@ -369,6 +396,18 @@ _gfx_put_c_clear:
         NOT   R4
         AND   R6, R4
         STORE [R7], R6
+        RET
+
+_gfx_put_pixel_b_bounds:
+        READ  R4, 80
+        CMP   R0, R4
+        JGE   _gfx_put_oob
+        READ  R4, 48
+        CMP   R1, R4
+        JGE   _gfx_put_oob
+        JUMP  _gfx_put_pixel_b
+
+_gfx_put_oob:
         RET
 
 _gfx_put_pixel_b:
@@ -494,30 +533,43 @@ _gfx_scroll_up_loop:
 _gfx_scroll_up_y:
         CMP   R4, R11
         JGE   _gfx_scroll_up_done
-        CPY   R6, R4
-        ADD   R6, R12                 ; src_y = y + amount
         READ  R5, 0                   ; x
 _gfx_scroll_up_x:
         CMP   R5, R10
         JGE   _gfx_scroll_up_next_y
+        CPY   R6, R4
+        ADD   R6, R12                 ; src_y = y + amount
         CPY   R1, R6
         CMP   R1, R11
         JGE   _gfx_scroll_up_clear
 
+        PUSH  R4
+        PUSH  R5
         CPY   R0, R5
         CPY   R1, R6
         CALL  _gfx_get_pixel          ; R0 = src pixel
         CPY   R2, R0
+        POP   R5
+        POP   R4
+
+        PUSH  R4
+        PUSH  R5
         CPY   R0, R5
         CPY   R1, R4
         CALL  _gfx_put_pixel
+        POP   R5
+        POP   R4
         JUMP  _gfx_scroll_up_inc_x
 
 _gfx_scroll_up_clear:
         READ  R2, 0
+        PUSH  R4
+        PUSH  R5
         CPY   R0, R5
         CPY   R1, R4
         CALL  _gfx_put_pixel
+        POP   R5
+        POP   R4
 
 _gfx_scroll_up_inc_x:
         READ  R0, 1
@@ -614,31 +666,45 @@ _gfx_scroll_down_y:
         READ  R0, 0
         CMP   R4, R0
         JLT   _gfx_scroll_down_done
-        CPY   R6, R4
-        SUB   R6, R12                 ; src_y = y - amount
         READ  R5, 0                   ; x
 _gfx_scroll_down_x:
         CMP   R5, R10
         JGE   _gfx_scroll_down_prev_y
 
+        CPY   R6, R4
+        SUB   R6, R12                 ; src_y = y - amount
+
         READ  R0, 0
         CMP   R6, R0
         JLT   _gfx_scroll_down_clear
 
+        PUSH  R4
+        PUSH  R5
         CPY   R0, R5
         CPY   R1, R6
         CALL  _gfx_get_pixel
         CPY   R2, R0
+        POP   R5
+        POP   R4
+
+        PUSH  R4
+        PUSH  R5
         CPY   R0, R5
         CPY   R1, R4
         CALL  _gfx_put_pixel
+        POP   R5
+        POP   R4
         JUMP  _gfx_scroll_down_inc_x
 
 _gfx_scroll_down_clear:
         READ  R2, 0
+        PUSH  R4
+        PUSH  R5
         CPY   R0, R5
         CPY   R1, R4
         CALL  _gfx_put_pixel
+        POP   R5
+        POP   R4
 
 _gfx_scroll_down_inc_x:
         READ  R0, 1
@@ -920,7 +986,14 @@ _gfx_pixel_ok:
         ; Valitse laskentapolku tilan mukaan
         READ  R3, GFX_MODE_B
         CMP   R2, R3
-        JZ    _gfx_pixel_b
+        JZ    _gfx_pixel_b_bounds
+
+        READ  R3, 160
+        CMP   R0, R3
+        JGE   _gfx_pixel_oob
+        READ  R3, 96
+        CMP   R1, R3
+        JGE   _gfx_pixel_oob
 
         ; -----------------------------------------------------------------------
         ; Tila C (braille) — koordinaatti (px=R0, py=R1)
@@ -987,6 +1060,18 @@ _gfx_pixel_c_xor:
         SHL   R4, R5                  ; R4 = 1 << bit_num  (R5=bit_num, R6=osoite)
         CPY   R5, R4                  ; R5 = bitmask
         JUMP  _gfx_apply              ; → yhteinen piirtokäsittelijä
+
+_gfx_pixel_b_bounds:
+        READ  R3, 80
+        CMP   R0, R3
+        JGE   _gfx_pixel_oob
+        READ  R3, 48
+        CMP   R1, R3
+        JGE   _gfx_pixel_oob
+        JUMP  _gfx_pixel_b
+
+_gfx_pixel_oob:
+        RET
 
 _gfx_pixel_b:
         ; -----------------------------------------------------------------------

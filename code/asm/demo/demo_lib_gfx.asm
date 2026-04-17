@@ -29,12 +29,12 @@
 
 .const BASE_PHASE_COUNT, 11
 .const PHASE_COUNT, 22
-.const TICK_MS, 100
+.const ANIM_TICK_MS, 100
 .const SPRITE_SIZE_8, 8
 
-; 100 ms tickit per vaihe (B- ja C-kierros jakavat samat kestot)
+; Vaiheiden kestot millisekunteina (B- ja C-kierros jakavat samat kestot)
 phase_ticks_table:
-        .db 30, 50, 50, 50, 50, 50, 50, 50, 50, 100, 300
+        .dw 3000, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 10000, 30000
 
 .state_text 0, 0,  "B1: ruudun valkytys"
 .state_text 1, 0,  "B2: satunnaiset pikselit"
@@ -60,17 +60,23 @@ phase_ticks_table:
 .state_text 21, 0, "C11: sprite tormays"
 
 phase:
-        .db 0
+        .dw 0
 drawn_phase:
-        .db 0xFFFF
+        .dw 0xFFFF
+drawn_anim_step:
+        .dw 0xFFFF
 phase_subticks:
-        .db 0
+        .dw 0
 anim_step:
-        .db 0
+        .dw 0
+anim_ms_accum:
+        .dw 0
 current_mode:
-        .db 0
+        .dw 0
 rng_state:
-        .db 0xACE1
+        .dw 0xACE1
+last_clock_ms:
+        .dw 0xFFFF
 
 pac_x:
         .db 8
@@ -110,49 +116,6 @@ sprite_pacman_8x8:
         .db 0x3C, 0x7E, 0xFC, 0xF8, 0xF8, 0xFC, 0x7E, 0x3C
 sprite_ghost_8x8:
         .db 0x3C, 0x7E, 0xDB, 0xFF, 0xFF, 0xE7, 0xA5, 0x00
-
-clock_handler:
-        PUSH  R0
-        PUSH  R1
-        PUSH  R2
-
-        READ  R0, [anim_step]
-        READ  R1, 1
-        ADD   R0, R1
-        STORE [anim_step], R0
-
-        READ  R0, [phase_subticks]
-        ADD   R0, R1
-        STORE [phase_subticks], R0
-
-        READ  R2, [phase]
-        CPY   R0, R2
-        CALL  _get_phase_tick_limit   ; R2 = tick-limit
-        READ  R0, [phase_subticks]
-        CMP   R0, R2
-        JLT   _ch_rearm
-
-        READ  R0, 0
-        STORE [phase_subticks], R0
-
-        READ  R0, [phase]
-        READ  R1, 1
-        ADD   R0, R1
-        READ  R2, PHASE_COUNT
-        CMP   R0, R2
-        JLT   _ch_store
-        READ  R0, 0
-_ch_store:
-        STORE [phase], R0
-
-_ch_rearm:
-        READ  R0, TICK_MS
-        SCTMR R0
-
-        POP   R2
-        POP   R1
-        POP   R0
-        IRET
 
 _set_mode_only:
         READ  R0, [current_mode]
@@ -202,6 +165,85 @@ _gptl_base_ok:
         READ  R2, [R1]
         RET
 
+_read_clock_minute_ms:
+_rcmm_retry:
+        READ  R0, [CLOCK_SECOND]
+        READ  R1, [CLOCK_MILLIS]
+        READ  R2, [CLOCK_SECOND]
+        CMP   R0, R2
+        JNZ   _rcmm_retry
+        READ  R3, 1000
+        MUL   R2, R3
+        ADD   R2, R1
+        CPY   R0, R2
+        RET
+
+_update_clock_state:
+        CALL  _read_clock_minute_ms   ; R0 = second*1000 + millis (0..59999)
+        READ  R1, [last_clock_ms]
+        READ  R2, 0xFFFF
+        CMP   R1, R2
+        JNZ   _ucs_have_prev
+        STORE [last_clock_ms], R0
+        RET
+
+_ucs_have_prev:
+        CPY   R2, R0
+        SUB   R2, R1                  ; delta_ms = now - prev
+        READ  R3, 0
+        CMP   R2, R3
+        JGE   _ucs_delta_ok
+        READ  R3, 60000               ; minuutin sisainen wrap
+        ADD   R2, R3
+_ucs_delta_ok:
+        STORE [last_clock_ms], R0
+
+        READ  R3, 0
+        CMP   R2, R3
+        JLE   _ucs_phase_check
+
+        READ  R0, [phase_subticks]
+        ADD   R0, R2
+        STORE [phase_subticks], R0
+
+        READ  R0, [anim_ms_accum]
+        ADD   R0, R2
+_ucs_anim_loop:
+        READ  R1, ANIM_TICK_MS
+        CMP   R0, R1
+        JLT   _ucs_anim_store
+        SUB   R0, R1
+        READ  R1, [anim_step]
+        READ  R3, 1
+        ADD   R1, R3
+        STORE [anim_step], R1
+        JUMP  _ucs_anim_loop
+_ucs_anim_store:
+        STORE [anim_ms_accum], R0
+
+_ucs_phase_check:
+        READ  R0, [phase]
+        CALL  _get_phase_tick_limit   ; R2 = vaiheen kesto ms
+        READ  R0, [phase_subticks]
+        CMP   R0, R2
+        JLT   _ucs_done
+        SUB   R0, R2
+        STORE [phase_subticks], R0
+
+        READ  R0, [phase]
+        READ  R1, 1
+        ADD   R0, R1
+        READ  R1, PHASE_COUNT
+        CMP   R0, R1
+        JLT   _ucs_store_phase
+        READ  R0, 0
+_ucs_store_phase:
+        STORE [phase], R0
+        JUMP  _ucs_phase_check
+
+_ucs_done:
+        RET
+
 _rand_u16:
         READ  R0, [rng_state]
         READ  R1, 0
@@ -232,6 +274,7 @@ _rand_range:
         CPY   R3, R0
         READ  R1, 1
         ADD   R1, R3                  ; n = max + 1
+        CPY   R5, R1                  ; _rand_u16 clobberoi R1/R2, talleta n
         READ  R4, 0
         CMP   R1, R4
         JNZ   _rr_div_ok
@@ -240,6 +283,7 @@ _rand_range:
         RET
 _rr_div_ok:
         CALL  _rand_u16               ; R0 = rand
+        CPY   R1, R5                  ; palauta n jakajaksi
         CPY   R2, R0                  ; R2 = rand
         CPY   R3, R2
         DIV   R3, R1                  ; q
@@ -988,14 +1032,14 @@ _dispatch_base_phase:
         RET
 
 main:
-        READ  R0, clock_handler
-        STORE [INT_CLOCK], R0
-
         READ  R0, 0
         STORE [phase], R0
         STORE [phase_subticks], R0
         STORE [anim_step], R0
+        STORE [anim_ms_accum], R0
         STORE [drawn_phase], 0xFFFF
+        STORE [drawn_anim_step], 0xFFFF
+        STORE [last_clock_ms], 0xFFFF
 
         READ  R0, GFX_MODE_B
         STORE [current_mode], R0
@@ -1003,23 +1047,29 @@ main:
         READ  R0, 1
         CALL  gfx_set_flip_enabled
 
-        READ  R0, TICK_MS
-        SCTMR R0
-        STI
-
 main_loop:
+        CALL  _update_clock_state
         READ  R4, [phase]
         READ  R1, [drawn_phase]
         CMP   R4, R1
-        JZ    _draw_frame
+        JZ    _frame_gate
 
         STORE [drawn_phase], R4
+        READ  R0, 0xFFFF
+        STORE [drawn_anim_step], R0
         CPY   R0, R4
         CALL  _set_mode_and_base_phase
         CPY   R5, R0
         CALL  _draw_common_mode
         CPY   R0, R5
         CALL  _emit_state_for_base_phase
+
+_frame_gate:
+        READ  R6, [anim_step]
+        READ  R1, [drawn_anim_step]
+        CMP   R6, R1
+        JZ    main_loop
+        STORE [drawn_anim_step], R6
 
 _draw_frame:
         CPY   R0, R4

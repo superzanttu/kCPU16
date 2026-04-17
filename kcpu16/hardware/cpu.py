@@ -28,6 +28,7 @@ Operandeissa rekisterit koodataan indekseilla 0-5:
 
 from __future__ import annotations
 
+from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import TYPE_CHECKING
@@ -113,6 +114,17 @@ class CPU(CPUCoreMixin, CPUEXecMixin, CPUMemCheckMixin, CPUMMIOMixin):
     _lfsr: int = field(default=RAND_LFSR_SEED, init=False)
     _clock_snapshot: datetime | None = field(default=None, init=False)
     _clock_snapshot_sim_us: int = field(default=-1, init=False)
+
+    # Viimeksi suoritettujen käskyjen jälkihistoria crash-diagnostiikkaan.
+    # Sisältö: (pc, opcode), maxlen rajaa muistijäljen vakioiseksi.
+    _recent_exec_trace: deque[tuple[int, int]] = field(
+        default_factory=lambda: deque(maxlen=64), init=False, repr=False
+    )
+
+    @property
+    def recent_exec_trace(self) -> tuple[tuple[int, int], ...]:
+        """Palauta immuuttinen kopio viimeisistä suoritetuista käskyistä."""
+        return tuple(self._recent_exec_trace)
 
     # ==========================================================================
     # MUISTITARKISTUSMETODIT (yhdistetty handler-metadataan, Task 3)
