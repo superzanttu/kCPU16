@@ -115,13 +115,13 @@ Säännöt:
 Assembler tukee seuraavia muotoja:
 
 ```asm
-.state_text 3, "Loading assets"
+.state_text 3, 0, "Loading assets"
 .state_text 4, 2, "Init done"
 ```
 
 Säännöt:
 
-- `N` on `STATE`-id ja sen on oltava välillä `0..15`.
+- `N` on `STATE`-id ja sen on oltava välillä `0..63`.
 - `delay_secs` on kokonaisluku sekunteina (`>= 0`).
 - Teksti on lainausmerkeissä (`"..."` tai `'...'`) ja tukee samoja escapeja kuin `.dstr`.
 - Sama `N` voidaan määritellä uudelleen; viimeisin määrittely jää voimaan.

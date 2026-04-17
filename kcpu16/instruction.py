@@ -136,9 +136,18 @@ def _op(p: int, grp: int, id_: int, nops: int) -> int:
     )
 
 
-# 1-sanaisen STATE-kaskyn opcode-perhe (16 tilaa, id 0..15 opcode:n alimmissa biteissa)
+# 1-sanaisen STATE-kaskyn opcode-perhe.
+#
+# STATE-opcode on muotoa _op(0, 7, 14, 0), jolloin:
+#   - bitit 15..6 ovat kiinteät (priv/grp/id/nops)
+#   - nops-kentta (bitit 7..6) pidetään arvossa 00
+#   - id-kentäksi voidaan käyttää turvallisesti alimmat 6 bittiä (5..0)
+#
+# Tama mahdollistaa 64 tilaa (0..63) yhden 16-bittisen sanan kaskyna.
 STATE_OPCODE_BASE: int = _op(0, 7, 14, 0)
-STATE_ID_MASK: int = 0x000F
+STATE_ID_MASK: int = 0x003F
+STATE_ID_MAX: int = STATE_ID_MASK
+STATE_ID_COUNT: int = STATE_ID_MAX + 1
 
 
 # =============================================================================
@@ -326,8 +335,8 @@ OPCODE_TABLE: dict[int, tuple[str, int, bool]] = {
     ),  # TSL    reg, addr   Test and Set Lock        [USER]
     **{
         (STATE_OPCODE_BASE | sid): ("STATE", 0, False)
-        for sid in range(16)
-    },  # STATE id(0..15)  1-sanaisen tilasignaalin lahetys [USER]
+        for sid in range(STATE_ID_COUNT)
+    },  # STATE id(0..63)  1-sanaisen tilasignaalin lahetys [USER]
     _op(0, 7, 15, 0): (
         "NOP",
         0,
@@ -501,7 +510,7 @@ OPERAND_TYPE_TABLE: dict[str, tuple[str, ...]] = {
     "SCTMR": ("reg",),
     "EXIT": (),
     "TSL": ("reg", "addr"),
-    "STATE": ("imm4",),
+    "STATE": ("imm6",),
     "NOP": (),
 }
 

@@ -20,6 +20,7 @@
 ;   gfx_scroll_right  — Scrollaa kuvaa oikealle (R0 = 1..15 px)
 ;   gfx_pixel         — Piirra pikseli (R0=x, R1=y)
 ;   gfx_line          — Piirrä viiva (R0=x0, R1=y0, R2=x1, R3=y1)
+;   gfx_draw_text_big — Piirrä 6x8 BIG-teksti (0-9, :, ., valilyonti)
 ;   gfx_sprite_xor_1bpp_64x32 — XOR-piirto 64x32 1bpp framebufferiin
 ;
 ; PIIRTOTILAT (gfx_set_draw_mode:n R0-arvo):
@@ -81,6 +82,7 @@
 ; =============================================================================
 
         .include "lib-font_small.asm"
+        .include "lib-font_big.asm"
 
 ; Näyttötilarekisterin osoite ($FF80) ja grafiikkatilakoodit ovat
 ; arkkitehtuurivakioita (ARCH_SYMBOLS) — ei tarvita .const-määrittelyjä:
@@ -1302,6 +1304,142 @@ _gdt_advance:
         JUMP  _gdt_next_char
 
 _gdt_done:
+        POP   R14
+        POP   R13
+        RET
+
+; =============================================================================
+; gfx_draw_text_big — Piirrä 6x8 BIG-teksti (0-9, :, ., valilyonti)
+;
+; Sisään:  R0 = merkkijonon osoite (null-terminoitu)
+;          R1 = x
+;          R2 = y
+; Ulos:    —
+; Clobbers: R0–R14
+;
+; Tuntemattomat merkit käsitellään valilyöntinä.
+; =============================================================================
+
+gfx_draw_text_big:
+        PUSH  R13
+        PUSH  R14
+        CPY   R13, R0                 ; str ptr
+        CPY   R14, R1                 ; cursor x
+        CPY   R12, R2                 ; base y
+
+_gdtb_next_char:
+        READ  R0, [R13]
+        READ  R1, 0
+        CMP   R0, R1
+        JZ    _gdtb_done
+
+        ; Muunna merkki BIG_FONT-indeksiksi (0..12)
+        READ  R1, 48                  ; '0'
+        CMP   R0, R1
+        JLT   _gdtb_check_colon
+        READ  R1, 57                  ; '9'
+        CMP   R0, R1
+        JGT   _gdtb_check_colon
+        READ  R1, 48
+        SUB   R0, R1                  ; 0..9
+        JUMP  _gdtb_have_idx
+
+_gdtb_check_colon:
+        READ  R1, 58                  ; ':'
+        CMP   R0, R1
+        JNZ   _gdtb_check_dot
+        READ  R0, 10
+        JUMP  _gdtb_have_idx
+
+_gdtb_check_dot:
+        READ  R1, 46                  ; '.'
+        CMP   R0, R1
+        JNZ   _gdtb_check_space
+        READ  R0, 11
+        JUMP  _gdtb_have_idx
+
+_gdtb_check_space:
+        READ  R1, 32                  ; ' '
+        CMP   R0, R1
+        JNZ   _gdtb_unknown
+        READ  R0, 12
+        JUMP  _gdtb_have_idx
+
+_gdtb_unknown:
+        READ  R0, 12                  ; valilyonti fallback
+
+_gdtb_have_idx:
+        ; glyph_ptr = BIG_FONT + idx * BIG_WORDS_PER_CHAR
+        READ  R1, BIG_WORDS_PER_CHAR
+        MUL   R0, R1
+        READ  R1, BIG_FONT
+        ADD   R0, R1
+        CPY   R11, R0                 ; glyph ptr
+
+        READ  R10, 0                  ; row idx
+_gdtb_row:
+        READ  R0, BIG_CHAR_H
+        CMP   R10, R0
+        JGE   _gdtb_advance
+
+        READ  R9, [R11]               ; row bits
+        READ  R8, 0                   ; col idx
+_gdtb_col:
+        READ  R0, BIG_CHAR_W
+        CMP   R8, R0
+        JGE   _gdtb_next_row
+
+        READ  R0, 5
+        SUB   R0, R8                  ; shift = 5-col
+        CPY   R1, R9
+        SHR   R1, R0
+        READ  R0, 1
+        AND   R1, R0
+        READ  R0, 0
+        CMP   R1, R0
+        JZ    _gdtb_inc_col
+
+        CPY   R0, R14
+        ADD   R0, R8
+        CPY   R1, R12
+        ADD   R1, R10
+
+        PUSH  R8
+        PUSH  R9
+        PUSH  R10
+        PUSH  R11
+        PUSH  R12
+        PUSH  R13
+        PUSH  R14
+        CALL  gfx_pixel
+        POP   R14
+        POP   R13
+        POP   R12
+        POP   R11
+        POP   R10
+        POP   R9
+        POP   R8
+
+_gdtb_inc_col:
+        READ  R0, 1
+        ADD   R8, R0
+        JUMP  _gdtb_col
+
+_gdtb_next_row:
+        READ  R0, 1
+        ADD   R10, R0
+        ADD   R11, R0
+        JUMP  _gdtb_row
+
+_gdtb_advance:
+        ; 1 px valitys merkkien valiin
+        READ  R0, 7
+        ADD   R14, R0
+        READ  R0, 1
+        ADD   R13, R0
+        JUMP  _gdtb_next_char
+
+_gdtb_done:
         POP   R14
         POP   R13
         RET

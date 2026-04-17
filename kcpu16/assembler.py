@@ -92,6 +92,8 @@ from pathlib import Path
 from .constants import ARCH_SYMBOLS, BOOT_RAM_START, STORAGE_BLOCK_SIZE, WORD_MASK
 from .instruction import (
     OPCODE_TABLE,
+    STATE_ID_COUNT,
+    STATE_ID_MAX,
     STATE_OPCODE_BASE,
     is_deprecated_assembler_mnemonic,
     is_variable_length_mnemonic,
@@ -755,6 +757,11 @@ class Assembler:
             # .state_text-direktiivi (UI-tilaviestit)
             if self._is_state_text_directive(stripped):
                 state_id, delay_secs, message = self._parse_state_text_directive(stripped)
+                if state_id not in self._state_texts and len(self._state_texts) >= STATE_ID_COUNT:
+                    raise ValueError(
+                        f".state_text supports at most {STATE_ID_COUNT} vaihtoehtoa "
+                        f"(id 0..{STATE_ID_MAX})"
+                    )
                 self._state_texts[state_id] = message
                 self._state_delays[state_id] = delay_secs
                 i += 1
@@ -928,10 +935,14 @@ class Assembler:
 
             if mnemonic == "STATE":
                 if len(parts) != 2:
-                    raise ValueError("STATE vaatii yhden operandin: STATE <0..15>")
+                    raise ValueError(
+                        f"STATE vaatii yhden operandin: STATE <0..{STATE_ID_MAX}>"
+                    )
                 state_id = self._parse_operand(parts[1], symbols)
-                if state_id < 0 or state_id > 15:
-                    raise ValueError("STATE-id:n on oltava valilla 0..15")
+                if state_id < 0 or state_id > STATE_ID_MAX:
+                    raise ValueError(
+                        f"STATE-id:n on oltava valilla 0..{STATE_ID_MAX}"
+                    )
                 addr += 1
                 continue
 
@@ -1142,13 +1153,17 @@ class Assembler:
                     "STORE vaatii [..] osoitussyntaksin: STORE [osoite], reg/arvo"
                 )
 
-            # 1-sanan STATE-käsky: STATE <id>, missä id on 0..15.
+            # 1-sanan STATE-käsky: STATE <id>, missä id on 0..63.
             if mnemonic == "STATE":
                 if len(parts) != 2:
-                    raise ValueError("STATE vaatii yhden operandin: STATE <0..15>")
+                    raise ValueError(
+                        f"STATE vaatii yhden operandin: STATE <0..{STATE_ID_MAX}>"
+                    )
                 state_id = self._parse_operand(parts[1], labels)
-                if state_id < 0 or state_id > 15:
-                    raise ValueError("STATE-id:n on oltava valilla 0..15")
+                if state_id < 0 or state_id > STATE_ID_MAX:
+                    raise ValueError(
+                        f"STATE-id:n on oltava valilla 0..{STATE_ID_MAX}"
+                    )
                 self._source_map.append(
                     (raw_line.strip(), current_start + len(current_words))
                 )
@@ -1404,8 +1419,10 @@ class Assembler:
             state_id = int(id_token, 0)
         except ValueError:
             raise ValueError(f"Invalid .state_text state id: {id_token!r}")
-        if state_id < 0 or state_id > 15:
-            raise ValueError(".state_text id must be in range 0..15")
+        if state_id < 0 or state_id > STATE_ID_MAX:
+            raise ValueError(
+                f".state_text id must be in range 0..{STATE_ID_MAX}"
+            )
 
         delay_secs = 0
         text_token = after_id

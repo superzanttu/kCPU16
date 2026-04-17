@@ -24,10 +24,8 @@ Tama mahdollistaa myos dataosuuksien tarkastelun.
 
 from __future__ import annotations
 
-from .instruction import OPCODE_TABLE, format_disasm_memory_syntax
+from .instruction import OPCODE_TABLE, STATE_ID_MASK, format_disasm_memory_syntax
 from .constants import WORD_MASK
-
-_STATE_ID_MASK = 0x000F
 
 # Kaanteinen hakutaulukko: opcode -> (mnemonic, operand_count, privileged)
 # Kaytamme samaa formaattia kuin OPCODE_TABLE
@@ -139,7 +137,7 @@ class Disassembler:
                 op_vals.append(words[i + 1 + j] & WORD_MASK)
 
             if mnemonic == "STATE":
-                state_id = opcode & _STATE_ID_MASK
+                state_id = opcode & STATE_ID_MASK
                 lines.append(f"{pc:04X}: STATE {state_id}")
                 i += 1
                 pc += 1
