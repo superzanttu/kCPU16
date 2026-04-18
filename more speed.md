@@ -33,16 +33,16 @@ Vähemmän dequen käsittelyä hot-pathissa; nopeushyöty korostuu pitkässä ja
 
 ---
 
-## 3) Harvenna keskeytysten käsittelykutsuja
+## 3) Vähennä jäljellä olevaa keskeytyspolun per-käsky-overheadia
 
 **Muutoksen tarve**  
-`_run_core()` tarkistaa jokaisella käskyllä keskeytyslipun ja voi kutsua jopa kolmea erillistä tarkistusmetodia (`keyboard/timer/clock`).
+`_run_core()` tekee jo deadline-pohjaiset timer/clock-tarkistukset (`_next_tmr_time_us` / `_next_ctmr_time_us`) eikä kutsu niiden käsittelijöitä ennen kuin `sim_time` ylittää kyseisen rajan. Jäljelle jäävää overheadia syntyy silti siitä, että keskeytyspolulla tehdään per-käsky tarkistuksia, erityisesti näppäimistön osalta silloin kun `SR.I` on asetettu.
 
 **Ehdotus**  
-Pidä paikallinen “next interrupt deadline” -arvo ja tarkista yksityiskohtaiset keskeytysfunktiot vasta kun deadline on saavutettu tai kun näppäimistöllä on pending-tila.
+Päivitä fast-path niin, että se hyödyntää nykyistä deadline-mallia eksplisiittisesti analyysissä eikä ehdota sitä uutena muutoksena. Varsinainen optimointi kannattaa kohdistaa jäljellä olevaan ehdottomaan tarkistukseen: vältä `keyboard`-polun kutsua jokaisella käskyllä, ellei laitteella ole pending-tilaa tai muuta nopeasti testattavaa merkkiä siitä, että tarkempi käsittely on tarpeen.
 
 **Vaikutus**  
-Pienempi per-käsky overhead tilanteissa, joissa keskeytykset ovat harvinaisia (yleisin tapaus).
+Pienempi per-käsky overhead yleisessä tapauksessa, jossa timer/clock odottavat jo seuraavaa deadlinea eikä näppäimistöllä ole pending-keskeytystä.
 
 ---
 
