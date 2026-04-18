@@ -33,7 +33,8 @@
 .const SCROLL_BOX_SIZE, 10
 .const RANDOM_PIXEL_BATCH, 64
 .const RANDOM_LINE_BATCH, 4
-.const LETTER_CYCLE_LEN, 6
+.const SMALL_CHAR_CYCLE_LEN, 6
+.const BIG_TEXT_BYTE_COUNT, 256
 
 ; Vaiheiden kestot millisekunteina (B- ja C-kierros jakavat samat kestot)
 phase_ticks_table:
@@ -100,7 +101,7 @@ ghost3_x:
 ghost3_y:
         .db 40
 
-fill_letters_all:
+fill_small_chars:
         .dstr "ABCDEF"
 one_char_buf:
         .db 0, 0
@@ -798,7 +799,7 @@ _dlgs_col:
         CMP   R4, R0
         JLE   _dlgs_next_row
 
-        READ  R0, fill_letters_all
+        READ  R0, fill_small_chars
         ADD   R0, R15
         READ  R1, [R0]
         STORE [one_char_buf], R1
@@ -824,7 +825,7 @@ _dlgs_col:
         ADD   R5, R0
         READ  R0, 1
         ADD   R15, R0
-        READ  R0, LETTER_CYCLE_LEN
+        READ  R0, SMALL_CHAR_CYCLE_LEN
         CMP   R15, R0
         JLT   _dlgs_pat_ok
         READ  R15, 0
@@ -849,13 +850,14 @@ _draw_letter_grid_big:
         JZ    _dlgb_mode_c
         READ  R6, 6
         READ  R7, 11
+        READ  R15, 0x20              ; B-tilassa näytä luettavat printable-merkit ensin
         JUMP  _dlgb_setup
 _dlgb_mode_c:
         READ  R6, 12
         READ  R7, 23
+        READ  R15, 0x00              ; C-tilassa näytä koko 0x00..0xFF-alue
 _dlgb_setup:
         READ  R8, 0                   ; y
-        READ  R15, 0                  ; pattern idx
 _dlgb_row:
         READ  R0, 0
         CMP   R6, R0
@@ -868,21 +870,16 @@ _dlgb_col:
         CMP   R4, R0
         JLE   _dlgb_next_row
 
-        READ  R0, fill_letters_all
-        ADD   R0, R15
-        READ  R1, [R0]
-        STORE [one_char_buf], R1
-
         PUSH  R4
         PUSH  R5
         PUSH  R6
         PUSH  R7
         PUSH  R8
         PUSH  R15
-        READ  R0, one_char_buf
+        CPY   R0, R15
         CPY   R1, R5
         CPY   R2, R8
-        CALL  gfx_draw_text_big
+        CALL  gfx_draw_char_big
         POP   R15
         POP   R8
         POP   R7
@@ -894,7 +891,7 @@ _dlgb_col:
         ADD   R5, R0
         READ  R0, 1
         ADD   R15, R0
-        READ  R0, LETTER_CYCLE_LEN
+        READ  R0, BIG_TEXT_BYTE_COUNT
         CMP   R15, R0
         JLT   _dlgb_pat_ok
         READ  R15, 0

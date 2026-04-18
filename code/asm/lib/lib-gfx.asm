@@ -22,7 +22,8 @@
 ;   gfx_scroll_right  — Scrollaa kuvaa oikealle (R0 = 1..15 px)
 ;   gfx_pixel         — Piirra pikseli (R0=x, R1=y)
 ;   gfx_line          — Piirrä viiva (R0=x0, R1=y0, R2=x1, R3=y1)
-;   gfx_draw_text_big — Piirrä 6x8 BIG-teksti (0-9, A-F, :, ., valilyonti)
+;   gfx_draw_char_big — Piirrä yksi 6x8 BIG-merkki tavuarvosta 0x00..0xFF
+;   gfx_draw_text_big — Piirrä 6x8 BIG-teksti (0x01..0xFF; 0x00 paattaa merkkijonon)
 ;   gfx_sprite_xor_1bpp_64x32 — XOR-piirto 64x32 1bpp framebufferiin
 ;
 ; PIIRTOTILAT (gfx_set_draw_mode:n R0-arvo):
@@ -172,6 +173,41 @@ gfx_flip:
         STORE [GFX_FLIP_REG], R0
 _gfx_flip_done:
         RET
+
+; =============================================================================
+; gfx_scroll_up / down / left / right — Scrollaa näkyvää kehystä takaisin VRAMiin
+;
+; Sisään:  R0 = amount (1..15 px)
+; Ulos:    —
+; Clobbers: R0–R2
+; =============================================================================
+
+_gfx_scroll_visible_common:
+        READ  R2, 0
+        CMP   R0, R2
+        JZ    _gfx_scroll_done
+        READ  R2, 8
+        SHL   R1, R2
+        OR    R0, R1
+        STORE [GFX_SCROLL_CMD_REG], R0
+_gfx_scroll_done:
+        RET
+
+gfx_scroll_up:
+        READ  R1, GFX_SCROLL_DIR_UP
+        JUMP  _gfx_scroll_visible_common
+
+gfx_scroll_down:
+        READ  R1, GFX_SCROLL_DIR_DOWN
+        JUMP  _gfx_scroll_visible_common
+
+gfx_scroll_left:
+        READ  R1, GFX_SCROLL_DIR_LEFT
+        JUMP  _gfx_scroll_visible_common
+
+gfx_scroll_right:
+        READ  R1, GFX_SCROLL_DIR_RIGHT
+        JUMP  _gfx_scroll_visible_common
 
 ; =============================================================================
 ; gfx_clear — Tyhjennä grafiikkanäyttö
@@ -906,76 +942,127 @@ _gfx_circle_restore:
         RET
 
 ; =============================================================================
-; gfx_scroll_up/down/left/right — Scrollaus 1..15 pikselia näkyvästä etupuskurista
+; gfx_draw_char_big — Piirrä yksi 6x8 BIG-merkki tavuarvosta 0x00..0xFF
 ;
-; Sisään:  R0 = siirtomaara pikseleina (1..15, >15 clampataan)
+; Sisään:  R0 = tavuarvo / merkki
+;          R1 = x
+;          R2 = y
 ; Ulos:    —
-; Clobbers: R0–R12
+; Clobbers: R0–R14
 ; =============================================================================
 
-_gfx_scroll_issue:
-        READ  R3, 0
-        CMP   R0, R3
-        JLE   _gfx_scroll_issue_done
-        READ  R3, 15
-        CMP   R0, R3
-        JLE   _gfx_scroll_issue_amt_ok
-        CPY   R0, R3
-_gfx_scroll_issue_amt_ok:
+gfx_draw_char_big:
+        PUSH  R13
+        PUSH  R14
+        CPY   R13, R1                 ; base x
+        CPY   R12, R2                 ; base y
+
+        CALL  font_big_get_glyph      ; R0 = glyph ptr
+        CPY   R11, R0                 ; glyph ptr
+
+        READ  R10, 0                  ; row idx
+_gdcb_row:
+        READ  R0, BIG_CHAR_H
+        CMP   R10, R0
+        JGE   _gdcb_done
+
+        READ  R9, [R11]               ; row bits
+        READ  R8, 0                   ; col idx
+_gdcb_col:
+        READ  R0, BIG_CHAR_W
+        CMP   R8, R0
+        JGE   _gdcb_next_row
+
+        READ  R0, 5
+        SUB   R0, R8                  ; shift = 5-col
+        CPY   R1, R9
+        SHR   R1, R0
+        READ  R0, 1
+        AND   R1, R0
+        READ  R0, 0
+        CMP   R1, R0
+        JZ    _gdcb_inc_col
+
+        CPY   R0, R13
+        ADD   R0, R8
+        CPY   R1, R12
+        ADD   R1, R10
+
+        PUSH  R8
+        PUSH  R9
+        PUSH  R10
+        PUSH  R11
+        PUSH  R12
+        PUSH  R13
+        PUSH  R14
+        CALL  gfx_pixel
+        POP   R14
+        POP   R13
+        POP   R12
+        POP   R11
+        POP   R10
+        POP   R9
+        POP   R8
+
+_gdcb_inc_col:
+        READ  R0, 1
+        ADD   R8, R0
+        JUMP  _gdcb_col
+
+_gdcb_next_row:
+        READ  R0, 1
+        ADD   R10, R0
+        ADD   R11, R0
+        JUMP  _gdcb_row
+
+_gdcb_done:
+        POP   R14
+        POP   R13
+        RET
+
+; =============================================================================
+; gfx_draw_text_big — Piirrä 6x8 BIG-teksti (0x01..0xFF; 0x00 päättää)
+;
+; Sisään:  R0 = merkkijonon osoite (null-terminoitu)
+;          R1 = x
+;          R2 = y
+; Ulos:    —
+; Clobbers: R0–R14
+; =============================================================================
+
+gfx_draw_text_big:
+        PUSH  R13
+        PUSH  R14
+        CPY   R13, R0                 ; str ptr
+        CPY   R14, R1                 ; cursor x
+        CPY   R12, R2                 ; base y
+
+_gdtb_next_char:
+        READ  R0, [R13]
+        READ  R1, 0
         CMP   R0, R1
-        JLT   _gfx_scroll_issue_do
-        CALL  gfx_clear
-        RET
-_gfx_scroll_issue_do:
-        READ  R3, 8
-        SHL   R2, R3
-        OR    R0, R2
-        STORE [GFX_SCROLL_CMD_REG], R0
-_gfx_scroll_issue_done:
-        RET
+        JZ    _gdtb_done
 
-gfx_scroll_up:
-        CALL  _gfx_get_dims
-        CPY   R1, R11
-        READ  R2, GFX_SCROLL_DIR_UP
-        CALL  _gfx_scroll_issue
-        RET
+        PUSH  R12
+        PUSH  R13
+        PUSH  R14
+        CPY   R1, R14
+        CPY   R2, R12
+        CALL  gfx_draw_char_big
+        POP   R14
+        POP   R13
+        POP   R12
 
-gfx_scroll_down:
-        CALL  _gfx_get_dims
-        CPY   R1, R11
-        READ  R2, GFX_SCROLL_DIR_DOWN
-        CALL  _gfx_scroll_issue
-        RET
+        READ  R0, 7
+        ADD   R14, R0
+        READ  R0, 1
+        ADD   R13, R0
+        JUMP  _gdtb_next_char
 
-gfx_scroll_left:
-        CALL  _gfx_get_dims
-        CPY   R1, R10
-        READ  R2, GFX_SCROLL_DIR_LEFT
-        CALL  _gfx_scroll_issue
+_gdtb_done:
+        POP   R14
+        POP   R13
         RET
-
-gfx_scroll_right:
-        CALL  _gfx_get_dims
-        CPY   R1, R10
-        READ  R2, GFX_SCROLL_DIR_RIGHT
-        CALL  _gfx_scroll_issue
-        RET
-
-; =============================================================================
-; gfx_pixel — Piirra pikseli XOR-toimintona
-;
-; Sisään:  R0 = x-koordinaatti
-;          R1 = y-koordinaatti
-; Ulos:    —
-; Clobbers: R0–R7
-;
-; Tila B: x ∈ [0, 79],  y ∈ [0, 47]
-; Tila C: x ∈ [0, 159], y ∈ [0, 95]
-;
-; Lukee nykyisen VRAM-sanan ja XOR:aa sen laskettua bittikuvaa vasten.
-; Laukaisee INT INT_BREAKPOINT (INT 3) jos näyttötila on A ($FF80 = 0).
-; =============================================================================
 
 gfx_pixel:
         ; --- Tarkista näyttötila ---
@@ -1391,168 +1478,6 @@ _gdt_advance:
         JUMP  _gdt_next_char
 
 _gdt_done:
-        POP   R14
-        POP   R13
-        RET
-
-; =============================================================================
-; gfx_draw_text_big — Piirrä 6x8 BIG-teksti (0-9, A-F, :, ., valilyonti)
-;
-; Sisään:  R0 = merkkijonon osoite (null-terminoitu)
-;          R1 = x
-;          R2 = y
-; Ulos:    —
-; Clobbers: R0–R14
-;
-; Tuntemattomat merkit käsitellään valilyöntinä.
-; =============================================================================
-
-gfx_draw_text_big:
-        PUSH  R13
-        PUSH  R14
-        CPY   R13, R0                 ; str ptr
-        CPY   R14, R1                 ; cursor x
-        CPY   R12, R2                 ; base y
-
-_gdtb_next_char:
-        READ  R0, [R13]
-        READ  R1, 0
-        CMP   R0, R1
-        JZ    _gdtb_done
-
-        ; Muunna merkki BIG_FONT-indeksiksi (0..18)
-        READ  R1, 48                  ; '0'
-        CMP   R0, R1
-        JLT   _gdtb_check_colon
-        READ  R1, 57                  ; '9'
-        CMP   R0, R1
-        JGT   _gdtb_check_colon
-        READ  R1, 48
-        SUB   R0, R1                  ; 0..9
-        JUMP  _gdtb_have_idx
-
-_gdtb_check_colon:
-        READ  R1, 58                  ; ':'
-        CMP   R0, R1
-        JNZ   _gdtb_check_dot
-        READ  R0, 10
-        JUMP  _gdtb_have_idx
-
-_gdtb_check_dot:
-        READ  R1, 46                  ; '.'
-        CMP   R0, R1
-        JNZ   _gdtb_check_space
-        READ  R0, 11
-        JUMP  _gdtb_have_idx
-
-_gdtb_check_space:
-        READ  R1, 32                  ; ' '
-        CMP   R0, R1
-        JNZ   _gdtb_check_upper
-        READ  R0, 12
-        JUMP  _gdtb_have_idx
-
-_gdtb_check_upper:
-        READ  R1, 65                  ; 'A'
-        CMP   R0, R1
-        JLT   _gdtb_check_lower
-        READ  R1, 70                  ; 'F'
-        CMP   R0, R1
-        JGT   _gdtb_check_lower
-        READ  R1, 65
-        SUB   R0, R1
-        READ  R1, 13
-        ADD   R0, R1
-        JUMP  _gdtb_have_idx
-
-_gdtb_check_lower:
-        READ  R1, 97                  ; 'a'
-        CMP   R0, R1
-        JLT   _gdtb_unknown
-        READ  R1, 102                 ; 'f'
-        CMP   R0, R1
-        JGT   _gdtb_unknown
-        READ  R1, 97
-        SUB   R0, R1
-        READ  R1, 13
-        ADD   R0, R1
-        JUMP  _gdtb_have_idx
-
-_gdtb_unknown:
-        READ  R0, 12                  ; valilyonti fallback
-
-_gdtb_have_idx:
-        ; glyph_ptr = BIG_FONT + idx * BIG_WORDS_PER_CHAR
-        READ  R1, BIG_WORDS_PER_CHAR
-        MUL   R0, R1
-        READ  R1, BIG_FONT
-        ADD   R0, R1
-        CPY   R11, R0                 ; glyph ptr
-
-        READ  R10, 0                  ; row idx
-_gdtb_row:
-        READ  R0, BIG_CHAR_H
-        CMP   R10, R0
-        JGE   _gdtb_advance
-
-        READ  R9, [R11]               ; row bits
-        READ  R8, 0                   ; col idx
-_gdtb_col:
-        READ  R0, BIG_CHAR_W
-        CMP   R8, R0
-        JGE   _gdtb_next_row
-
-        READ  R0, 5
-        SUB   R0, R8                  ; shift = 5-col
-        CPY   R1, R9
-        SHR   R1, R0
-        READ  R0, 1
-        AND   R1, R0
-        READ  R0, 0
-        CMP   R1, R0
-        JZ    _gdtb_inc_col
-
-        CPY   R0, R14
-        ADD   R0, R8
-        CPY   R1, R12
-        ADD   R1, R10
-
-        PUSH  R8
-        PUSH  R9
-        PUSH  R10
-        PUSH  R11
-        PUSH  R12
-        PUSH  R13
-        PUSH  R14
-        CALL  gfx_pixel
-        POP   R14
-        POP   R13
-        POP   R12
-        POP   R11
-        POP   R10
-        POP   R9
-        POP   R8
-
-_gdtb_inc_col:
-        READ  R0, 1
-        ADD   R8, R0
-        JUMP  _gdtb_col
-
-_gdtb_next_row:
-        READ  R0, 1
-        ADD   R10, R0
-        ADD   R11, R0
-        JUMP  _gdtb_row
-
-_gdtb_advance:
-        ; 1 px valitys merkkien valiin
-        READ  R0, 7
-        ADD   R14, R0
-        READ  R0, 1
-        ADD   R13, R0
-        JUMP  _gdtb_next_char
-
-_gdtb_done:
         POP   R14
         POP   R13
         RET
