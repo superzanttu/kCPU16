@@ -163,6 +163,7 @@ class CPUCoreMixin:
         self._simulated_time_us = 0
         self._next_tmr_time_us = _TMR_DISABLED
         self._next_ctmr_time_us = _TMR_DISABLED
+        self._recent_exec_trace.clear()
         self.regs.reset()
         self._clock_snapshot = None
         self._clock_snapshot_sim_us = -1
@@ -189,6 +190,9 @@ class CPUCoreMixin:
             check_fn = self._mem_check_table.get(ins.opcode)
             if check_fn is not None:
                 check_fn(ins)  # type: ignore[operator]
+
+            # Tallenna juuri suoritettava käsky crash-jäljitettä varten.
+            self._recent_exec_trace.append((pc & WORD_MASK, ins.opcode & WORD_MASK))
 
             exec_cycles = self._cycles_table.get(ins.opcode, 1)
             if ins.opcode in (_OPCODE_FILL, _OPCODE_COPY) and len(ins.operands) >= 2:
@@ -349,6 +353,9 @@ class CPUCoreMixin:
                 handler = exec_list[opcode >> 6]
                 if handler is None:
                     raise InvalidOpcodeError(f"Unknown opcode: 0x{opcode:04X}")
+
+                # Tallenna juuri suoritettava käsky crash-jäljitettä varten.
+                self._recent_exec_trace.append((pc & word_mask, opcode & word_mask))
                 handler(ins)
 
                 regs.pc = (regs.pc + ins.size_words) & word_mask

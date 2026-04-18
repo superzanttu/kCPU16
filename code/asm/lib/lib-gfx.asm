@@ -20,6 +20,8 @@
 ;   gfx_scroll_right  — Scrollaa kuvaa oikealle (R0 = 1..15 px)
 ;   gfx_pixel         — Piirra pikseli (R0=x, R1=y)
 ;   gfx_line          — Piirrä viiva (R0=x0, R1=y0, R2=x1, R3=y1)
+;   gfx_draw_text_big — Piirrä 6x8 BIG-teksti (0-9, :, ., valilyonti)
+;   gfx_sprite_xor_1bpp_64x32 — XOR-piirto 64x32 1bpp framebufferiin
 ;
 ; PIIRTOTILAT (gfx_set_draw_mode:n R0-arvo):
 ;   GFX_DRAW_XOR (0) — XOR-tila: vaihtaa pikselin tilaa (oletus)
@@ -80,6 +82,7 @@
 ; =============================================================================
 
         .include "lib-font_small.asm"
+        .include "lib-font_big.asm"
 
 ; Näyttötilarekisterin osoite ($FF80) ja grafiikkatilakoodit ovat
 ; arkkitehtuurivakioita (ARCH_SYMBOLS) — ei tarvita .const-määrittelyjä:
@@ -227,7 +230,14 @@ _gfx_get_pixel:
         READ  R2, [GFX_MODE_REG]
         READ  R3, GFX_MODE_B
         CMP   R2, R3
-        JZ    _gfx_get_pixel_b
+        JZ    _gfx_get_pixel_b_bounds
+
+        READ  R3, 160
+        CMP   R0, R3
+        JGE   _gfx_get_oob
+        READ  R3, 96
+        CMP   R1, R3
+        JGE   _gfx_get_oob
 
         ; Tila C
         READ  R2, 2
@@ -271,6 +281,19 @@ _gfx_get_c_mask:
         JZ    _gfx_get_ret
         READ  R0, 1
 _gfx_get_ret:
+        RET
+
+_gfx_get_pixel_b_bounds:
+        READ  R3, 80
+        CMP   R0, R3
+        JGE   _gfx_get_oob
+        READ  R3, 48
+        CMP   R1, R3
+        JGE   _gfx_get_oob
+        JUMP  _gfx_get_pixel_b
+
+_gfx_get_oob:
+        READ  R0, 0
         RET
 
 _gfx_get_pixel_b:
@@ -318,7 +341,14 @@ _gfx_put_pixel:
         READ  R3, [GFX_MODE_REG]
         READ  R4, GFX_MODE_B
         CMP   R3, R4
-        JZ    _gfx_put_pixel_b
+        JZ    _gfx_put_pixel_b_bounds
+
+        READ  R4, 160
+        CMP   R0, R4
+        JGE   _gfx_put_oob
+        READ  R4, 96
+        CMP   R1, R4
+        JGE   _gfx_put_oob
 
         ; Tila C
         READ  R3, 2
@@ -366,6 +396,18 @@ _gfx_put_c_clear:
         NOT   R4
         AND   R6, R4
         STORE [R7], R6
+        RET
+
+_gfx_put_pixel_b_bounds:
+        READ  R4, 80
+        CMP   R0, R4
+        JGE   _gfx_put_oob
+        READ  R4, 48
+        CMP   R1, R4
+        JGE   _gfx_put_oob
+        JUMP  _gfx_put_pixel_b
+
+_gfx_put_oob:
         RET
 
 _gfx_put_pixel_b:
@@ -491,30 +533,43 @@ _gfx_scroll_up_loop:
 _gfx_scroll_up_y:
         CMP   R4, R11
         JGE   _gfx_scroll_up_done
-        CPY   R6, R4
-        ADD   R6, R12                 ; src_y = y + amount
         READ  R5, 0                   ; x
 _gfx_scroll_up_x:
         CMP   R5, R10
         JGE   _gfx_scroll_up_next_y
+        CPY   R6, R4
+        ADD   R6, R12                 ; src_y = y + amount
         CPY   R1, R6
         CMP   R1, R11
         JGE   _gfx_scroll_up_clear
 
+        PUSH  R4
+        PUSH  R5
         CPY   R0, R5
         CPY   R1, R6
         CALL  _gfx_get_pixel          ; R0 = src pixel
         CPY   R2, R0
+        POP   R5
+        POP   R4
+
+        PUSH  R4
+        PUSH  R5
         CPY   R0, R5
         CPY   R1, R4
         CALL  _gfx_put_pixel
+        POP   R5
+        POP   R4
         JUMP  _gfx_scroll_up_inc_x
 
 _gfx_scroll_up_clear:
         READ  R2, 0
+        PUSH  R4
+        PUSH  R5
         CPY   R0, R5
         CPY   R1, R4
         CALL  _gfx_put_pixel
+        POP   R5
+        POP   R4
 
 _gfx_scroll_up_inc_x:
         READ  R0, 1
@@ -611,31 +666,45 @@ _gfx_scroll_down_y:
         READ  R0, 0
         CMP   R4, R0
         JLT   _gfx_scroll_down_done
-        CPY   R6, R4
-        SUB   R6, R12                 ; src_y = y - amount
         READ  R5, 0                   ; x
 _gfx_scroll_down_x:
         CMP   R5, R10
         JGE   _gfx_scroll_down_prev_y
 
+        CPY   R6, R4
+        SUB   R6, R12                 ; src_y = y - amount
+
         READ  R0, 0
         CMP   R6, R0
         JLT   _gfx_scroll_down_clear
 
+        PUSH  R4
+        PUSH  R5
         CPY   R0, R5
         CPY   R1, R6
         CALL  _gfx_get_pixel
         CPY   R2, R0
+        POP   R5
+        POP   R4
+
+        PUSH  R4
+        PUSH  R5
         CPY   R0, R5
         CPY   R1, R4
         CALL  _gfx_put_pixel
+        POP   R5
+        POP   R4
         JUMP  _gfx_scroll_down_inc_x
 
 _gfx_scroll_down_clear:
         READ  R2, 0
+        PUSH  R4
+        PUSH  R5
         CPY   R0, R5
         CPY   R1, R4
         CALL  _gfx_put_pixel
+        POP   R5
+        POP   R4
 
 _gfx_scroll_down_inc_x:
         READ  R0, 1
@@ -917,7 +986,14 @@ _gfx_pixel_ok:
         ; Valitse laskentapolku tilan mukaan
         READ  R3, GFX_MODE_B
         CMP   R2, R3
-        JZ    _gfx_pixel_b
+        JZ    _gfx_pixel_b_bounds
+
+        READ  R3, 160
+        CMP   R0, R3
+        JGE   _gfx_pixel_oob
+        READ  R3, 96
+        CMP   R1, R3
+        JGE   _gfx_pixel_oob
 
         ; -----------------------------------------------------------------------
         ; Tila C (braille) — koordinaatti (px=R0, py=R1)
@@ -984,6 +1060,18 @@ _gfx_pixel_c_xor:
         SHL   R4, R5                  ; R4 = 1 << bit_num  (R5=bit_num, R6=osoite)
         CPY   R5, R4                  ; R5 = bitmask
         JUMP  _gfx_apply              ; → yhteinen piirtokäsittelijä
+
+_gfx_pixel_b_bounds:
+        READ  R3, 80
+        CMP   R0, R3
+        JGE   _gfx_pixel_oob
+        READ  R3, 48
+        CMP   R1, R3
+        JGE   _gfx_pixel_oob
+        JUMP  _gfx_pixel_b
+
+_gfx_pixel_oob:
+        RET
 
 _gfx_pixel_b:
         ; -----------------------------------------------------------------------
@@ -1306,7 +1394,143 @@ _gdt_done:
         RET
 
 ; =============================================================================
-; gfx_chip8_sprite_xor — XOR-piirto CHIP-8 64x32 framebufferiin
+; gfx_draw_text_big — Piirrä 6x8 BIG-teksti (0-9, :, ., valilyonti)
+;
+; Sisään:  R0 = merkkijonon osoite (null-terminoitu)
+;          R1 = x
+;          R2 = y
+; Ulos:    —
+; Clobbers: R0–R14
+;
+; Tuntemattomat merkit käsitellään valilyöntinä.
+; =============================================================================
+
+gfx_draw_text_big:
+        PUSH  R13
+        PUSH  R14
+        CPY   R13, R0                 ; str ptr
+        CPY   R14, R1                 ; cursor x
+        CPY   R12, R2                 ; base y
+
+_gdtb_next_char:
+        READ  R0, [R13]
+        READ  R1, 0
+        CMP   R0, R1
+        JZ    _gdtb_done
+
+        ; Muunna merkki BIG_FONT-indeksiksi (0..12)
+        READ  R1, 48                  ; '0'
+        CMP   R0, R1
+        JLT   _gdtb_check_colon
+        READ  R1, 57                  ; '9'
+        CMP   R0, R1
+        JGT   _gdtb_check_colon
+        READ  R1, 48
+        SUB   R0, R1                  ; 0..9
+        JUMP  _gdtb_have_idx
+
+_gdtb_check_colon:
+        READ  R1, 58                  ; ':'
+        CMP   R0, R1
+        JNZ   _gdtb_check_dot
+        READ  R0, 10
+        JUMP  _gdtb_have_idx
+
+_gdtb_check_dot:
+        READ  R1, 46                  ; '.'
+        CMP   R0, R1
+        JNZ   _gdtb_check_space
+        READ  R0, 11
+        JUMP  _gdtb_have_idx
+
+_gdtb_check_space:
+        READ  R1, 32                  ; ' '
+        CMP   R0, R1
+        JNZ   _gdtb_unknown
+        READ  R0, 12
+        JUMP  _gdtb_have_idx
+
+_gdtb_unknown:
+        READ  R0, 12                  ; valilyonti fallback
+
+_gdtb_have_idx:
+        ; glyph_ptr = BIG_FONT + idx * BIG_WORDS_PER_CHAR
+        READ  R1, BIG_WORDS_PER_CHAR
+        MUL   R0, R1
+        READ  R1, BIG_FONT
+        ADD   R0, R1
+        CPY   R11, R0                 ; glyph ptr
+
+        READ  R10, 0                  ; row idx
+_gdtb_row:
+        READ  R0, BIG_CHAR_H
+        CMP   R10, R0
+        JGE   _gdtb_advance
+
+        READ  R9, [R11]               ; row bits
+        READ  R8, 0                   ; col idx
+_gdtb_col:
+        READ  R0, BIG_CHAR_W
+        CMP   R8, R0
+        JGE   _gdtb_next_row
+
+        READ  R0, 5
+        SUB   R0, R8                  ; shift = 5-col
+        CPY   R1, R9
+        SHR   R1, R0
+        READ  R0, 1
+        AND   R1, R0
+        READ  R0, 0
+        CMP   R1, R0
+        JZ    _gdtb_inc_col
+
+        CPY   R0, R14
+        ADD   R0, R8
+        CPY   R1, R12
+        ADD   R1, R10
+
+        PUSH  R8
+        PUSH  R9
+        PUSH  R10
+        PUSH  R11
+        PUSH  R12
+        PUSH  R13
+        PUSH  R14
+        CALL  gfx_pixel
+        POP   R14
+        POP   R13
+        POP   R12
+        POP   R11
+        POP   R10
+        POP   R9
+        POP   R8
+
+_gdtb_inc_col:
+        READ  R0, 1
+        ADD   R8, R0
+        JUMP  _gdtb_col
+
+_gdtb_next_row:
+        READ  R0, 1
+        ADD   R10, R0
+        ADD   R11, R0
+        JUMP  _gdtb_row
+
+_gdtb_advance:
+        ; 1 px valitys merkkien valiin
+        READ  R0, 7
+        ADD   R14, R0
+        READ  R0, 1
+        ADD   R13, R0
+        JUMP  _gdtb_next_char
+
+_gdtb_done:
+        POP   R14
+        POP   R13
+        RET
+
+; =============================================================================
+; gfx_sprite_xor_1bpp_64x32 — XOR-piirto 64x32 1bpp framebufferiin
 ;
 ; Sisään:  R0 = fb_base (64x32, 1 sana / pikseli)
 ;          R1 = x (0..63)
@@ -1317,7 +1541,7 @@ _gdt_done:
 ; Clobbers: R0–R12
 ; =============================================================================
 
-gfx_chip8_sprite_xor:
+gfx_sprite_xor_1bpp_64x32:
         CPY   R12, R0                 ; fb base
         READ  R10, 0x003F
         AND   R1, R10

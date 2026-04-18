@@ -488,7 +488,7 @@ class CPUEXecMixin:
         self.regs.set_zn_flags(old_value)
 
     def _exec_state(self, ins) -> None:
-        """Emit one-word state signal (id 0..15) to optional UI callback."""
+        """Emit one-word state signal (id 0..63) to optional UI callback."""
         state_id = ins.opcode & STATE_ID_MASK
         delay_secs = 0.0
         cb = getattr(self, "state_callback", None)

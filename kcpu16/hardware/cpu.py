@@ -28,6 +28,7 @@ Operandeissa rekisterit koodataan indekseilla 0-5:
 
 from __future__ import annotations
 
+from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import TYPE_CHECKING
@@ -96,7 +97,7 @@ class CPU(CPUCoreMixin, CPUEXecMixin, CPUMemCheckMixin, CPUMMIOMixin):
     # (arvo != 0). Machine asettaa tämän renderoimaan VRAMin etupuskuriin
     # juuri sillä hetkellä kun kehys on valmis — ennen kuin gfx_clear tyhjentää sen.
     flip_callback: object = field(default=None, init=False, repr=False)
-    # Valinnainen hook: kutsutaan STATE-käskyllä (id 0..15) UI-tilaviesteille.
+    # Valinnainen hook: kutsutaan STATE-käskyllä (id 0..63) UI-tilaviesteille.
     state_callback: object = field(default=None, init=False, repr=False)
 
     _uptime_counter: int = field(default=0, init=False)
@@ -113,6 +114,17 @@ class CPU(CPUCoreMixin, CPUEXecMixin, CPUMemCheckMixin, CPUMMIOMixin):
     _lfsr: int = field(default=RAND_LFSR_SEED, init=False)
     _clock_snapshot: datetime | None = field(default=None, init=False)
     _clock_snapshot_sim_us: int = field(default=-1, init=False)
+
+    # Viimeksi suoritettujen käskyjen jälkihistoria crash-diagnostiikkaan.
+    # Sisältö: (pc, opcode), maxlen rajaa muistijäljen vakioiseksi.
+    _recent_exec_trace: deque[tuple[int, int]] = field(
+        default_factory=lambda: deque(maxlen=64), init=False, repr=False
+    )
+
+    @property
+    def recent_exec_trace(self) -> tuple[tuple[int, int], ...]:
+        """Palauta immuuttinen kopio viimeisistä suoritetuista käskyistä."""
+        return tuple(self._recent_exec_trace)
 
     # ==========================================================================
     # MUISTITARKISTUSMETODIT (yhdistetty handler-metadataan, Task 3)

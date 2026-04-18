@@ -16,6 +16,10 @@ from ..constants import (
     CLOCK_SECOND,
     CLOCK_YEAR,
     GFX_FLIP_REG,
+    GFX_MODE_A,
+    GFX_MODE_B,
+    GFX_MODE_C,
+    GFX_MODE_REG,
     KBD_DATA,
     KBD_MMIO_END,
     KBD_MMIO_START,
@@ -80,6 +84,10 @@ class CPUMMIOMixin:
             return
         if addr == RAND_MMIO:
             self._lfsr = value if value != 0 else 1
+            return
+        if addr == GFX_MODE_REG:
+            if value in (GFX_MODE_A, GFX_MODE_B, GFX_MODE_C):
+                self._write_word_ram(addr, value)
             return
         if addr == GFX_FLIP_REG:
             if value != 0 and self.flip_callback is not None:

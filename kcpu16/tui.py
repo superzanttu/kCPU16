@@ -2867,6 +2867,31 @@ class KCPU16TUI(App[None], TUIRenderMixin, TUICommandsMixin):
         except Exception:
             pass
 
+        # Viimeksi suoritetut käskyt (ring buffer CPU:ssa)
+        try:
+            trace = list(cpu.recent_exec_trace)
+            if trace:
+                self._log("[bold]Last executed instructions:[/bold]")
+                for t_pc, t_opcode in trace[-12:]:
+                    line_no = self.addr_to_line.get(t_pc)
+                    line_str = f" [dim](line {line_no})[/dim]" if line_no else ""
+                    try:
+                        if t_opcode in OPCODE_TABLE:
+                            _, op_count, _ = OPCODE_TABLE[t_opcode]
+                            words = [t_opcode] + [
+                                self.machine.memory.read((t_pc + 1 + j) & WORD_MASK)
+                                for j in range(op_count)
+                            ]
+                            raw = self.disassembler.disassemble(words, start_addr=t_pc)
+                            tail = raw.split(":", 1)[1].strip() if ":" in raw else raw
+                        else:
+                            tail = f".word 0x{t_opcode:04X}"
+                    except Exception:
+                        tail = f".word 0x{t_opcode:04X}"
+                    self._log(f"  0x{t_pc:04X}: {tail}{line_str}")
+        except Exception:
+            pass
+
         self._log(sep)
 
         # Päivitä UI
