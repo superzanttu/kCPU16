@@ -31,6 +31,7 @@
 .const PHASE_COUNT, 22
 .const ANIM_TICK_MS, 100
 .const SPRITE_SIZE_8, 8
+.const SCROLL_BOX_SIZE, 10
 .const PHASE2_PIXEL_BATCH, 64
 .const PHASE3_LINE_BATCH, 4
 
@@ -76,6 +77,8 @@ anim_ms_accum:
 current_mode:
         .dw 0
 last_clock_ms:
+        .dw 0xFFFF
+scroll_seeded_phase:
         .dw 0xFFFF
 
 pac_x:
@@ -741,6 +744,41 @@ _esbc10_b:
         STATE 10
         RET
 
+_draw_center_scroll_square:
+        CALL  _get_demo_bounds
+        READ  R4, 1
+        ADD   R2, R4                  ; width
+        ADD   R3, R4                  ; height
+        READ  R4, SCROLL_BOX_SIZE
+        SUB   R2, R4
+        SUB   R3, R4
+        READ  R4, 2
+        DIV   R2, R4
+        DIV   R3, R4
+
+        CPY   R0, R2
+        CPY   R1, R3
+        READ  R2, SCROLL_BOX_SIZE
+        READ  R3, SCROLL_BOX_SIZE
+        READ  R4, 1
+        READ  R5, GFX_DRAW_FG
+        CALL  gfx_rect
+        RET
+
+_init_scroll_phase_frame:
+        READ  R0, [phase]
+        READ  R1, [scroll_seeded_phase]
+        CMP   R0, R1
+        JZ    _ispf_no
+        STORE [scroll_seeded_phase], R0
+        CALL  _draw_center_scroll_square
+        CALL  gfx_flip
+        READ  R0, 1
+        RET
+_ispf_no:
+        READ  R0, 0
+        RET
+
 demo_phase1_blink:
         CALL  _set_mode_only
 
@@ -786,54 +824,50 @@ demo_phase3_random_lines:
 
 demo_phase4_scroll_right:
         CALL  _set_mode_only
-        READ  R0, GFX_DRAW_FG
-        CALL  gfx_set_draw_mode
-        CALL  _draw_random_line
-        READ  R0, 1
-        CALL  gfx_scroll_right
-        CALL  _draw_random_line
+        CALL  _init_scroll_phase_frame
+        READ  R1, 1
+        CMP   R0, R1
+        JZ    _dp4_done
         READ  R0, 1
         CALL  gfx_scroll_right
         CALL  gfx_flip
+_dp4_done:
         RET
 
 demo_phase5_scroll_left:
         CALL  _set_mode_only
-        READ  R0, GFX_DRAW_FG
-        CALL  gfx_set_draw_mode
-        CALL  _draw_random_line
-        READ  R0, 1
-        CALL  gfx_scroll_left
-        CALL  _draw_random_line
+        CALL  _init_scroll_phase_frame
+        READ  R1, 1
+        CMP   R0, R1
+        JZ    _dp5_done
         READ  R0, 1
         CALL  gfx_scroll_left
         CALL  gfx_flip
+_dp5_done:
         RET
 
 demo_phase6_scroll_up:
         CALL  _set_mode_only
-        READ  R0, GFX_DRAW_FG
-        CALL  gfx_set_draw_mode
-        CALL  _draw_random_line
-        READ  R0, 1
-        CALL  gfx_scroll_up
-        CALL  _draw_random_line
+        CALL  _init_scroll_phase_frame
+        READ  R1, 1
+        CMP   R0, R1
+        JZ    _dp6_done
         READ  R0, 1
         CALL  gfx_scroll_up
         CALL  gfx_flip
+_dp6_done:
         RET
 
 demo_phase7_scroll_down:
         CALL  _set_mode_only
-        READ  R0, GFX_DRAW_FG
-        CALL  gfx_set_draw_mode
-        CALL  _draw_random_line
-        READ  R0, 1
-        CALL  gfx_scroll_down
-        CALL  _draw_random_line
+        CALL  _init_scroll_phase_frame
+        READ  R1, 1
+        CMP   R0, R1
+        JZ    _dp7_done
         READ  R0, 1
         CALL  gfx_scroll_down
         CALL  gfx_flip
+_dp7_done:
         RET
 
 demo_phase8_small_text:
@@ -1074,6 +1108,7 @@ main:
         STORE [drawn_phase], 0xFFFF
         STORE [drawn_anim_step], 0xFFFF
         STORE [last_clock_ms], 0xFFFF
+        STORE [scroll_seeded_phase], 0xFFFF
 
         READ  R0, GFX_MODE_B
         STORE [current_mode], R0
@@ -1091,6 +1126,7 @@ main_loop:
         STORE [drawn_phase], R4
         READ  R0, 0xFFFF
         STORE [drawn_anim_step], R0
+        STORE [scroll_seeded_phase], R0
         CPY   R0, R4
         CALL  _set_mode_and_base_phase
         CPY   R5, R0

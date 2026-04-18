@@ -57,12 +57,14 @@ from ...constants import (
     SCREEN_COLS,
     SCREEN_ROWS,
     VRAM_START,
+    VRAM_WORDS,
     VRAM_CHAR_MASK,
     VRAM_FG_MASK,
     VRAM_FG_SHIFT,
     VRAM_BG_MASK,
     VRAM_BG_SHIFT,
     VRAM_ATTR_BOLD,
+    WORD_MASK,
 )
 from ..memory import Memory
 
@@ -77,6 +79,11 @@ _COLOR_MAP = {
     COLOR_CYAN: "cyan",
     COLOR_WHITE: "white",
 }
+
+_GFX_SCROLL_DIR_UP = 0
+_GFX_SCROLL_DIR_DOWN = 1
+_GFX_SCROLL_DIR_LEFT = 2
+_GFX_SCROLL_DIR_RIGHT = 3
 
 
 @dataclass
@@ -100,6 +107,8 @@ class ScreenDevice:
     # (näyttö ei välky). Puskuri tyhjennetään cold_reset/reset_for_test:ssä.
     _front_rendered: str = field(default="", init=False, repr=False)
     _has_front_buffer: bool = field(default=False, init=False, repr=False)
+    _front_vram_words: list[int] = field(default_factory=list, init=False, repr=False)
+    _front_vram_mode: int = field(default=0, init=False, repr=False)
 
     # VRAM dirty-flag: version counter joka inkrementoidaan aina kun VRAM kirjoitetaan.
     # TUI voi näin välttyä turhilta renderöinneiltä vertaamalla versiota edelliseen.
@@ -125,12 +134,33 @@ class ScreenDevice:
         """Tyhjennä etupuskuri (kutsutaan resetissä)."""
         self._front_rendered = ""
         self._has_front_buffer = False
+        self._front_vram_words.clear()
+        self._front_vram_mode = 0
+
+    def capture_front_vram(self, memory: Memory) -> None:
+        """Tallenna nykyinen VRAM näkyvän etupuskurin raakakuvaksi."""
+        self._front_vram_words = list(memory.words[VRAM_START : VRAM_START + VRAM_WORDS])
+        self._front_vram_mode = memory.read(GFX_MODE_REG)
 
     def reset_vram_version(self) -> None:
         """Nollaa VRAM-versio (kutsutaan cold_reset/reset_for_test:ssä)."""
         self._vram_version = 0
         self._dirty_min = -1
         self._dirty_max = -1
+
+    def mark_vram_dirty_range(self, start_idx: int, end_idx: int) -> None:
+        """Merkitse lineaarinen VRAM-alue muuttuneeksi yhdellä versiopäivityksellä."""
+        self._vram_version = (self._vram_version + 1) & 0x7FFFFFFF
+        if start_idx > end_idx:
+            return
+        if self._dirty_min < 0:
+            self._dirty_min = start_idx
+            self._dirty_max = end_idx
+            return
+        if start_idx < self._dirty_min:
+            self._dirty_min = start_idx
+        if end_idx > self._dirty_max:
+            self._dirty_max = end_idx
 
     def mark_vram_dirty(self, addr: int | None = None) -> None:
         """Merkitse VRAM muuttuneeksi (kutsutaan VRAM-kirjoituksessa)."""
@@ -161,6 +191,117 @@ class ScreenDevice:
         self._dirty_min = -1
         self._dirty_max = -1
         return span
+
+    def scroll_visible_to_vram(self, memory: Memory, command: int) -> None:
+        """Kopioi näkyvä etupuskuri VRAMiin siirrettynä annetun komennon mukaan."""
+        mode = memory.read(GFX_MODE_REG)
+        if mode == GFX_MODE_B:
+            width, height = 80, 48
+        elif mode == GFX_MODE_C:
+            width, height = 160, 96
+        else:
+            return
+
+        direction = (command >> 8) & 0x00FF
+        amount = command & 0x00FF
+        if amount <= 0:
+            return
+        amount = min(amount, 15)
+
+        if direction == _GFX_SCROLL_DIR_UP:
+            dx = 0
+            dy = amount
+            axis_limit = height
+        elif direction == _GFX_SCROLL_DIR_DOWN:
+            dx = 0
+            dy = -amount
+            axis_limit = height
+        elif direction == _GFX_SCROLL_DIR_LEFT:
+            dx = amount
+            dy = 0
+            axis_limit = width
+        elif direction == _GFX_SCROLL_DIR_RIGHT:
+            dx = -amount
+            dy = 0
+            axis_limit = width
+        else:
+            return
+
+        dest_words = [0] * VRAM_WORDS
+        if amount >= axis_limit:
+            self._write_vram_words(memory, dest_words)
+            return
+
+        if len(self._front_vram_words) == VRAM_WORDS and self._front_vram_mode == mode:
+            source_words = self._front_vram_words
+        else:
+            source_words = self._snapshot_vram_words(memory)
+
+        for y in range(height):
+            src_y = y + dy
+            if src_y < 0 or src_y >= height:
+                continue
+            for x in range(width):
+                src_x = x + dx
+                if src_x < 0 or src_x >= width:
+                    continue
+                if self._get_pixel_from_words(source_words, mode, src_x, src_y):
+                    self._set_pixel_in_words(dest_words, mode, x, y, 1)
+
+        self._write_vram_words(memory, dest_words)
+
+    def _snapshot_vram_words(self, memory: Memory) -> list[int]:
+        """Palauta nykyinen VRAM raakasanalistana."""
+        return list(memory.words[VRAM_START : VRAM_START + VRAM_WORDS])
+
+    def _write_vram_words(self, memory: Memory, words: list[int]) -> None:
+        """Kirjoita koko grafiikka-VRAM yhdestä sanalistasta."""
+        for idx, word in enumerate(words[:VRAM_WORDS]):
+            memory.write(VRAM_START + idx, word & WORD_MASK)
+        self.mark_vram_dirty_range(0, VRAM_WORDS - 1)
+
+    def _get_pixel_from_words(
+        self,
+        words: list[int],
+        mode: int,
+        x: int,
+        y: int,
+    ) -> int:
+        """Lue yksi grafiikkapikseli raakasta VRAM-sanataulukosta."""
+        if mode == GFX_MODE_B:
+            idx = (y // 2) * self.cols + x
+            mask = 0x0002 if (y & 1) == 0 else 0x0001
+            return 1 if (words[idx] & mask) != 0 else 0
+
+        idx = (y // 4) * self.cols + (x // 2)
+        pt_col = x & 1
+        pt_row = y & 0x0003
+        bit_num = 6 + pt_col if pt_row == 3 else pt_col * 3 + pt_row
+        return 1 if (words[idx] & (1 << bit_num)) != 0 else 0
+
+    def _set_pixel_in_words(
+        self,
+        words: list[int],
+        mode: int,
+        x: int,
+        y: int,
+        value: int,
+    ) -> None:
+        """Kirjoita yksi grafiikkapikseli raakasanataulukkoon."""
+        if mode == GFX_MODE_B:
+            idx = (y // 2) * self.cols + x
+            mask = 0x0002 if (y & 1) == 0 else 0x0001
+        else:
+            idx = (y // 4) * self.cols + (x // 2)
+            pt_col = x & 1
+            pt_row = y & 0x0003
+            bit_num = 6 + pt_col if pt_row == 3 else pt_col * 3 + pt_row
+            mask = 1 << bit_num
+
+        if value:
+            words[idx] = (words[idx] | mask) & WORD_MASK
+        else:
+            words[idx] = words[idx] & (~mask & WORD_MASK)
 
     def render_text(self, memory: Memory) -> str:
         """

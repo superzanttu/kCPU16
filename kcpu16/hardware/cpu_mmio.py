@@ -20,6 +20,7 @@ from ..constants import (
     GFX_MODE_B,
     GFX_MODE_C,
     GFX_MODE_REG,
+    GFX_SCROLL_CMD_REG,
     KBD_DATA,
     KBD_MMIO_END,
     KBD_MMIO_START,
@@ -92,6 +93,10 @@ class CPUMMIOMixin:
         if addr == GFX_FLIP_REG:
             if value != 0 and self.flip_callback is not None:
                 self.flip_callback()  # type: ignore[operator]
+            return
+        if addr == GFX_SCROLL_CMD_REG:
+            if self.screen is not None:
+                self.screen.scroll_visible_to_vram(self.memory, value)
             return
         self._write_word_ram(addr, value)
 
