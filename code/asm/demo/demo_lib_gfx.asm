@@ -8,7 +8,7 @@
 ;   3) Aloitetaan uudelleen kohdasta 1.
 ;
 ; DEMOVAIHEET:
-;   1) Ruudun valkytys (3 s)
+;   1) Ruudun valkytys (10 s)
 ;   2) Satunnaiset pikselit (5 s)
 ;   3) Satunnaiset viivat (5 s)
 ;   4) Skrollaus oikealle (5 s)
@@ -31,10 +31,12 @@
 .const PHASE_COUNT, 22
 .const ANIM_TICK_MS, 100
 .const SPRITE_SIZE_8, 8
+.const PHASE2_PIXEL_BATCH, 64
+.const PHASE3_LINE_BATCH, 4
 
 ; Vaiheiden kestot millisekunteina (B- ja C-kierros jakavat samat kestot)
 phase_ticks_table:
-        .dw 3000, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 10000, 30000
+        .dw 10000, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 10000, 30000
 
 .state_text 0, 0,  "B1: ruudun valkytys"
 .state_text 1, 0,  "B2: satunnaiset pikselit"
@@ -73,8 +75,6 @@ anim_ms_accum:
         .dw 0
 current_mode:
         .dw 0
-rng_state:
-        .dw 0xACE1
 last_clock_ms:
         .dw 0xFFFF
 
@@ -245,28 +245,7 @@ _ucs_done:
         RET
 
 _rand_u16:
-        READ  R0, [rng_state]
-        READ  R1, 0
-        CMP   R0, R1
-        JNZ   _rand_mix
-        READ  R0, 0xACE1
-_rand_mix:
-        CPY   R1, R0
-        READ  R2, 7
-        SHL   R1, R2
-        XOR   R0, R1
-
-        CPY   R1, R0
-        READ  R2, 9
-        SHR   R1, R2
-        XOR   R0, R1
-
-        CPY   R1, R0
-        READ  R2, 8
-        SHL   R1, R2
-        XOR   R0, R1
-
-        STORE [rng_state], R0
+        READ  R0, [RAND_MMIO]
         RET
 
 _rand_range:
@@ -330,6 +309,65 @@ _draw_random_line:
         CPY   R2, R6
         CPY   R3, R7
         CALL  gfx_line
+        RET
+
+_draw_random_pixels_batch:
+        CALL  _get_demo_bounds
+        CPY   R8, R2                  ; xmax
+        CPY   R9, R3                  ; ymax
+        READ  R12, PHASE2_PIXEL_BATCH
+_drpb_loop:
+        READ  R0, 0
+        CMP   R12, R0
+        JLE   _drpb_done
+
+        CPY   R0, R8
+        CALL  _rand_range
+        CPY   R4, R0
+        CPY   R0, R9
+        CALL  _rand_range
+        CPY   R1, R0
+        CPY   R0, R4
+        CALL  gfx_pixel
+
+        READ  R0, 1
+        SUB   R12, R0
+        JUMP  _drpb_loop
+_drpb_done:
+        RET
+
+_draw_random_lines_batch:
+        CALL  _get_demo_bounds
+        CPY   R14, R2                 ; xmax
+        CPY   R15, R3                 ; ymax
+        READ  R13, PHASE3_LINE_BATCH
+_drlb_loop:
+        READ  R0, 0
+        CMP   R13, R0
+        JLE   _drlb_done
+
+        CPY   R0, R14
+        CALL  _rand_range
+        CPY   R4, R0
+        CPY   R0, R15
+        CALL  _rand_range
+        CPY   R5, R0
+
+        CPY   R0, R14
+        CALL  _rand_range
+        CPY   R2, R0
+        CPY   R0, R15
+        CALL  _rand_range
+        CPY   R3, R0
+
+        CPY   R0, R4
+        CPY   R1, R5
+        CALL  gfx_line
+
+        READ  R0, 1
+        SUB   R13, R0
+        JUMP  _drlb_loop
+_drlb_done:
         RET
 
 _draw_sprite_8x8:
@@ -733,20 +771,17 @@ _dp1_fill_do:
 
 demo_phase2_random_pixels:
         CALL  _set_mode_only
-        READ  R0, GFX_DRAW_FG
+        READ  R0, GFX_DRAW_XOR
         CALL  gfx_set_draw_mode
-        CALL  _draw_random_pixel
-        CALL  _draw_random_pixel
-        CALL  _draw_random_pixel
+        CALL  _draw_random_pixels_batch
         CALL  gfx_flip
         RET
 
 demo_phase3_random_lines:
         CALL  _set_mode_only
-        READ  R0, GFX_DRAW_FG
+        READ  R0, GFX_DRAW_XOR
         CALL  gfx_set_draw_mode
-        CALL  _draw_random_line
-        CALL  _draw_random_line
+        CALL  _draw_random_lines_batch
         CALL  gfx_flip
         RET
 
