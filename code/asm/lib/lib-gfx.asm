@@ -22,7 +22,7 @@
 ;   gfx_scroll_right  — Scrollaa kuvaa oikealle (R0 = 1..15 px)
 ;   gfx_pixel         — Piirra pikseli (R0=x, R1=y)
 ;   gfx_line          — Piirrä viiva (R0=x0, R1=y0, R2=x1, R3=y1)
-;   gfx_draw_text_big — Piirrä 6x8 BIG-teksti (0-9, :, ., valilyonti)
+;   gfx_draw_text_big — Piirrä 6x8 BIG-teksti (0-9, A-F, :, ., valilyonti)
 ;   gfx_sprite_xor_1bpp_64x32 — XOR-piirto 64x32 1bpp framebufferiin
 ;
 ; PIIRTOTILAT (gfx_set_draw_mode:n R0-arvo):
@@ -1396,7 +1396,7 @@ _gdt_done:
         RET
 
 ; =============================================================================
-; gfx_draw_text_big — Piirrä 6x8 BIG-teksti (0-9, :, ., valilyonti)
+; gfx_draw_text_big — Piirrä 6x8 BIG-teksti (0-9, A-F, :, ., valilyonti)
 ;
 ; Sisään:  R0 = merkkijonon osoite (null-terminoitu)
 ;          R1 = x
@@ -1420,7 +1420,7 @@ _gdtb_next_char:
         CMP   R0, R1
         JZ    _gdtb_done
 
-        ; Muunna merkki BIG_FONT-indeksiksi (0..12)
+        ; Muunna merkki BIG_FONT-indeksiksi (0..18)
         READ  R1, 48                  ; '0'
         CMP   R0, R1
         JLT   _gdtb_check_colon
@@ -1448,8 +1448,34 @@ _gdtb_check_dot:
 _gdtb_check_space:
         READ  R1, 32                  ; ' '
         CMP   R0, R1
-        JNZ   _gdtb_unknown
+        JNZ   _gdtb_check_upper
         READ  R0, 12
+        JUMP  _gdtb_have_idx
+
+_gdtb_check_upper:
+        READ  R1, 65                  ; 'A'
+        CMP   R0, R1
+        JLT   _gdtb_check_lower
+        READ  R1, 70                  ; 'F'
+        CMP   R0, R1
+        JGT   _gdtb_check_lower
+        READ  R1, 65
+        SUB   R0, R1
+        READ  R1, 13
+        ADD   R0, R1
+        JUMP  _gdtb_have_idx
+
+_gdtb_check_lower:
+        READ  R1, 97                  ; 'a'
+        CMP   R0, R1
+        JLT   _gdtb_unknown
+        READ  R1, 102                 ; 'f'
+        CMP   R0, R1
+        JGT   _gdtb_unknown
+        READ  R1, 97
+        SUB   R0, R1
+        READ  R1, 13
+        ADD   R0, R1
         JUMP  _gdtb_have_idx
 
 _gdtb_unknown:

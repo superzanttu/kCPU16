@@ -10,15 +10,14 @@
 ; DEMOVAIHEET:
 ;   1) Satunnaiset pikselit (10 s)
 ;   2) Satunnaiset viivat (5 s)
-;   3) Ruudun valkytys (5 s)
-;   4) Skrollaus oikealle (5 s)
-;   5) Skrollaus vasemmalle (5 s)
-;   6) Skrollaus ylos (5 s)
-;   7) Skrollaus alas (5 s)
-;   8) Pienta tekstia (5 s)
-;   9) Isoa tekstia (5 s)
-;  10) Pacman sprite (10 s)
-;  11) Sprite tormays (30 s)
+;   3) Skrollaus oikealle (5 s)
+;   4) Skrollaus vasemmalle (5 s)
+;   5) Skrollaus ylos (5 s)
+;   6) Skrollaus alas (5 s)
+;   7) Pienta tekstia (5 s)
+;   8) Isoa tekstia (5 s)
+;   9) Pacman sprite (10 s)
+;  10) Sprite tormays (30 s)
 ; =============================================================================
 
         .origin 0x0200
@@ -27,40 +26,39 @@
 
         .include "../lib/lib-gfx.asm"
 
-.const BASE_PHASE_COUNT, 11
-.const PHASE_COUNT, 22
+.const BASE_PHASE_COUNT, 10
+.const PHASE_COUNT, 20
 .const ANIM_TICK_MS, 100
 .const SPRITE_SIZE_8, 8
 .const SCROLL_BOX_SIZE, 10
-.const PHASE2_PIXEL_BATCH, 64
-.const PHASE3_LINE_BATCH, 4
+.const RANDOM_PIXEL_BATCH, 64
+.const RANDOM_LINE_BATCH, 4
+.const LETTER_CYCLE_LEN, 6
 
 ; Vaiheiden kestot millisekunteina (B- ja C-kierros jakavat samat kestot)
 phase_ticks_table:
-        .dw 10000, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 10000, 30000
+        .dw 10000, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 10000, 30000
 
 .state_text 0, 0,  "B1: satunnaiset pikselit"
 .state_text 1, 0,  "B2: satunnaiset viivat"
-.state_text 2, 0,  "B3: ruudun valkytys"
-.state_text 3, 0,  "B4: skrollaus oikealle"
-.state_text 4, 0,  "B5: skrollaus vasemmalle"
-.state_text 5, 0,  "B6: skrollaus ylos"
-.state_text 6, 0,  "B7: skrollaus alas"
-.state_text 7, 0,  "B8: pienta tekstia"
-.state_text 8, 0,  "B9: isoa tekstia"
-.state_text 9, 0,  "B10: pacman sprite"
-.state_text 10, 0, "B11: sprite tormays"
-.state_text 11, 0, "C1: satunnaiset pikselit"
-.state_text 12, 0, "C2: satunnaiset viivat"
-.state_text 13, 0, "C3: ruudun valkytys"
-.state_text 14, 0, "C4: skrollaus oikealle"
-.state_text 15, 0, "C5: skrollaus vasemmalle"
-.state_text 16, 0, "C6: skrollaus ylos"
-.state_text 17, 0, "C7: skrollaus alas"
-.state_text 18, 0, "C8: pienta tekstia"
-.state_text 19, 0, "C9: isoa tekstia"
-.state_text 20, 0, "C10: pacman sprite"
-.state_text 21, 0, "C11: sprite tormays"
+.state_text 2, 0,  "B3: skrollaus oikealle"
+.state_text 3, 0,  "B4: skrollaus vasemmalle"
+.state_text 4, 0,  "B5: skrollaus ylos"
+.state_text 5, 0,  "B6: skrollaus alas"
+.state_text 6, 0,  "B7: pienta tekstia"
+.state_text 7, 0,  "B8: isoa tekstia"
+.state_text 8, 0,  "B9: pacman sprite"
+.state_text 9, 0,  "B10: sprite tormays"
+.state_text 10, 0, "C1: satunnaiset pikselit"
+.state_text 11, 0, "C2: satunnaiset viivat"
+.state_text 12, 0, "C3: skrollaus oikealle"
+.state_text 13, 0, "C4: skrollaus vasemmalle"
+.state_text 14, 0, "C5: skrollaus ylos"
+.state_text 15, 0, "C6: skrollaus alas"
+.state_text 16, 0, "C7: pienta tekstia"
+.state_text 17, 0, "C8: isoa tekstia"
+.state_text 18, 0, "C9: pacman sprite"
+.state_text 19, 0, "C10: sprite tormays"
 
 phase:
         .dw 0
@@ -78,7 +76,7 @@ current_mode:
         .dw 0
 last_clock_ms:
         .dw 0xFFFF
-scroll_seeded_phase:
+seeded_phase:
         .dw 0xFFFF
 
 pac_x:
@@ -102,10 +100,8 @@ ghost3_x:
 ghost3_y:
         .db 40
 
-small_text_all:
-        .dstr "0123456789ABCDEF"
-big_text_all:
-        .dstr "0123456789:. "
+fill_letters_all:
+        .dstr "ABCDEF"
 one_char_buf:
         .db 0, 0
 msg_col0:
@@ -115,8 +111,10 @@ msg_col1:
 msg_col2:
         .dstr "C2"
 
-sprite_pacman_8x8:
-        .db 0x3C, 0x7E, 0xFC, 0xF8, 0xF8, 0xFC, 0x7E, 0x3C
+sprite_pacman_open_8x8:
+        .db 0x3C, 0x7E, 0xEC, 0xF8, 0xF8, 0xEC, 0x7E, 0x3C
+sprite_pacman_closed_8x8:
+        .db 0x3C, 0x7E, 0xEE, 0xFF, 0xFF, 0xEE, 0x7E, 0x3C
 sprite_ghost_8x8:
         .db 0x3C, 0x7E, 0xDB, 0xFF, 0xFF, 0xE7, 0xA5, 0x00
 
@@ -317,7 +315,7 @@ _draw_random_pixels_batch:
         CALL  _get_demo_bounds
         CPY   R8, R2                  ; xmax
         CPY   R9, R3                  ; ymax
-        READ  R12, PHASE2_PIXEL_BATCH
+        READ  R12, RANDOM_PIXEL_BATCH
 _drpb_loop:
         READ  R0, 0
         CMP   R12, R0
@@ -342,7 +340,7 @@ _draw_random_lines_batch:
         CALL  _get_demo_bounds
         CPY   R14, R2                 ; xmax
         CPY   R15, R3                 ; ymax
-        READ  R13, PHASE3_LINE_BATCH
+        READ  R13, RANDOM_LINE_BATCH
 _drlb_loop:
         READ  R0, 0
         CMP   R13, R0
@@ -478,10 +476,7 @@ _emit_state_for_base_phase:
         READ  R1, 8
         CMP   R0, R1
         JZ    _esbp8
-        READ  R1, 9
-        CMP   R0, R1
-        JZ    _esbp9
-        CALL  _emit_state_bc_10
+        CALL  _emit_state_bc_9
         RET
 _esbp0:
         CALL  _emit_state_bc_0
@@ -628,7 +623,7 @@ _emit_state_bc_0:
         READ  R1, GFX_MODE_B
         CMP   R0, R1
         JZ    _esbc0_b
-        STATE 11
+        STATE 10
         RET
 _esbc0_b:
         STATE 0
@@ -639,7 +634,7 @@ _emit_state_bc_1:
         READ  R1, GFX_MODE_B
         CMP   R0, R1
         JZ    _esbc1_b
-        STATE 12
+        STATE 11
         RET
 _esbc1_b:
         STATE 1
@@ -650,7 +645,7 @@ _emit_state_bc_2:
         READ  R1, GFX_MODE_B
         CMP   R0, R1
         JZ    _esbc2_b
-        STATE 13
+        STATE 12
         RET
 _esbc2_b:
         STATE 2
@@ -661,7 +656,7 @@ _emit_state_bc_3:
         READ  R1, GFX_MODE_B
         CMP   R0, R1
         JZ    _esbc3_b
-        STATE 14
+        STATE 13
         RET
 _esbc3_b:
         STATE 3
@@ -672,7 +667,7 @@ _emit_state_bc_4:
         READ  R1, GFX_MODE_B
         CMP   R0, R1
         JZ    _esbc4_b
-        STATE 15
+        STATE 14
         RET
 _esbc4_b:
         STATE 4
@@ -683,7 +678,7 @@ _emit_state_bc_5:
         READ  R1, GFX_MODE_B
         CMP   R0, R1
         JZ    _esbc5_b
-        STATE 16
+        STATE 15
         RET
 _esbc5_b:
         STATE 5
@@ -694,7 +689,7 @@ _emit_state_bc_6:
         READ  R1, GFX_MODE_B
         CMP   R0, R1
         JZ    _esbc6_b
-        STATE 17
+        STATE 16
         RET
 _esbc6_b:
         STATE 6
@@ -705,7 +700,7 @@ _emit_state_bc_7:
         READ  R1, GFX_MODE_B
         CMP   R0, R1
         JZ    _esbc7_b
-        STATE 18
+        STATE 17
         RET
 _esbc7_b:
         STATE 7
@@ -716,7 +711,7 @@ _emit_state_bc_8:
         READ  R1, GFX_MODE_B
         CMP   R0, R1
         JZ    _esbc8_b
-        STATE 19
+        STATE 18
         RET
 _esbc8_b:
         STATE 8
@@ -727,21 +722,22 @@ _emit_state_bc_9:
         READ  R1, GFX_MODE_B
         CMP   R0, R1
         JZ    _esbc9_b
-        STATE 20
+        STATE 19
         RET
 _esbc9_b:
         STATE 9
         RET
 
-_emit_state_bc_10:
-        READ  R0, [current_mode]
-        READ  R1, GFX_MODE_B
+_begin_seeded_phase:
+        READ  R0, [phase]
+        READ  R1, [seeded_phase]
         CMP   R0, R1
-        JZ    _esbc10_b
-        STATE 21
+        JZ    _bsp_no
+        STORE [seeded_phase], R0
+        READ  R0, 1
         RET
-_esbc10_b:
-        STATE 10
+_bsp_no:
+        READ  R0, 0
         RET
 
 _draw_center_scroll_square:
@@ -766,172 +762,275 @@ _draw_center_scroll_square:
         RET
 
 _init_scroll_phase_frame:
-        READ  R0, [phase]
-        READ  R1, [scroll_seeded_phase]
+        CALL  _begin_seeded_phase
+        READ  R1, 1
         CMP   R0, R1
-        JZ    _ispf_no
-        STORE [scroll_seeded_phase], R0
+        JNZ   _ispf_no
         CALL  _draw_center_scroll_square
         CALL  gfx_flip
         READ  R0, 1
-        RET
 _ispf_no:
-        READ  R0, 0
         RET
 
-demo_phase1_blink:
-        CALL  _set_mode_only
-
-        READ  R0, [anim_step]
-        READ  R1, 1
-        AND   R0, R1
-        CMP   R0, R1
-        JZ    _dp1_fill
-        CALL  gfx_clear
-        CALL  gfx_flip
-        RET
-_dp1_fill:
+_draw_letter_grid_small:
         READ  R0, [current_mode]
-        READ  R1, GFX_MODE_B
+        READ  R1, GFX_MODE_C
         CMP   R0, R1
-        JZ    _dp1_fill_b
-        READ  R2, 0x00FF
-        JUMP  _dp1_fill_do
-_dp1_fill_b:
-        READ  R2, 0x0003
-_dp1_fill_do:
-        READ  R0, VRAM_START
-        READ  R1, VRAM_END
-        FILL  R0, R1, R2
-        CALL  gfx_flip
+        JZ    _dlgs_mode_c
+        READ  R6, 9
+        READ  R7, 16
+        JUMP  _dlgs_setup
+_dlgs_mode_c:
+        READ  R6, 19
+        READ  R7, 32
+_dlgs_setup:
+        READ  R8, 0                   ; y
+        READ  R15, 0                  ; pattern idx
+_dlgs_row:
+        READ  R0, 0
+        CMP   R6, R0
+        JLE   _dlgs_done
+
+        READ  R5, 0                   ; x
+        CPY   R4, R7                  ; cols remaining
+_dlgs_col:
+        READ  R0, 0
+        CMP   R4, R0
+        JLE   _dlgs_next_row
+
+        READ  R0, fill_letters_all
+        ADD   R0, R15
+        READ  R1, [R0]
+        STORE [one_char_buf], R1
+
+        PUSH  R4
+        PUSH  R5
+        PUSH  R6
+        PUSH  R7
+        PUSH  R8
+        PUSH  R15
+        READ  R0, one_char_buf
+        CPY   R1, R5
+        CPY   R2, R8
+        CALL  gfx_draw_text_small
+        POP   R15
+        POP   R8
+        POP   R7
+        POP   R6
+        POP   R5
+        POP   R4
+
+        READ  R0, 5
+        ADD   R5, R0
+        READ  R0, 1
+        ADD   R15, R0
+        READ  R0, LETTER_CYCLE_LEN
+        CMP   R15, R0
+        JLT   _dlgs_pat_ok
+        READ  R15, 0
+_dlgs_pat_ok:
+        READ  R0, 1
+        SUB   R4, R0
+        JUMP  _dlgs_col
+
+_dlgs_next_row:
+        READ  R0, 5
+        ADD   R8, R0
+        READ  R0, 1
+        SUB   R6, R0
+        JUMP  _dlgs_row
+_dlgs_done:
         RET
 
-demo_phase2_random_pixels:
+_draw_letter_grid_big:
+        READ  R0, [current_mode]
+        READ  R1, GFX_MODE_C
+        CMP   R0, R1
+        JZ    _dlgb_mode_c
+        READ  R6, 6
+        READ  R7, 11
+        JUMP  _dlgb_setup
+_dlgb_mode_c:
+        READ  R6, 12
+        READ  R7, 23
+_dlgb_setup:
+        READ  R8, 0                   ; y
+        READ  R15, 0                  ; pattern idx
+_dlgb_row:
+        READ  R0, 0
+        CMP   R6, R0
+        JLE   _dlgb_done
+
+        READ  R5, 0                   ; x
+        CPY   R4, R7                  ; cols remaining
+_dlgb_col:
+        READ  R0, 0
+        CMP   R4, R0
+        JLE   _dlgb_next_row
+
+        READ  R0, fill_letters_all
+        ADD   R0, R15
+        READ  R1, [R0]
+        STORE [one_char_buf], R1
+
+        PUSH  R4
+        PUSH  R5
+        PUSH  R6
+        PUSH  R7
+        PUSH  R8
+        PUSH  R15
+        READ  R0, one_char_buf
+        CPY   R1, R5
+        CPY   R2, R8
+        CALL  gfx_draw_text_big
+        POP   R15
+        POP   R8
+        POP   R7
+        POP   R6
+        POP   R5
+        POP   R4
+
+        READ  R0, 7
+        ADD   R5, R0
+        READ  R0, 1
+        ADD   R15, R0
+        READ  R0, LETTER_CYCLE_LEN
+        CMP   R15, R0
+        JLT   _dlgb_pat_ok
+        READ  R15, 0
+_dlgb_pat_ok:
+        READ  R0, 1
+        SUB   R4, R0
+        JUMP  _dlgb_col
+
+_dlgb_next_row:
+        READ  R0, 8
+        ADD   R8, R0
+        READ  R0, 1
+        SUB   R6, R0
+        JUMP  _dlgb_row
+_dlgb_done:
+        RET
+
+demo_phase1_random_pixels:
         CALL  _set_mode_only
+
         READ  R0, GFX_DRAW_XOR
         CALL  gfx_set_draw_mode
         CALL  _draw_random_pixels_batch
         CALL  gfx_flip
         RET
 
-demo_phase3_random_lines:
+demo_phase2_random_lines:
         CALL  _set_mode_only
+
         READ  R0, GFX_DRAW_XOR
         CALL  gfx_set_draw_mode
         CALL  _draw_random_lines_batch
         CALL  gfx_flip
         RET
 
-demo_phase4_scroll_right:
+demo_phase3_scroll_right:
+        CALL  _set_mode_only
+        CALL  _init_scroll_phase_frame
+        READ  R1, 1
+        CMP   R0, R1
+        JZ    _dp3_done
+        READ  R0, 1
+        CALL  gfx_scroll_right
+        CALL  gfx_flip
+_dp3_done:
+        RET
+
+demo_phase4_scroll_left:
         CALL  _set_mode_only
         CALL  _init_scroll_phase_frame
         READ  R1, 1
         CMP   R0, R1
         JZ    _dp4_done
         READ  R0, 1
-        CALL  gfx_scroll_right
+        CALL  gfx_scroll_left
         CALL  gfx_flip
 _dp4_done:
         RET
 
-demo_phase5_scroll_left:
+demo_phase5_scroll_up:
         CALL  _set_mode_only
         CALL  _init_scroll_phase_frame
         READ  R1, 1
         CMP   R0, R1
         JZ    _dp5_done
         READ  R0, 1
-        CALL  gfx_scroll_left
+        CALL  gfx_scroll_up
         CALL  gfx_flip
 _dp5_done:
         RET
 
-demo_phase6_scroll_up:
+demo_phase6_scroll_down:
         CALL  _set_mode_only
         CALL  _init_scroll_phase_frame
         READ  R1, 1
         CMP   R0, R1
         JZ    _dp6_done
         READ  R0, 1
-        CALL  gfx_scroll_up
+        CALL  gfx_scroll_down
         CALL  gfx_flip
 _dp6_done:
         RET
 
-demo_phase7_scroll_down:
-        CALL  _set_mode_only
-        CALL  _init_scroll_phase_frame
+demo_phase7_small_text:
+        CALL  _begin_seeded_phase
         READ  R1, 1
         CMP   R0, R1
-        JZ    _dp7_done
-        READ  R0, 1
-        CALL  gfx_scroll_down
+        JNZ   _dp7_done
+
+        CALL  _draw_common_mode
+        READ  R0, GFX_DRAW_FG
+        CALL  gfx_set_draw_mode
+        CALL  _draw_letter_grid_small
         CALL  gfx_flip
 _dp7_done:
         RET
 
-demo_phase8_small_text:
+demo_phase8_big_text:
+        CALL  _begin_seeded_phase
+        READ  R1, 1
+        CMP   R0, R1
+        JNZ   _dp8_done
+
+        CALL  _draw_common_mode
+        READ  R0, GFX_DRAW_FG
+        CALL  gfx_set_draw_mode
+        CALL  _draw_letter_grid_big
+        CALL  gfx_flip
+_dp8_done:
+        RET
+
+demo_phase9_pacman:
         CALL  _draw_common_mode
         READ  R0, GFX_DRAW_FG
         CALL  gfx_set_draw_mode
 
         READ  R0, [anim_step]
-        READ  R1, 16
-        DIV   R0, R1
-        MUL   R0, R1
-        READ  R1, [anim_step]
-        SUB   R1, R0                  ; idx = anim_step % 16
-
-        READ  R0, small_text_all
-        ADD   R0, R1
-        READ  R2, [R0]
-        STORE [one_char_buf], R2
-
-        READ  R0, one_char_buf
-        READ  R1, 10
-        READ  R2, 10
-        CALL  gfx_draw_text_small
-        CALL  gfx_flip
-        RET
-
-demo_phase9_big_text:
-        CALL  _draw_common_mode
-        READ  R0, GFX_DRAW_FG
-        CALL  gfx_set_draw_mode
-
-        READ  R0, [anim_step]
-        READ  R1, 13
-        DIV   R0, R1
-        MUL   R0, R1
-        READ  R1, [anim_step]
-        SUB   R1, R0                  ; idx = anim_step % 13
-
-        READ  R0, big_text_all
-        ADD   R0, R1
-        READ  R2, [R0]
-        STORE [one_char_buf], R2
-
-        READ  R0, one_char_buf
-        READ  R1, 10
-        READ  R2, 10
-        CALL  gfx_draw_text_big
-        CALL  gfx_flip
-        RET
-
-demo_phase10_pacman:
-        CALL  _draw_common_mode
-        READ  R0, GFX_DRAW_FG
-        CALL  gfx_set_draw_mode
+        READ  R1, 1
+        AND   R0, R1
+        CMP   R0, R1
+        JZ    _dp9_closed
+        READ  R14, sprite_pacman_open_8x8
+        JUMP  _dp9_have_sprite
+_dp9_closed:
+        READ  R14, sprite_pacman_closed_8x8
+_dp9_have_sprite:
 
         CALL  _update_pacman_random
         READ  R0, [pac_x]
         READ  R1, [pac_y]
-        READ  R2, sprite_pacman_8x8
+        CPY   R2, R14
         CALL  _draw_sprite_8x8
         CALL  gfx_flip
         RET
 
-demo_phase11_collision:
+demo_phase10_collision:
         CALL  _draw_common_mode
         READ  R0, GFX_DRAW_FG
         CALL  gfx_set_draw_mode
@@ -956,7 +1055,7 @@ demo_phase11_collision:
         ; Piirra pacman
         READ  R0, [pac_x]
         READ  R1, [pac_y]
-        READ  R2, sprite_pacman_8x8
+        READ  R2, sprite_pacman_open_8x8
         CALL  _draw_sprite_8x8
 
         ; Tormayslaskuri 0..2
@@ -1068,35 +1167,32 @@ _dp11_msg_draw:
 _dispatch_base_phase:
         READ  R1, 0
         CMP   R0, R1
-        JZ    demo_phase2_random_pixels
+        JZ    demo_phase1_random_pixels
         READ  R1, 1
         CMP   R0, R1
-        JZ    demo_phase3_random_lines
+        JZ    demo_phase2_random_lines
         READ  R1, 2
         CMP   R0, R1
-        JZ    demo_phase1_blink
+        JZ    demo_phase3_scroll_right
         READ  R1, 3
         CMP   R0, R1
-        JZ    demo_phase4_scroll_right
+        JZ    demo_phase4_scroll_left
         READ  R1, 4
         CMP   R0, R1
-        JZ    demo_phase5_scroll_left
+        JZ    demo_phase5_scroll_up
         READ  R1, 5
         CMP   R0, R1
-        JZ    demo_phase6_scroll_up
+        JZ    demo_phase6_scroll_down
         READ  R1, 6
         CMP   R0, R1
-        JZ    demo_phase7_scroll_down
+        JZ    demo_phase7_small_text
         READ  R1, 7
         CMP   R0, R1
-        JZ    demo_phase8_small_text
+        JZ    demo_phase8_big_text
         READ  R1, 8
         CMP   R0, R1
-        JZ    demo_phase9_big_text
-        READ  R1, 9
-        CMP   R0, R1
-        JZ    demo_phase10_pacman
-        CALL  demo_phase11_collision
+        JZ    demo_phase9_pacman
+        CALL  demo_phase10_collision
         RET
 
 main:
@@ -1108,7 +1204,7 @@ main:
         STORE [drawn_phase], 0xFFFF
         STORE [drawn_anim_step], 0xFFFF
         STORE [last_clock_ms], 0xFFFF
-        STORE [scroll_seeded_phase], 0xFFFF
+        STORE [seeded_phase], 0xFFFF
 
         READ  R0, GFX_MODE_B
         STORE [current_mode], R0
@@ -1126,7 +1222,7 @@ main_loop:
         STORE [drawn_phase], R4
         READ  R0, 0xFFFF
         STORE [drawn_anim_step], R0
-        STORE [scroll_seeded_phase], R0
+        STORE [seeded_phase], R0
         CPY   R0, R4
         CALL  _set_mode_and_base_phase
         CPY   R5, R0
