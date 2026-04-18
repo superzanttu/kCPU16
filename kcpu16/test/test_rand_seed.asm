@@ -5,8 +5,9 @@
 ; luetaan ensimmäinen arvo (R0), asetetaan sama siemen uudelleen,
 ; luetaan toinen arvo (R1). Koska siemen on sama, R0 == R1.
 ;
-; CPU:n Python-funktio laskee: lsb = 0xDEAD & 1 = 1
+; CPU:n Python-funktio laskee:
 ;   _lfsr = (0xDEAD >> 1) ^ 0xB400 = 0x6F56 ^ 0xB400 = 0xDB56
+;   ja sekoittaa ulostulon xorshift-permutaatiolla arvoon 0x1E6E.
 ;
 ; R2 = lopputulos: 1 = ok, 0 = virhe.
 ; =============================================================================
@@ -18,7 +19,7 @@
         ; Ensimmäinen kierros: siemen $DEAD
         READ  R3, 0xDEAD
         STORE [RAND_MMIO], R3   ; aseta siemen
-        READ  R0, [RAND_MMIO]   ; lue arvo (= 0xDB56)
+        READ  R0, [RAND_MMIO]   ; lue arvo (= 0x1E6E)
 
         ; Toinen kierros: sama siemen uudelleen
         STORE [RAND_MMIO], R3   ; aseta siemen uudelleen
@@ -33,6 +34,6 @@ fail:
         READ  R2, 0
         HALT
 
-.expect_reg   R0, 0xDB56
-.expect_reg   R1, 0xDB56
+.expect_reg   R0, 0x1E6E
+.expect_reg   R1, 0x1E6E
 .expect_reg   R2, 1

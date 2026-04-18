@@ -40,6 +40,20 @@ from ..constants import (
 _TMR_DISABLED_MMIO = 0x7FFFFFFFFFFFFFFF
 
 
+def _scramble_rand_word(value: int) -> int:
+    """Whiten a 16-bit LFSR state before exposing it via RAND_MMIO.
+
+    Raw consecutive LFSR states are cheap but visually correlated when callers
+    use adjacent reads for coordinates. A small xorshift permutation keeps the
+    generator deterministic while producing less structured 16-bit outputs.
+    """
+    value &= WORD_MASK
+    value ^= (value << 7) & WORD_MASK
+    value ^= value >> 9
+    value ^= (value << 8) & WORD_MASK
+    return value & WORD_MASK
+
+
 class CPUMMIOMixin:
     """Shared MMIO read/write helpers extracted from the CPU core class."""
 
@@ -64,7 +78,7 @@ class CPUMMIOMixin:
         if addr == RAND_MMIO:
             lsb = self._lfsr & 1
             self._lfsr = (self._lfsr >> 1) ^ ((-lsb) & RAND_LFSR_MASK)
-            return self._lfsr
+            return _scramble_rand_word(self._lfsr)
         return self._read_word_ram(addr)
 
     def _write_word(self, addr: int, value: int) -> None:

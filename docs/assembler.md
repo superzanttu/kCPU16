@@ -164,80 +164,80 @@ MERKIT:
 Assembler injektoi automaattisesti seuraavat vakiot koodin käyttöön label-niminä.
 Ne voidaan käyttää suoraan operandeina ilman erillistä määrittelyä.
 
-| Vakio                 | Arvo   | Kuvaus                                                     |
-| --------------------- | ------ | ---------------------------------------------------------- |
-| `VRAM_START`          | 0xF800 | VRAM:n alkuosoite                                          |
-| `VRAM_END`            | 0xFF7F | VRAM:n loppuosoite (viimeinen solu)                        |
-| `VRAM_WORDS`          | 1920   | VRAM:n koko sanoina (80 × 24)                              |
-| `VRAM_CHAR_MASK`      | 0x00FF | Merkkikentän bittimaski                                    |
-| `VRAM_FG_MASK`        | 0x0700 | Edusta-värikentän bittimaski (bitit 8–10)                  |
-| `VRAM_FG_SHIFT`       | 8      | Edusta-värikentän siirto bitteinä                          |
-| `VRAM_BG_MASK`        | 0x3800 | Tausta-värikentän bittimaski (bitit 11–13)                 |
-| `VRAM_BG_SHIFT`       | 11     | Tausta-värikentän siirto bitteinä                          |
-| `VRAM_ATTR_BOLD`      | 0x4000 | Lihavointi-attribuutti (bitti 14)                          |
-| `SCREEN_COLS`         | 80     | Näytön leveys sarakkeina                                   |
-| `SCREEN_ROWS`         | 24     | Näytön korkeus riveinä                                     |
-| `BOOT_RAM_START`      | 0x0100 | Bootloaderin latausalue                                    |
-| `BOOT_RAM_END`        | 0x01FF | Bootloaderin latausalueen loppu                            |
-| `KERNEL_STACK_START`  | 0xFF80 | Kernel-pinon alkuosoite                                    |
-| `KERNEL_STACK_END`    | 0xFFFF | Kernel-pinon loppuosoite                                   |
-| `MEMORY_WORDS`        | 65536  | Muistiavaruuden koko sanoina                               |
-| `WORD_MASK`           | 0xFFFF | 16-bittinen maski                                          |
-| `WORD_SIGN_BIT`       | 0x8000 | Etumerkkilipun bitti                                       |
-| `WORD_BITS`           | 16     | Sanan bittimäärä                                           |
-| `INT_DIV_ZERO`        | 0      | Jako nollalla (vektori 0)                                  |
-| `INT_INVALID_OPCODE`  | 1      | Tuntematon käsky (vektori 1)                               |
-| `INT_STACK_OVERFLOW`  | 2      | Pinon ylivuoto (vektori 2)                                 |
-| `INT_BREAKPOINT`      | 3      | Debug/breakpoint (vektori 3)                               |
-| `INT_PRIVILEGE`       | 4      | Privilege violation (vektori 4)                            |
-| `INT_MEM_FAULT`       | 5      | Muistisuojausrikkomus (vektori 5)                          |
-| `INT_KEYBOARD`        | 6      | Näppäimistökeskeytys (vektori 6)                           |
-| `INT_TIMER`           | 7      | Ajastinkeskeytys (vektori 7)                               |
-| `INT_PROCESS_EXIT`    | 8      | Prosessin lopetus (vektori 8)                              |
-| `INT_CLOCK`           | 9      | Kellokeskeytys (vektori 9)                                 |
-| `INT_VECTOR_BASE`     | 0x0000 | Vektoritaulukon alkuosoite                                 |
-| `INT_VECTOR_COUNT`    | 16     | Vektoritaulukon koko                                       |
-| `CLOCK_MMIO_START`    | 0x0010 | Kellokello-MMIO-alueen alku                                |
-| `CLOCK_MMIO_END`      | 0x001F | Kellokello-MMIO-alueen loppu                               |
-| `CLOCK_YEAR`          | 0x0010 | Vuosi MMIO                                                 |
-| `CLOCK_MONTH`         | 0x0011 | Kuukausi MMIO                                              |
-| `CLOCK_DAY`           | 0x0012 | Päivä MMIO                                                 |
-| `CLOCK_HOUR`          | 0x0013 | Tunti MMIO                                                 |
-| `CLOCK_MINUTE`        | 0x0014 | Minuutti MMIO                                              |
-| `CLOCK_SECOND`        | 0x0015 | Sekunti MMIO                                               |
-| `CLOCK_MILLIS`        | 0x0016 | Millisekunti MMIO                                          |
-| `UPTIME_W3`           | 0x0017 | Uptime bitit 48–63 MMIO                                    |
-| `UPTIME_W2`           | 0x0018 | Uptime bitit 32–47 MMIO                                    |
-| `UPTIME_W1`           | 0x0019 | Uptime bitit 16–31 MMIO                                    |
-| `UPTIME_W0`           | 0x001A | Uptime bitit 0–15 MMIO                                     |
-| `CLOCK_INT_INTERVAL`  | 0x001B | CTMR MMIO (kellokeskeytyksen väli ms)                      |
-| `KBD_MMIO_START`      | 0x0020 | Näppäimistö-MMIO-alueen alku                               |
-| `KBD_MMIO_END`        | 0x0021 | Näppäimistö-MMIO-alueen loppu                              |
-| `KBD_DATA`            | 0x0020 | Näppäintapahtuma MMIO (lue: seuraava tapahtuma puskurista) |
-| `KBD_STATUS`          | 0x0021 | Näppäimistöpuskurin koko MMIO                              |
-| `KBD_RELEASE_BIT`     | 0x80   | Vapautusbitti KBD_DATA:ssa (1 = vapautus)                  |
-| `KBD_KEY_CODE_MASK`   | 0x7F   | Näppäinkoodi bittimaski (bitit 6–0)                        |
-| `RAND_MMIO`           | 0x0022 | Satunnaisluku MMIO (lue: satunnaisluku; kirj: siemen)      |
-| `RAND_LFSR_SEED`      | 0xACE1 | LFSR-oletussiemen                                          |
-| `STORAGE_BLOCK_SIZE`  | 256    | Tallennuslaitteen blokin koko sanoina                      |
-| `STORAGE_BLOCK_COUNT` | 256    | Tallennuslaitteen blokkien lukumäärä                       |
-| `COLOR_BLACK`         | 0      | Värikoodi: musta                                           |
-| `COLOR_RED`           | 1      | Värikoodi: punainen                                        |
-| `COLOR_GREEN`         | 2      | Värikoodi: vihreä                                          |
-| `COLOR_YELLOW`        | 3      | Värikoodi: keltainen                                       |
-| `COLOR_BLUE`          | 4      | Värikoodi: sininen                                         |
-| `COLOR_MAGENTA`       | 5      | Värikoodi: magenta                                         |
-| `COLOR_CYAN`          | 6      | Värikoodi: syaani                                          |
-| `COLOR_WHITE`         | 7      | Värikoodi: valkoinen                                       |
-| `SR_FLAG_Z`           | 0      | Tilarekisterin Z-lipun bittinumero                         |
-| `SR_FLAG_N`           | 1      | Tilarekisterin N-lipun bittinumero                         |
-| `SR_FLAG_C`           | 2      | Tilarekisterin C-lipun bittinumero                         |
-| `SR_FLAG_V`           | 3      | Tilarekisterin V-lipun bittinumero                         |
-| `SR_FLAG_I`           | 4      | Tilarekisterin I-lipun bittinumero                         |
-| `SR_FLAG_P`           | 5      | Tilarekisterin P-lipun bittinumero                         |
-| `MODE_KERNEL`         | 1      | Kernel-tila (SR:n P-lippu = 1)                             |
-| `MODE_USER`           | 0      | User-tila (SR:n P-lippu = 0)                               |
-| `DEFAULT_MPR`         | 0x0100 | MPR:n oletusarvo (= BOOT_RAM_START)                        |
+| Vakio                 | Arvo   | Kuvaus                                                                                     |
+| --------------------- | ------ | ------------------------------------------------------------------------------------------ |
+| `VRAM_START`          | 0xF800 | VRAM:n alkuosoite                                                                          |
+| `VRAM_END`            | 0xFF7F | VRAM:n loppuosoite (viimeinen solu)                                                        |
+| `VRAM_WORDS`          | 1920   | VRAM:n koko sanoina (80 × 24)                                                              |
+| `VRAM_CHAR_MASK`      | 0x00FF | Merkkikentän bittimaski                                                                    |
+| `VRAM_FG_MASK`        | 0x0700 | Edusta-värikentän bittimaski (bitit 8–10)                                                  |
+| `VRAM_FG_SHIFT`       | 8      | Edusta-värikentän siirto bitteinä                                                          |
+| `VRAM_BG_MASK`        | 0x3800 | Tausta-värikentän bittimaski (bitit 11–13)                                                 |
+| `VRAM_BG_SHIFT`       | 11     | Tausta-värikentän siirto bitteinä                                                          |
+| `VRAM_ATTR_BOLD`      | 0x4000 | Lihavointi-attribuutti (bitti 14)                                                          |
+| `SCREEN_COLS`         | 80     | Näytön leveys sarakkeina                                                                   |
+| `SCREEN_ROWS`         | 24     | Näytön korkeus riveinä                                                                     |
+| `BOOT_RAM_START`      | 0x0100 | Bootloaderin latausalue                                                                    |
+| `BOOT_RAM_END`        | 0x01FF | Bootloaderin latausalueen loppu                                                            |
+| `KERNEL_STACK_START`  | 0xFF80 | Kernel-pinon alkuosoite                                                                    |
+| `KERNEL_STACK_END`    | 0xFFFF | Kernel-pinon loppuosoite                                                                   |
+| `MEMORY_WORDS`        | 65536  | Muistiavaruuden koko sanoina                                                               |
+| `WORD_MASK`           | 0xFFFF | 16-bittinen maski                                                                          |
+| `WORD_SIGN_BIT`       | 0x8000 | Etumerkkilipun bitti                                                                       |
+| `WORD_BITS`           | 16     | Sanan bittimäärä                                                                           |
+| `INT_DIV_ZERO`        | 0      | Jako nollalla (vektori 0)                                                                  |
+| `INT_INVALID_OPCODE`  | 1      | Tuntematon käsky (vektori 1)                                                               |
+| `INT_STACK_OVERFLOW`  | 2      | Pinon ylivuoto (vektori 2)                                                                 |
+| `INT_BREAKPOINT`      | 3      | Debug/breakpoint (vektori 3)                                                               |
+| `INT_PRIVILEGE`       | 4      | Privilege violation (vektori 4)                                                            |
+| `INT_MEM_FAULT`       | 5      | Muistisuojausrikkomus (vektori 5)                                                          |
+| `INT_KEYBOARD`        | 6      | Näppäimistökeskeytys (vektori 6)                                                           |
+| `INT_TIMER`           | 7      | Ajastinkeskeytys (vektori 7)                                                               |
+| `INT_PROCESS_EXIT`    | 8      | Prosessin lopetus (vektori 8)                                                              |
+| `INT_CLOCK`           | 9      | Kellokeskeytys (vektori 9)                                                                 |
+| `INT_VECTOR_BASE`     | 0x0000 | Vektoritaulukon alkuosoite                                                                 |
+| `INT_VECTOR_COUNT`    | 16     | Vektoritaulukon koko                                                                       |
+| `CLOCK_MMIO_START`    | 0x0010 | Kellokello-MMIO-alueen alku                                                                |
+| `CLOCK_MMIO_END`      | 0x001F | Kellokello-MMIO-alueen loppu                                                               |
+| `CLOCK_YEAR`          | 0x0010 | Vuosi MMIO                                                                                 |
+| `CLOCK_MONTH`         | 0x0011 | Kuukausi MMIO                                                                              |
+| `CLOCK_DAY`           | 0x0012 | Päivä MMIO                                                                                 |
+| `CLOCK_HOUR`          | 0x0013 | Tunti MMIO                                                                                 |
+| `CLOCK_MINUTE`        | 0x0014 | Minuutti MMIO                                                                              |
+| `CLOCK_SECOND`        | 0x0015 | Sekunti MMIO                                                                               |
+| `CLOCK_MILLIS`        | 0x0016 | Millisekunti MMIO                                                                          |
+| `UPTIME_W3`           | 0x0017 | Uptime bitit 48–63 MMIO                                                                    |
+| `UPTIME_W2`           | 0x0018 | Uptime bitit 32–47 MMIO                                                                    |
+| `UPTIME_W1`           | 0x0019 | Uptime bitit 16–31 MMIO                                                                    |
+| `UPTIME_W0`           | 0x001A | Uptime bitit 0–15 MMIO                                                                     |
+| `CLOCK_INT_INTERVAL`  | 0x001B | CTMR MMIO (kellokeskeytyksen väli ms)                                                      |
+| `KBD_MMIO_START`      | 0x0020 | Näppäimistö-MMIO-alueen alku                                                               |
+| `KBD_MMIO_END`        | 0x0021 | Näppäimistö-MMIO-alueen loppu                                                              |
+| `KBD_DATA`            | 0x0020 | Näppäintapahtuma MMIO (lue: seuraava tapahtuma puskurista)                                 |
+| `KBD_STATUS`          | 0x0021 | Näppäimistöpuskurin koko MMIO                                                              |
+| `KBD_RELEASE_BIT`     | 0x80   | Vapautusbitti KBD_DATA:ssa (1 = vapautus)                                                  |
+| `KBD_KEY_CODE_MASK`   | 0x7F   | Näppäinkoodi bittimaski (bitit 6–0)                                                        |
+| `RAND_MMIO`           | 0x0022 | Satunnaisluku MMIO (LFSR-pohjainen, ulostulo sekoitettu; lue: satunnaisluku; kirj: siemen) |
+| `RAND_LFSR_SEED`      | 0xACE1 | LFSR-oletussiemen                                                                          |
+| `STORAGE_BLOCK_SIZE`  | 256    | Tallennuslaitteen blokin koko sanoina                                                      |
+| `STORAGE_BLOCK_COUNT` | 256    | Tallennuslaitteen blokkien lukumäärä                                                       |
+| `COLOR_BLACK`         | 0      | Värikoodi: musta                                                                           |
+| `COLOR_RED`           | 1      | Värikoodi: punainen                                                                        |
+| `COLOR_GREEN`         | 2      | Värikoodi: vihreä                                                                          |
+| `COLOR_YELLOW`        | 3      | Värikoodi: keltainen                                                                       |
+| `COLOR_BLUE`          | 4      | Värikoodi: sininen                                                                         |
+| `COLOR_MAGENTA`       | 5      | Värikoodi: magenta                                                                         |
+| `COLOR_CYAN`          | 6      | Värikoodi: syaani                                                                          |
+| `COLOR_WHITE`         | 7      | Värikoodi: valkoinen                                                                       |
+| `SR_FLAG_Z`           | 0      | Tilarekisterin Z-lipun bittinumero                                                         |
+| `SR_FLAG_N`           | 1      | Tilarekisterin N-lipun bittinumero                                                         |
+| `SR_FLAG_C`           | 2      | Tilarekisterin C-lipun bittinumero                                                         |
+| `SR_FLAG_V`           | 3      | Tilarekisterin V-lipun bittinumero                                                         |
+| `SR_FLAG_I`           | 4      | Tilarekisterin I-lipun bittinumero                                                         |
+| `SR_FLAG_P`           | 5      | Tilarekisterin P-lipun bittinumero                                                         |
+| `MODE_KERNEL`         | 1      | Kernel-tila (SR:n P-lippu = 1)                                                             |
+| `MODE_USER`           | 0      | User-tila (SR:n P-lippu = 0)                                                               |
+| `DEFAULT_MPR`         | 0x0100 | MPR:n oletusarvo (= BOOT_RAM_START)                                                        |
 
 ---
 

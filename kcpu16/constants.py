@@ -117,9 +117,11 @@ KBD_KEY_CODE_MASK = 0x7F
 
 # =============================================================================
 # SATUNNAISLUKUGENERAATTORI-MMIO (RANDOM MMIO)
-# Osoite $0022: lukeminen palauttaa seuraavan 16-bittisen LFSR-arvon.
+# Osoite $0022: lukeminen palauttaa seuraavan 16-bittisen pseudosatunnaisluvun.
 # Kirjoittaminen asettaa siemenen (arvo 0 nollataan arvoon 1).
-# Toteutus: 16-bittinen Galois LFSR, polynomi x^16+x^15+x^13+x^4+1 (0xB400).
+# Toteutus: 16-bittinen Galois LFSR, jonka ulostulo sekoitetaan xorshift-
+# permutaatiolla ennen palautusta. Sisainen polynomi on
+# x^16+x^15+x^13+x^4+1 (0xB400).
 # =============================================================================
 
 RAND_MMIO = 0x0022  # Lue: seuraava pseudosatunnaisluku; kirjoitus: aseta siemen

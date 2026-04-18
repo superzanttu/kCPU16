@@ -8,9 +8,9 @@
 ;   3) Aloitetaan uudelleen kohdasta 1.
 ;
 ; DEMOVAIHEET:
-;   1) Ruudun valkytys (10 s)
-;   2) Satunnaiset pikselit (5 s)
-;   3) Satunnaiset viivat (5 s)
+;   1) Satunnaiset pikselit (10 s)
+;   2) Satunnaiset viivat (5 s)
+;   3) Ruudun valkytys (5 s)
 ;   4) Skrollaus oikealle (5 s)
 ;   5) Skrollaus vasemmalle (5 s)
 ;   6) Skrollaus ylos (5 s)
@@ -39,9 +39,9 @@
 phase_ticks_table:
         .dw 10000, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 10000, 30000
 
-.state_text 0, 0,  "B1: ruudun valkytys"
-.state_text 1, 0,  "B2: satunnaiset pikselit"
-.state_text 2, 0,  "B3: satunnaiset viivat"
+.state_text 0, 0,  "B1: satunnaiset pikselit"
+.state_text 1, 0,  "B2: satunnaiset viivat"
+.state_text 2, 0,  "B3: ruudun valkytys"
 .state_text 3, 0,  "B4: skrollaus oikealle"
 .state_text 4, 0,  "B5: skrollaus vasemmalle"
 .state_text 5, 0,  "B6: skrollaus ylos"
@@ -50,9 +50,9 @@ phase_ticks_table:
 .state_text 8, 0,  "B9: isoa tekstia"
 .state_text 9, 0,  "B10: pacman sprite"
 .state_text 10, 0, "B11: sprite tormays"
-.state_text 11, 0, "C1: ruudun valkytys"
-.state_text 12, 0, "C2: satunnaiset pikselit"
-.state_text 13, 0, "C3: satunnaiset viivat"
+.state_text 11, 0, "C1: satunnaiset pikselit"
+.state_text 12, 0, "C2: satunnaiset viivat"
+.state_text 13, 0, "C3: ruudun valkytys"
 .state_text 14, 0, "C4: skrollaus oikealle"
 .state_text 15, 0, "C5: skrollaus vasemmalle"
 .state_text 16, 0, "C6: skrollaus ylos"
@@ -1068,13 +1068,13 @@ _dp11_msg_draw:
 _dispatch_base_phase:
         READ  R1, 0
         CMP   R0, R1
-        JZ    demo_phase1_blink
+        JZ    demo_phase2_random_pixels
         READ  R1, 1
         CMP   R0, R1
-        JZ    demo_phase2_random_pixels
+        JZ    demo_phase3_random_lines
         READ  R1, 2
         CMP   R0, R1
-        JZ    demo_phase3_random_lines
+        JZ    demo_phase1_blink
         READ  R1, 3
         CMP   R0, R1
         JZ    demo_phase4_scroll_right
