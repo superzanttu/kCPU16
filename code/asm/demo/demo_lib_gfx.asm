@@ -250,6 +250,7 @@ _rand_u16:
 
 _rand_range:
         ; Sisaan R0=max_inclusive, ulos R0=0..max
+        ; Clobbers: R1-R5
         CPY   R3, R0
         READ  R1, 1
         ADD   R1, R3                  ; n = max + 1
@@ -273,41 +274,39 @@ _rr_div_ok:
 
 _draw_random_pixel:
         CALL  _get_demo_bounds
-        CPY   R6, R2                  ; xmax
-        CPY   R7, R3                  ; ymax
-        CPY   R0, R6
+        CPY   R8, R2                  ; xmax
+        CPY   R9, R3                  ; ymax
+        CPY   R0, R8
         CALL  _rand_range
-        CPY   R4, R0
-        CPY   R0, R7
+        CPY   R10, R0                 ; x
+        CPY   R0, R9
         CALL  _rand_range
         CPY   R1, R0
-        CPY   R0, R4
+        CPY   R0, R10
         CALL  gfx_pixel
         RET
 
 _draw_random_line:
         CALL  _get_demo_bounds
-        CPY   R10, R2                 ; xmax
-        CPY   R11, R3                 ; ymax
+        CPY   R8, R2                  ; xmax
+        CPY   R9, R3                  ; ymax
+
+        CPY   R0, R8
+        CALL  _rand_range
+        CPY   R10, R0                 ; x0
+        CPY   R0, R9
+        CALL  _rand_range
+        CPY   R11, R0                 ; y0
+
+        CPY   R0, R8
+        CALL  _rand_range
+        CPY   R2, R0                  ; x1
+        CPY   R0, R9
+        CALL  _rand_range
+        CPY   R3, R0                  ; y1
 
         CPY   R0, R10
-        CALL  _rand_range
-        CPY   R4, R0
-        CPY   R0, R11
-        CALL  _rand_range
-        CPY   R5, R0
-
-        CPY   R0, R10
-        CALL  _rand_range
-        CPY   R6, R0
-        CPY   R0, R11
-        CALL  _rand_range
-        CPY   R7, R0
-
-        CPY   R0, R4
-        CPY   R1, R5
-        CPY   R2, R6
-        CPY   R3, R7
+        CPY   R1, R11
         CALL  gfx_line
         RET
 
@@ -323,11 +322,11 @@ _drpb_loop:
 
         CPY   R0, R8
         CALL  _rand_range
-        CPY   R4, R0
+        CPY   R10, R0                 ; x
         CPY   R0, R9
         CALL  _rand_range
         CPY   R1, R0
-        CPY   R0, R4
+        CPY   R0, R10
         CALL  gfx_pixel
 
         READ  R0, 1
@@ -348,10 +347,10 @@ _drlb_loop:
 
         CPY   R0, R14
         CALL  _rand_range
-        CPY   R4, R0
+        CPY   R10, R0                 ; x0
         CPY   R0, R15
         CALL  _rand_range
-        CPY   R5, R0
+        CPY   R11, R0                 ; y0
 
         CPY   R0, R14
         CALL  _rand_range
@@ -360,8 +359,8 @@ _drlb_loop:
         CALL  _rand_range
         CPY   R3, R0
 
-        CPY   R0, R4
-        CPY   R1, R5
+        CPY   R0, R10
+        CPY   R1, R11
         CALL  gfx_line
 
         READ  R0, 1
