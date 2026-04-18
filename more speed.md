@@ -1,11 +1,11 @@
 # kCPU16 emulaation suorituskyky – analyysi ja parannusehdotukset
 
 Tämä analyysi perustuu nykyiseen toteutukseen tiedostoissa:
-- `/home/runner/work/kCPU16/kCPU16/kcpu16/hardware/cpu_core.py`
-- `/home/runner/work/kCPU16/kCPU16/kcpu16/hardware/cpu_exec.py`
-- `/home/runner/work/kCPU16/kCPU16/kcpu16/hardware/cpu_memcheck.py`
-- `/home/runner/work/kCPU16/kCPU16/kcpu16/hardware/cpu_mmio.py`
-- `/home/runner/work/kCPU16/kCPU16/kcpu16/hardware/devices/screen.py`
+- `kcpu16/hardware/cpu_core.py`
+- `kcpu16/hardware/cpu_exec.py`
+- `kcpu16/hardware/cpu_memcheck.py`
+- `kcpu16/hardware/cpu_mmio.py`
+- `kcpu16/hardware/devices/screen.py`
 
 ## 1) Poista per-käsky `_Ins`-olioallokaatio hot loopista
 
