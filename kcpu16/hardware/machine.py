@@ -118,6 +118,7 @@ class KCPU16Machine:
         - Kernel Mode paalle, keskeytykset pois
         """
         self.memory.reset()
+        self.keyboard.reset()
         self.cpu.reset()
         self.screen.clear_front_buffer()
         self.screen.reset_vram_version()
@@ -137,6 +138,7 @@ class KCPU16Machine:
         boot-logiikka ei vahingossa kaynnisty.
         """
         self.memory.reset()
+        self.keyboard.reset()
         self.cpu.reset()
         self.screen.clear_front_buffer()
         self.screen.reset_vram_version()

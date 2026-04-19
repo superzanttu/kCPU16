@@ -73,7 +73,7 @@ chip8_sprite_tmp:
         .db 0, 0, 0, 0, 0, 0, 0, 0
         .db 0, 0, 0, 0, 0, 0, 0, 0
 chip8_boot_text:
-        .dstr "CHIP-8 booted"
+        .dstr "CHIP-8 EMULATOR"
 
 chip8_stack:
         .dw 0, 0, 0, 0, 0, 0, 0, 0
