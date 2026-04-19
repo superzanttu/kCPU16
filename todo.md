@@ -240,7 +240,4 @@ Tehtävät on merkitty hakasulkeilla, ja niiden tilaa voidaan päivittää seura
 	Huom: nykyinen sprite-API on kiinteä 8x8-malli, joten törmäysboksi johdetaan aina automaattisesti vakiosta `GFX_SPRITE8_SIZE`; erillistä bbox-parametria ei enää tarvita.
 - [X] Varmista että lib-gfx.asm:n tukema spriten koko on 8x8 ja että se on myös dokumentoitu.
 	Huom: 8x8-koko on nyt eksplisiittisesti dokumentoitu `lib-gfx.asm`:ssa, `docs/project_structure.md`:ssa ja `docs/misc/gfx_optimizations.md`:ssa.
-
-
-### Muut tehtävät
 - [X] Paranna asm-kirjastojen, kuten lib-disk.asm ja lib-screen.asm nimeämiskäytäntöä siten, siten että kirjastot eivät mene helposti ristiin varsinaisten .asm-ohjelmien kanssa. Nyt esimerkiksi code/asm/demo/lib_gfx.asm ja code/asm/lib/lib-gfx.asm voivat aiheuttaa sekaannusta. Ehdota, dokumentoi ja toteuta uusi nimeämiskäytäntö, joka selkeyttää kirjastojen ja ohjelmien erottelua.

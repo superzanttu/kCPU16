@@ -395,11 +395,13 @@ _drlb_done:
 
 _pick_random_pacman_target:
         CALL  _get_sprite_origin_bounds
+        CPY   R8, R2                  ; max x origin
+        CPY   R9, R3                  ; max y origin
 _prpt_retry:
-        CPY   R0, R2
+        CPY   R0, R8
         CALL  _rand_range
         CPY   R6, R0
-        CPY   R0, R3
+        CPY   R0, R9
         CALL  _rand_range
         CPY   R7, R0
 
@@ -410,9 +412,9 @@ _prpt_retry:
         CMP   R7, R0
         JNZ   _prpt_store
         READ  R0, 0
-        CMP   R2, R0
+        CMP   R8, R0
         JNZ   _prpt_retry
-        CMP   R3, R0
+        CMP   R9, R0
         JNZ   _prpt_retry
 _prpt_store:
         STORE [pac_target_x], R6
@@ -421,10 +423,12 @@ _prpt_store:
 
 _seed_pacman_motion:
         CALL  _get_sprite_origin_bounds
-        CPY   R0, R2
+        CPY   R8, R2                  ; max x origin
+        CPY   R9, R3                  ; max y origin
+        CPY   R0, R8
         CALL  _rand_range
         STORE [pac_x], R0
-        CPY   R0, R3
+        CPY   R0, R9
         CALL  _rand_range
         STORE [pac_y], R0
         CALL  _pick_random_pacman_target
@@ -522,18 +526,22 @@ _step_ghost_towards_pacman:
         PUSH  R5
         PUSH  R6
         PUSH  R7
+        PUSH  R8
+        PUSH  R9
 
-        CPY   R6, R0
-        CPY   R7, R1
+        CPY   R8, R0
+        CPY   R9, R1
 
-        READ  R0, [R6]
-        READ  R1, [R7]
+        READ  R0, [R8]
+        READ  R1, [R9]
         READ  R2, [pac_x]
         READ  R3, [pac_y]
         CALL  gfx_step_towards_point_1px
-        STORE [R6], R0
-        STORE [R7], R1
+        STORE [R8], R0
+        STORE [R9], R1
 
+        POP   R9
+        POP   R8
         POP   R7
         POP   R6
         POP   R5
