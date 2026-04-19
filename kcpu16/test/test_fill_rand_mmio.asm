@@ -5,8 +5,8 @@
 ; Oikea käyttäytyminen: kirjoitus siementää LFSR:n (ei kirjoita suoraan RAM:iin).
 ;
 ; Siemen 0xBEEF -> ensimmäinen RAND-luku:
-;   lsb = 1
-;   (0xBEEF >> 1) ^ 0xB400 = 0x5F77 ^ 0xB400 = 0xEB77
+;   LFSR-askel: (0xBEEF >> 1) ^ 0xB400 = 0xEB77
+;   Ulostulon sekoitus: 0xEB77 -> 0x8FDF
 ; =============================================================================
 
         .origin 0x0200
@@ -20,4 +20,4 @@
 
         HALT
 
-.expect_reg R3, 0xEB77
+.expect_reg R3, 0x8FDF

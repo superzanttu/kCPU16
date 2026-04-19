@@ -220,6 +220,80 @@ draw_done:
         CALL  gfx_flip
         RET
 
+; _chip8_sprite_xor_1bpp_64x32: XOR-piirto CHIP-8:n 64x32 framebufferiin
+; Sisään:  R0 = fb_base, R1 = x, R2 = y, R3 = sprite_ptr, R4 = rivikorkeus
+; Ulos:    R0 = collision (0/1)
+_chip8_sprite_xor_1bpp_64x32:
+        CPY   R12, R0                 ; fb base
+        READ  R10, 0x003F
+        AND   R1, R10
+        READ  R10, 0x001F
+        AND   R2, R10
+        READ  R0, 0                   ; collision = 0
+
+        READ  R9, 0                   ; row index
+_ch8s_row:
+        CMP   R9, R4
+        JGE   _ch8s_done
+
+        READ  R8, [R3]                ; sprite byte
+        READ  R11, 1
+        ADD   R3, R11
+
+        CPY   R7, R2
+        ADD   R7, R9
+        READ  R10, 0x001F
+        AND   R7, R10                 ; sy
+
+        READ  R6, 0                   ; bit index
+_ch8s_bit:
+        READ  R10, 8
+        CMP   R6, R10
+        JGE   _ch8s_next_row
+
+        READ  R10, 0x0080
+        SHR   R10, R6
+        CPY   R5, R8
+        AND   R5, R10
+        READ  R10, 0
+        CMP   R5, R10
+        JZ    _ch8s_inc_bit
+
+        CPY   R5, R1
+        ADD   R5, R6
+        READ  R10, 0x003F
+        AND   R5, R10                 ; sx
+
+        CPY   R10, R7
+        READ  R11, 6
+        SHL   R10, R11
+        ADD   R10, R5
+        ADD   R10, R12                ; addr
+
+        READ  R11, [R10]
+        READ  R5, 1
+        CMP   R11, R5
+        JNZ   _ch8s_xor
+        READ  R0, 1                   ; collision = 1
+
+_ch8s_xor:
+        READ  R5, 1
+        XOR   R11, R5
+        STORE [R10], R11
+
+_ch8s_inc_bit:
+        READ  R10, 1
+        ADD   R6, R10
+        JUMP  _ch8s_bit
+
+_ch8s_next_row:
+        READ  R10, 1
+        ADD   R9, R10
+        JUMP  _ch8s_row
+
+_ch8s_done:
+        RET
+
 ; fb_scroll_down: scrollaa framebufferia alas R12 rivia
 fb_scroll_down:
         READ  R0, 0
@@ -778,7 +852,7 @@ op_dxyn:
         CPY   R2, R5
         READ  R3, chip8_sprite_tmp
         CPY   R4, R12
-        CALL  gfx_sprite_xor_1bpp_64x32
+        CALL  _chip8_sprite_xor_1bpp_64x32
         CALL  set_vf
 
 opd_done:

@@ -279,6 +279,29 @@ GFX_FLIP_REG:llä ole vaikutusta.
 | Kirjoitus  | Mikä tahansa nollasta poikkeava arvo käynnistää flipin |
 | Lukeminen  | Aina 0 flipin jälkeen (TUI nollaa automaattisesti)     |
 
+## GFX_SCROLL_CMD_REG — näkyvän kehyksen scroll-komento
+
+Kirjoitus osoitteeseen `0xFF82` (`GFX_SCROLL_CMD_REG`) käskee emulaattoria
+kopioimaan viimeksi flippatun näkyvän grafiikkakehyksen takaisin VRAMiin
+siirrettynä. Tämä mahdollistaa sen, että `lib-gfx.asm`:n scroll-rutiinit
+skrollaavat nimenomaan näytössä näkyvää kuvaa, eivät keskeneräistä
+taustapuskuriin jo piirrettyä sisältöä.
+
+Komennon muoto on:
+
+```text
+(suunta << 8) | amount
+```
+
+Missä `amount` on pikselisiirto 1..15 ja suunnat ovat:
+
+| Suunta | Arvo |
+| ------ | ---- |
+| Up     | 0    |
+| Down   | 1    |
+| Left   | 2    |
+| Right  | 3    |
+
 ## Toimintaperiaate
 
 ```
@@ -320,10 +343,11 @@ STORE R0, GFX_FLIP_REG  ; käynnistää flipin
 
 ## Muistiosoitteet
 
-| Symboli        | Osoite   | Kuvaus                                                               |
-| -------------- | -------- | -------------------------------------------------------------------- |
-| `GFX_MODE_REG` | `0xFF80` | Grafiikkatila: 0=A (teksti), 1=B (puoliblokkipikseli), 2=C (braille) |
-| `GFX_FLIP_REG` | `0xFF81` | Kirjoita ≠ 0 → flip; luetaan aina 0 flipin jälkeen                   |
+| Symboli              | Osoite   | Kuvaus                                                                       |
+| -------------------- | -------- | ---------------------------------------------------------------------------- |
+| `GFX_MODE_REG`       | `0xFF80` | Grafiikkatila: 0=A (teksti), 1=B (puoliblokkipikseli), 2=C (braille)         |
+| `GFX_FLIP_REG`       | `0xFF81` | Kirjoita ≠ 0 → flip; luetaan aina 0 flipin jälkeen                           |
+| `GFX_SCROLL_CMD_REG` | `0xFF82` | Kirjoita `(suunta << 8) + amount` → kopioi näkyvä kehys VRAMiin skrollattuna |
 
 ---
 

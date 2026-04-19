@@ -117,9 +117,11 @@ KBD_KEY_CODE_MASK = 0x7F
 
 # =============================================================================
 # SATUNNAISLUKUGENERAATTORI-MMIO (RANDOM MMIO)
-# Osoite $0022: lukeminen palauttaa seuraavan 16-bittisen LFSR-arvon.
+# Osoite $0022: lukeminen palauttaa seuraavan 16-bittisen pseudosatunnaisluvun.
 # Kirjoittaminen asettaa siemenen (arvo 0 nollataan arvoon 1).
-# Toteutus: 16-bittinen Galois LFSR, polynomi x^16+x^15+x^13+x^4+1 (0xB400).
+# Toteutus: 16-bittinen Galois LFSR, jonka ulostulo sekoitetaan xorshift-
+# permutaatiolla ennen palautusta. Sisainen polynomi on
+# x^16+x^15+x^13+x^4+1 (0xB400).
 # =============================================================================
 
 RAND_MMIO = 0x0022  # Lue: seuraava pseudosatunnaisluku; kirjoitus: aseta siemen
@@ -201,6 +203,10 @@ GFX_MODE_C = 2  # Tila C — braille          (160 × 96 pikseliä)
 # näytön taustapuolelle piirretyt muutokset kopioidaan etupuskuriin ja
 # päivitetään näytölle kerralla. Rekisteri nollataan automaattisesti flipin jälkeen.
 GFX_FLIP_REG = 0xFF81  # Kaksoisbufferoinnin flip-rekisteri (kirjoitus = flip)
+# Näkyvän etupuskurin scroll-komentorekisteri.
+# Kirjoita arvo (suunta << 8) | amount, jolloin näkyvä etupuskuri kopioidaan
+# VRAMiin siirrettynä ja paljastuneet pikselit nollataan.
+GFX_SCROLL_CMD_REG = 0xFF82
 # Kernel-pino: Kayttojarjestelman sisainen pino keskeytyksille yms.
 # Sijaitsee muistin lopussa, VRAM:n yläpuolella
 KERNEL_STACK_START = 0xFF80  # Kernelin pino alkaa VRAM:n jälkeen
@@ -355,12 +361,13 @@ ARCH_SYMBOLS: dict[str, int] = {
     "SR_FLAG_V": SR_FLAG_V,  # Overflow-lippu (3)
     "SR_FLAG_I": SR_FLAG_I,  # Interrupt Enable -lippu (4)
     "SR_FLAG_P": SR_FLAG_P,  # Privilege-lippu (5)
-    # ---- Grafiikkarekisterit ($FF80-$FF81) ----------------------------
+    # ---- Grafiikkarekisterit ($FF80-$FF82) ----------------------------
     "GFX_MODE_REG": GFX_MODE_REG,  # Grafiikkatila-rekisteri (0xFF80)
     "GFX_MODE_A": GFX_MODE_A,  # Tekstitila (0)
     "GFX_MODE_B": GFX_MODE_B,  # Puoliblokkipikseli (1)
     "GFX_MODE_C": GFX_MODE_C,  # Braille (2)
     "GFX_FLIP_REG": GFX_FLIP_REG,  # Kaksoisbufferoinnin flip-rekisteri (0xFF81)
+    "GFX_SCROLL_CMD_REG": GFX_SCROLL_CMD_REG,  # Visible->VRAM scroll (0xFF82)
     # ---- Suoritustilat -----------------------------------------------
     "MODE_KERNEL": MODE_KERNEL,  # Kernel-tila (1)
     "MODE_USER": MODE_USER,  # User-tila (0)

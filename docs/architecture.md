@@ -566,7 +566,7 @@ Käytetään CMP-käskyn jälkeen. Etumerkillinen vertailu perustuu N- ja V-lipp
 ## 8.3 Satunnaislukugeneraattori (RAND MMIO)
 
 - Osoite $0022 (`RAND_MMIO`): lukeminen palauttaa seuraavan 16-bittisen pseudosatunnaisluvun
-- Toteutus: 16-bittinen Galois LFSR, polynomi 0xB400, jakso 65 535
+- Toteutus: 16-bittinen Galois LFSR (polynomi 0xB400, jakso 65 535), jonka ulostulo sekoitetaan xorshift-permutaatiolla ennen palautusta
 - Kirjoittaminen asettaa siemenen (0 korvautuu arvolla 1 automaattisesti)
 - Sallittu sekä Kernel- että User-tilassa (READ reg, [RAND_MMIO])
 

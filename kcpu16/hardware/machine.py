@@ -103,6 +103,7 @@ class KCPU16Machine:
         suoritus, juuri ennen kuin ohjelman seuraava käsky suoritetaan.
         Tämä takaa että VRAMissa on täydellinen kehys ilman repeytymiä.
         """
+        self.screen.capture_front_vram(self.memory)
         rendered = self.screen.render_auto(self.memory)
         self.screen.set_front_buffer(rendered)
 

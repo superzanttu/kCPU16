@@ -66,17 +66,17 @@ Käytössä bitit 0–5:
 
 ## 4. Muistikartta
 
-| Alue | Tarkoitus |
-|---|---|
-| `0x0000–0x000F` | Keskeytysvektorit |
+| Alue            | Tarkoitus                        |
+| --------------- | -------------------------------- |
+| `0x0000–0x000F` | Keskeytysvektorit                |
 | `0x0010–0x001F` | Kellon MMIO + uptime + CTMR-väli |
-| `0x0020–0x0021` | Näppäimistö MMIO |
-| `0x0022` | Satunnaisluku MMIO |
-| `0x0023–0x00FF` | OS-varattu alue |
-| `0x0100–0x01FF` | Bootloader RAM-alue |
-| `0x0200–0xF7FF` | Yleinen RAM |
-| `0xF800–0xFF7F` | Video RAM (80×24 = 1920 sanaa) |
-| `0xFF80–0xFFFF` | Kernel-pino |
+| `0x0020–0x0021` | Näppäimistö MMIO                 |
+| `0x0022`        | Satunnaisluku MMIO               |
+| `0x0023–0x00FF` | OS-varattu alue                  |
+| `0x0100–0x01FF` | Bootloader RAM-alue              |
+| `0x0200–0xF7FF` | Yleinen RAM                      |
+| `0xF800–0xFF7F` | Video RAM (80×24 = 1920 sanaa)   |
+| `0xFF80–0xFFFF` | Kernel-pino                      |
 
 ---
 
@@ -105,7 +105,7 @@ Jokainen painallus/vapautus voi laukaista **INT 6** (jos I=1).
 - `RAND_MMIO`:
   - luku: seuraava 16-bittinen pseudosatunnaisluku
   - kirjoitus: aseta siemen
-- Toteutus: 16-bittinen Galois LFSR (maski `0xB400`); nollasiemen vältetään, koska nollatila ei kuulu jaksoon (käytännössä 0 korvataan arvolla 1)
+- Toteutus: 16-bittinen Galois LFSR (maski `0xB400`), jonka ulostulo sekoitetaan xorshift-permutaatiolla; nollasiemen vältetään, koska nollatila ei kuulu jaksoon (käytännössä 0 korvataan arvolla 1)
 
 ### 5.4 Video RAM (`0xF800–0xFF7F`)
 
