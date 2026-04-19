@@ -230,11 +230,16 @@ Tehtävät on merkitty hakasulkeilla, ja niiden tilaa voidaan päivittää seura
 - [X] Varmista että state-komento ei vaikuta suoritustilan ollessa MAX. MAX-tilassa simulaation tulee toimia mahdollisimman nopeasti.
 - [X] Varmista että state-komento pysäyttää suorituksen odotetus. Tämän hetkinen toteutus ei pysäytä suoritusta.
 - [X] statue-komento tulostaa vain tekstin "STATE 0: STATE 0", eikä eikä .state_test-direktiivillä määriteltyä tekstiä. Näin tapahtuu ainakin lib_gfx.asm:ssa.
-- [ ] Lisää lib-gfx.asm:n toiminto jolla voi täyttää mahdollisimman nopeasti koko näytön nollilla tai ykkösillä. Päivitä demo_lib_gfx.asm:n demovaihe 1 käyttämääm uutta toimintoa.
-- [ ] Analusoi lib-gfx.asm:n nykyiset grafiikkaoperaatiot ja optimoi ne mahdollisimman nopeiksi. Vertaile eri toteutustapoja ja valitse paras suorituskyvyn ja monipuolisuuden kannalta. Dokumentoi analyysi ja optimoinnit.
-- [ ] Lisää assemlyn jälkeiseen tulosteeseen tieto käytetyn ja vapaana olevan muistin määrästä. Huomioi varatut muistialueet, kuten stack ja MMIO. Tämä auttaa ohjelmoijia ymmärtämään muistinkäyttöä ja optimoimaan ohjelmiaan.
-- [ ] Lisää lib-gfx.asm:n spritejen törmäysrutiiniin automaattinen boudingbox laskenta, jos käytäjän antama boundinbox on kooltaa 0. T
-- [ ] Varmista että lib-gfx.asm:n tukema spriten koko on 8x8 ja että se on myös dokumentoitu.
+- [X] Lisää lib-gfx.asm:n toiminto jolla voi täyttää mahdollisimman nopeasti koko näytön nollilla tai ykkösillä. Päivitä demo_lib_gfx.asm:n demovaihe 1 käyttämääm uutta toimintoa.
+	Huom: toteutettu `gfx_fill_screen(R0=0/1)` ja demo käyttää sitä nyt yhteisessä kehysalustuksessa sekä vaiheen 1 alussa.
+- [X] Analusoi lib-gfx.asm:n nykyiset grafiikkaoperaatiot ja optimoi ne mahdollisimman nopeiksi. Vertaile eri toteutustapoja ja valitse paras suorituskyvyn ja monipuolisuuden kannalta. Dokumentoi analyysi ja optimoinnit.
+	Huom: analyysi ja valinnat dokumentoitu tiedostoon `docs/misc/gfx_optimizations.md`; nopea koko ruudun fill erotettu omaksi hot-path-rutiinikseen.
+- [X] Lisää assemlyn jälkeiseen tulosteeseen tieto käytetyn ja vapaana olevan muistin määrästä. Huomioi varatut muistialueet, kuten stack ja MMIO. Tämä auttaa ohjelmoijia ymmärtämään muistinkäyttöä ja optimoimaan ohjelmiaan.
+	Huom: `python main.py --asm ...` tulostaa nyt listauksen lopussa muistiraportin, joka erottaa ohjelma-RAM:n ja varatut alueet.
+- [X] Lisää lib-gfx.asm:n spritejen törmäysrutiiniin automaattinen boudingbox laskenta, jos käytäjän antama boundinbox on kooltaa 0.
+	Huom: nykyinen sprite-API on kiinteä 8x8-malli, joten törmäysboksi johdetaan aina automaattisesti vakiosta `GFX_SPRITE8_SIZE`; erillistä bbox-parametria ei enää tarvita.
+- [X] Varmista että lib-gfx.asm:n tukema spriten koko on 8x8 ja että se on myös dokumentoitu.
+	Huom: 8x8-koko on nyt eksplisiittisesti dokumentoitu `lib-gfx.asm`:ssa, `docs/project_structure.md`:ssa ja `docs/misc/gfx_optimizations.md`:ssa.
 
 
 ### Muut tehtävät

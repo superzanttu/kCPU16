@@ -11,6 +11,7 @@
 ;   Tila C — Braille:            160 × 96 pikseliä  ($FF80 = 2)
 ;
 ; TOIMINNOT:
+;   gfx_fill_screen   — Täytä koko näyttö pikseliarvolla 0/1 mahdollisimman nopeasti
 ;   gfx_clear         — Tyhjennä näyttö (nollaa koko VRAM)
 ;   gfx_flip          — Flipaa kaksoisbufferointi (triggeroi näytönpäivitys)
 ;   gfx_set_draw_mode — Aseta piirtotila (R0 = piirtotila)
@@ -20,18 +21,19 @@
 ;   gfx_scroll_down   — Scrollaa kuvaa alaspäin (R0 = 1..15 px)
 ;   gfx_scroll_left   — Scrollaa kuvaa vasemmalle (R0 = 1..15 px)
 ;   gfx_scroll_right  — Scrollaa kuvaa oikealle (R0 = 1..15 px)
+;   gfx_step_towards_point_1px — Siirrä pistetta yksi pikseli/frame kohti kohdetta
 ;   gfx_pixel         — Piirra pikseli (R0=x, R1=y)
 ;   gfx_line          — Piirrä viiva (R0=x0, R1=y0, R2=x1, R3=y1)
 ;   gfx_draw_char_big — Piirrä yksi 6x8 BIG-merkki tavuarvosta 0x00..0xFF
 ;   gfx_draw_text_big — Piirrä 6x8 BIG-teksti (0x01..0xFF; 0x00 paattaa merkkijonon)
-;   gfx_sprite8_reset_all — Tyhjennä kaikki 16 sprite-slotia
+;   gfx_sprite8_reset_all — Tyhjennä kaikki 16 kiintean 8x8 sprite-slotia
 ;   gfx_sprite8_set_bitmap — Aseta 8x8 spritebitmapin osoite
-;   gfx_sprite8_set_pos — Aseta spriten sijainti [x, y]
+;   gfx_sprite8_set_pos — Aseta 8x8 spriten sijainti [x, y]
 ;   gfx_sprite8_set_draw_mode — Aseta spritepiirtotapa 0/1/XOR
 ;   gfx_sprite8_set_visible — Aseta spriten näkyvyys 0/1
-;   gfx_sprite8_set_collision_check — Aseta törmäystarkistus 0/1
-;   gfx_sprite8_get_collision — Lue viimeisin bounding box -törmäystulos
-;   gfx_sprite8_update_collisions — Päivitä spritejen 8x8 bounding box -törmäykset
+;   gfx_sprite8_set_collision_check — Aseta kiintean 8x8 bounding box -törmäystarkistus 0/1
+;   gfx_sprite8_get_collision — Lue viimeisin automaattinen 8x8 bounding box -törmäystulos
+;   gfx_sprite8_update_collisions — Päivitä spritejen automaattiset 8x8 bounding box -törmäykset
 ;
 ; PIIRTOTILAT (gfx_set_draw_mode:n R0-arvo):
 ;   GFX_DRAW_XOR (0) — XOR-tila: vaihtaa pikselin tilaa (oletus)
@@ -39,12 +41,14 @@
 ;   GFX_DRAW_BG  (2) — Taustaväri: nollaa pikselin
 ;
 ; REKISTERIKÄYTTÖ (clobbers):
-;   gfx_clear:         R0–R2  (käyttää FILL-käskyä, ei enää R3:a)
+;   gfx_fill_screen:   R0–R3
+;   gfx_clear:         R0–R3
 ;   gfx_flip:          R0
 ;   gfx_set_draw_mode: —
 ;   gfx_rect:          R0–R15
 ;   gfx_circle:        R0–R15
 ;   gfx_scroll_*:      R0–R12
+;   gfx_step_towards_point_1px: R0–R7
 ;   gfx_pixel:         R0–R7
 ;   gfx_line:          R0–R12  (kutsuu gfx_pixel sisäisesti)
 ;
@@ -107,7 +111,7 @@
 .const GFX_DRAW_FG,  1     ; Etuväri:   asettaa pikselin päälle
 .const GFX_DRAW_BG,  2     ; Taustaväri: nollaa pikselin
 .const GFX_SPRITE8_COUNT, 16
-.const GFX_SPRITE8_SIZE, 8
+.const GFX_SPRITE8_SIZE, 8   ; kiintea spritekoko ja collision-bboxin sivun pituus
 .const GFX_SPRITE_DRAW_0,   0
 .const GFX_SPRITE_DRAW_1,   1
 .const GFX_SPRITE_DRAW_XOR, 2
@@ -246,30 +250,150 @@ gfx_scroll_right:
         JUMP  _gfx_scroll_visible_common
 
 ; =============================================================================
+; gfx_fill_screen — Täytä koko grafiikkanäyttö pikseliarvolla 0/1
+;
+; Sisään:  R0 = 0 -> kaikki pikselit pois, muu -> kaikki pikselit paalle
+; Ulos:    —
+; Clobbers: R0–R3
+;
+; Toteutus valitsee aktiivisen grafiikkatilan mukaisen VRAM-täytesanan ja
+; käyttää yhtä FILL-käskyä koko ruudun yli.
+;   Tila B: 0x0000 / 0x0003
+;   Tila C: 0x0000 / 0x00FF
+; Tekstitila A laukaisee INT INT_BREAKPOINT kuten muutkin gfx-rutiinit.
+; =============================================================================
+
+gfx_fill_screen:
+        READ  R1, [GFX_MODE_REG]
+        READ  R2, 0
+        CMP   R1, R2
+        JNZ   _gfx_fill_screen_mode_ok
+        INT   INT_BREAKPOINT
+_gfx_fill_screen_mode_ok:
+        READ  R2, 0
+        CMP   R0, R2
+        JZ    _gfx_fill_screen_zero
+
+        READ  R2, GFX_MODE_B
+        CMP   R1, R2
+        JZ    _gfx_fill_screen_mode_b
+        READ  R2, 0x00FF
+        JUMP  _gfx_fill_screen_do
+_gfx_fill_screen_mode_b:
+        READ  R2, 0x0003
+        JUMP  _gfx_fill_screen_do
+
+_gfx_fill_screen_zero:
+        READ  R2, 0
+
+_gfx_fill_screen_do:
+        READ  R0, VRAM_START
+        READ  R1, VRAM_END
+        FILL  R0, R1, R2
+        RET
+
+; =============================================================================
 ; gfx_clear — Tyhjennä grafiikkanäyttö
 ;
 ; Sisään:  —
 ; Ulos:    —
-; Clobbers: R0–R2
+; Clobbers: R0–R3
 ;
-; Nollaa kaikki 1920 VRAM-sanaa ($F800–$FF7F) FILL-käskyllä.
+; Nollaa kaikki 1920 VRAM-sanaa ($F800–$FF7F) kutsumalla gfx_fill_screen.
 ; Huom: toiminto ohittaa gfx_draw_mode — tyhjentää aina taustaan.
 ; Laukaisee INT INT_BREAKPOINT (INT 3) jos näyttötila on A ($FF80 = 0).
 ; =============================================================================
 
 gfx_clear:
-        ; --- Tarkista näyttötila ---
-        READ  R0, [GFX_MODE_REG]      ; R0 = nykyinen tila
-        READ  R1, 0
-        CMP   R0, R1
-        JNZ   _gfx_clear_ok
-        INT   INT_BREAKPOINT          ; Virhe: käyttö tekstitilassa A
-_gfx_clear_ok:
-        ; --- Nollaa koko VRAM FILL-käskyllä ---
-        READ  R0, VRAM_START          ; R0 = alkuosoite ($F800)
-        READ  R1, VRAM_END            ; R1 = loppuosoite ($FF7F, inklusiivinen)
-        READ  R2, 0                   ; R2 = täyttöarvo (nolla)
-        FILL  R0, R1, R2              ; täytä [VRAM_START..VRAM_END] nollilla
+        READ  R0, 0
+        JUMP  gfx_fill_screen
+
+; =============================================================================
+; gfx_step_towards_point_1px — Siirrä pistettä yksi pikseli kohti kohdetta
+;
+; Sisään:  R0 = x, R1 = y, R2 = target_x, R3 = target_y
+; Ulos:    R0 = uusi x, R1 = uusi y, R2 = 1 jos kohde saavutettu, muuten 0
+; Clobbers: R0–R7
+;
+; Liike on korkeintaan yksi pikseli per frame. Jos sekä x- että y-etäisyys ovat
+; ei-nollia, askel otetaan suuremman etäisyyden akselilla. Tasatilanteessa x
+; priorisoidaan. Tätä voi käyttää spritejen deterministiseen 1 px/frame
+; liikkeeseen ilman kahden akselin samanaikaista askelta.
+; =============================================================================
+
+gfx_step_towards_point_1px:
+        CPY   R4, R0                  ; x
+        CPY   R5, R1                  ; y
+        CPY   R6, R2                  ; target_x
+        CPY   R7, R3                  ; target_y
+
+        CMP   R4, R6
+        JNZ   _gstp_need_step
+        CMP   R5, R7
+        JNZ   _gstp_need_step
+        CPY   R0, R4
+        CPY   R1, R5
+        READ  R2, 1
+        RET
+
+_gstp_need_step:
+        CPY   R0, R6
+        SUB   R0, R4                  ; dx
+        CPY   R1, R7
+        SUB   R1, R5                  ; dy
+
+        CPY   R2, R0                  ; abs(dx)
+        READ  R3, 0
+        CMP   R2, R3
+        JGE   _gstp_dx_abs_ok
+        NOT   R2
+        READ  R3, 1
+        ADD   R2, R3
+_gstp_dx_abs_ok:
+        CPY   R3, R1                  ; abs(dy)
+        READ  R0, 0
+        CMP   R3, R0
+        JGE   _gstp_dy_abs_ok
+        NOT   R3
+        READ  R0, 1
+        ADD   R3, R0
+_gstp_dy_abs_ok:
+        CMP   R2, R3
+        JLT   _gstp_step_y
+        CMP   R4, R6
+        JNZ   _gstp_step_x
+
+_gstp_step_y:
+        CMP   R5, R7
+        JGT   _gstp_step_y_dec
+        READ  R0, 1
+        ADD   R5, R0
+        JUMP  _gstp_finish
+_gstp_step_y_dec:
+        READ  R0, 1
+        SUB   R5, R0
+        JUMP  _gstp_finish
+
+_gstp_step_x:
+        CMP   R4, R6
+        JGT   _gstp_step_x_dec
+        READ  R0, 1
+        ADD   R4, R0
+        JUMP  _gstp_finish
+_gstp_step_x_dec:
+        READ  R0, 1
+        SUB   R4, R0
+
+_gstp_finish:
+        CPY   R0, R4
+        CPY   R1, R5
+        READ  R2, 0
+        CMP   R4, R6
+        JNZ   _gstp_done
+        CMP   R5, R7
+        JNZ   _gstp_done
+        READ  R2, 1
+_gstp_done:
         RET
 
 ; =============================================================================

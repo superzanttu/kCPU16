@@ -8,6 +8,11 @@ Muistialueiden massaoperaatiot ovat käytettävissä myös assemblerissa:
 - `FILL rStart, rEnd, rValue` täyttää alueen `[rStart..rEnd]`.
 - `COPY rStart, rEnd, rDst` kopioi alueen `[rStart..rEnd]` kohteeseen `rDst` (myös päällekkäisillä alueilla turvallisesti).
 
+CLI:n listausmoodi näyttää myös muistiraportin:
+- `python main.py --asm ohjelma.asm` tulostaa konekielisen listauksen segmentti kerrallaan.
+- Listauksen lopussa näytetään emittoitujen sanojen määrä sekä paljonko yleiskäyttöisestä ohjelma-RAM:sta (`$0200-$F7FF`) on käytetty ja paljonko sitä on vapaana.
+- Raportti erottaa myös varatuille alueille sijoitetut sanat, kuten boot-alueen, VRAM:n sekä kernel stack / ylä-MMIO -alueen.
+
 ---
 
 # 1. Yleismuoto

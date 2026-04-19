@@ -84,6 +84,10 @@ pac_x:
         .db 8
 pac_y:
         .db 8
+pac_target_x:
+        .db 8
+pac_target_y:
+        .db 8
 ghost0_x:
         .db 0
 ghost0_y:
@@ -135,7 +139,8 @@ _set_mode_only:
 
 _draw_common_mode:
         CALL  _set_mode_only
-        CALL  gfx_clear
+        READ  R0, 0
+        CALL  gfx_fill_screen
         RET
 
 _get_demo_bounds:
@@ -149,6 +154,15 @@ _get_demo_bounds:
 _gdb_mode_c:
         READ  R2, 159
         READ  R3, 95
+        RET
+
+_get_sprite_origin_bounds:
+        CALL  _get_demo_bounds
+        READ  R4, SPRITE_SIZE_8
+        READ  R5, 1
+        SUB   R4, R5                  ; sprite_size - 1
+        SUB   R2, R4                  ; max x origin
+        SUB   R3, R4                  ; max y origin
         RET
 
 _set_mode_and_base_phase:
@@ -379,19 +393,64 @@ _drlb_loop:
 _drlb_done:
         RET
 
-_update_pacman_random:
-        CALL  _get_demo_bounds
-        READ  R4, SPRITE_SIZE_8
-        SUB   R2, R4
-        SUB   R3, R4
-        CPY   R6, R2                  ; xmax-8
-        CPY   R7, R3                  ; ymax-8
-        CPY   R0, R6
+_pick_random_pacman_target:
+        CALL  _get_sprite_origin_bounds
+_prpt_retry:
+        CPY   R0, R2
+        CALL  _rand_range
+        CPY   R6, R0
+        CPY   R0, R3
+        CALL  _rand_range
+        CPY   R7, R0
+
+        READ  R0, [pac_x]
+        CMP   R6, R0
+        JNZ   _prpt_store
+        READ  R0, [pac_y]
+        CMP   R7, R0
+        JNZ   _prpt_store
+        READ  R0, 0
+        CMP   R2, R0
+        JNZ   _prpt_retry
+        CMP   R3, R0
+        JNZ   _prpt_retry
+_prpt_store:
+        STORE [pac_target_x], R6
+        STORE [pac_target_y], R7
+        RET
+
+_seed_pacman_motion:
+        CALL  _get_sprite_origin_bounds
+        CPY   R0, R2
         CALL  _rand_range
         STORE [pac_x], R0
-        CPY   R0, R7
+        CPY   R0, R3
         CALL  _rand_range
         STORE [pac_y], R0
+        CALL  _pick_random_pacman_target
+        RET
+
+_step_pacman_motion:
+        READ  R0, [pac_x]
+        READ  R1, [pac_y]
+        READ  R2, [pac_target_x]
+        READ  R3, [pac_target_y]
+        CMP   R0, R2
+        JNZ   _spm_have_target
+        CMP   R1, R3
+        JNZ   _spm_have_target
+        CALL  _pick_random_pacman_target
+        READ  R2, [pac_target_x]
+        READ  R3, [pac_target_y]
+_spm_have_target:
+        CALL  gfx_step_towards_point_1px
+        STORE [pac_x], R0
+        STORE [pac_y], R1
+        READ  R3, 1
+        CMP   R2, R3
+        JNZ   _spm_done
+        CALL  _pick_random_pacman_target
+_spm_done:
         RET
 
 _emit_state_for_base_phase:
@@ -462,39 +521,20 @@ _step_ghost_towards_pacman:
         PUSH  R4
         PUSH  R5
         PUSH  R6
+        PUSH  R7
 
         CPY   R6, R0
-        CPY   R5, R1
+        CPY   R7, R1
 
-        READ  R2, [R6]                ; gx
-        READ  R3, [R5]                ; gy
-        READ  R4, [pac_x]
-        CMP   R2, R4
-        JZ    _sgtp_y
-        JGT   _sgtp_x_dec
-        READ  R0, 1
-        ADD   R2, R0
-        JUMP  _sgtp_y
-_sgtp_x_dec:
-        READ  R0, 1
-        SUB   R2, R0
+        READ  R0, [R6]
+        READ  R1, [R7]
+        READ  R2, [pac_x]
+        READ  R3, [pac_y]
+        CALL  gfx_step_towards_point_1px
+        STORE [R6], R0
+        STORE [R7], R1
 
-_sgtp_y:
-        READ  R4, [pac_y]
-        CMP   R3, R4
-        JZ    _sgtp_store
-        JGT   _sgtp_y_dec
-        READ  R0, 1
-        ADD   R3, R0
-        JUMP  _sgtp_store
-_sgtp_y_dec:
-        READ  R0, 1
-        SUB   R3, R0
-
-_sgtp_store:
-        STORE [R6], R2
-        STORE [R5], R3
-
+        POP   R7
         POP   R6
         POP   R5
         POP   R4
@@ -552,37 +592,66 @@ _configure_sprite_slot:
 
 _reset_ghost_to_corner:
         ; Sisaan: R0=idx(0..3)
+        PUSH  R2
+        PUSH  R3
+        PUSH  R4
+        PUSH  R5
+        PUSH  R6
+
+        CPY   R6, R0
+        CALL  _get_sprite_origin_bounds
+        CPY   R4, R2                  ; max x origin
+        CPY   R5, R3                  ; max y origin
+
         READ  R1, 0
-        CMP   R0, R1
+        CMP   R6, R1
         JZ    _rgc0
         READ  R1, 1
-        CMP   R0, R1
+        CMP   R6, R1
         JZ    _rgc1
         READ  R1, 2
-        CMP   R0, R1
+        CMP   R6, R1
         JZ    _rgc2
         ; idx 3
-        READ  R1, 72
+        CPY   R1, R4
         STORE [ghost3_x], R1
-        READ  R1, 40
+        CPY   R1, R5
         STORE [ghost3_y], R1
-        RET
+        JUMP  _rgc_done
 _rgc0:
         READ  R1, 0
         STORE [ghost0_x], R1
         STORE [ghost0_y], R1
-        RET
+        JUMP  _rgc_done
 _rgc1:
-        READ  R1, 72
+        CPY   R1, R4
         STORE [ghost1_x], R1
         READ  R1, 0
         STORE [ghost1_y], R1
-        RET
+        JUMP  _rgc_done
 _rgc2:
         READ  R1, 0
         STORE [ghost2_x], R1
-        READ  R1, 40
+        CPY   R1, R5
         STORE [ghost2_y], R1
+_rgc_done:
+        POP   R6
+        POP   R5
+        POP   R4
+        POP   R3
+        POP   R2
+        RET
+
+_seed_collision_phase:
+        CALL  _seed_pacman_motion
+        READ  R0, 0
+        CALL  _reset_ghost_to_corner
+        READ  R0, 1
+        CALL  _reset_ghost_to_corner
+        READ  R0, 2
+        CALL  _reset_ghost_to_corner
+        READ  R0, 3
+        CALL  _reset_ghost_to_corner
         RET
 
 _emit_state_bc_0:
@@ -908,7 +977,14 @@ _dlaz_mode_c:
 
 demo_phase1_random_pixels:
         CALL  _set_mode_only
+        CALL  _begin_seeded_phase
+        READ  R1, 1
+        CMP   R0, R1
+        JNZ   _dp1_draw
+        READ  R0, 0
+        CALL  gfx_fill_screen
 
+_dp1_draw:
         READ  R0, GFX_DRAW_XOR
         CALL  gfx_set_draw_mode
         CALL  _draw_random_pixels_batch
@@ -1003,10 +1079,17 @@ _dp8_done:
         RET
 
 demo_phase9_pacman:
+        CALL  _begin_seeded_phase
+        READ  R1, 1
+        CMP   R0, R1
+        JNZ   _dp9_frame
+        CALL  _seed_pacman_motion
+
+_dp9_frame:
         CALL  _draw_common_mode
         CALL  gfx_sprite8_reset_all
 
-        CALL  _update_pacman_random
+        CALL  _step_pacman_motion
         READ  R0, 0
         READ  R1, [pac_x]
         READ  R2, [pac_y]
@@ -1019,15 +1102,22 @@ demo_phase9_pacman:
         RET
 
 demo_phase10_collision:
+        CALL  _begin_seeded_phase
+        READ  R1, 1
+        CMP   R0, R1
+        JNZ   _dp10_frame
+        CALL  _seed_collision_phase
+
+_dp10_frame:
         CALL  _draw_common_mode
         CALL  gfx_sprite8_reset_all
         READ  R0, GFX_DRAW_FG
         CALL  gfx_set_draw_mode
 
-        ; Pacman satunnaiseen kohtaan
-        CALL  _update_pacman_random
+        ; Pacman jatkaa kohti nykyista kohdettaan 1 px / frame
+        CALL  _step_pacman_motion
 
-        ; Liikuta haamuja kohti pacmania
+        ; Liikuta haamuja kohti pacmania 1 px / frame
         READ  R0, ghost0_x
         READ  R1, ghost0_y
         CALL  _step_ghost_towards_pacman

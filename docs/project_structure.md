@@ -169,14 +169,14 @@ Muut alihakemistot:
 Kaikki tiedostot `lib/`-hakemistossa ovat jaettuja kirjastoja. Niiden nimi
 noudattaa muotoa `lib-NIMI.asm` — siis `lib-`-etuliite ja väliviiva:
 
-| Tiedosto             | Kuvaus                                    |
-| -------------------- | ----------------------------------------- |
-| `lib-gfx.asm`        | Grafiikkatoiminnot (piirtäminen, flip)    |
-| `lib-screen.asm`     | Tekstiterminaali (print, input, scroll)   |
-| `lib-disk.asm`       | Levytoiminnot (format, create, read jne.) |
-| `lib-font_small.asm` | 4×5 ASCII-fontti (CHIP-8-yhteensopiva)    |
-| `lib-font_big.asm`   | Suuri segmenttinäyttöfontti               |
-| `lib-3dobjects.asm`  | 3D-objektidata ja apufunktiot             |
+| Tiedosto             | Kuvaus                                                                                |
+| -------------------- | ------------------------------------------------------------------------------------- |
+| `lib-gfx.asm`        | Grafiikkatoiminnot (piirtäminen, flip, koko ruudun fill, kiinteä 8x8 sprite-manageri) |
+| `lib-screen.asm`     | Tekstiterminaali (print, input, scroll)                                               |
+| `lib-disk.asm`       | Levytoiminnot (format, create, read jne.)                                             |
+| `lib-font_small.asm` | 4×5 ASCII-fontti (CHIP-8-yhteensopiva)                                                |
+| `lib-font_big.asm`   | Suuri segmenttinäyttöfontti                                                           |
+| `lib-3dobjects.asm`  | 3D-objektidata ja apufunktiot                                                         |
 
 **Säännöt kirjastoille:**
 - Etuliite on aina `lib-` (väliviiva, ei alaviiva).
