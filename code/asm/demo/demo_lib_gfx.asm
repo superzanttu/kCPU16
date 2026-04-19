@@ -13,7 +13,7 @@
 ;   3) Skrollaus oikealle (5 s)
 ;   4) Skrollaus vasemmalle (5 s)
 ;   5) Skrollaus ylos (5 s)
-;   6) Skrollaus alas (5 s)
+;   6) Kirjaimet A-Z (5 s)
 ;   7) Pienta tekstia (5 s)
 ;   8) Isoa tekstia (5 s)
 ;   9) Pacman sprite (10 s)
@@ -45,7 +45,7 @@ phase_ticks_table:
 .state_text 2, 0,  "B3: skrollaus oikealle"
 .state_text 3, 0,  "B4: skrollaus vasemmalle"
 .state_text 4, 0,  "B5: skrollaus ylos"
-.state_text 5, 0,  "B6: skrollaus alas"
+.state_text 5, 0,  "B6: kirjaimet A-Z"
 .state_text 6, 0,  "B7: pienta tekstia"
 .state_text 7, 0,  "B8: isoa tekstia"
 .state_text 8, 0,  "B9: pacman sprite"
@@ -55,7 +55,7 @@ phase_ticks_table:
 .state_text 12, 0, "C3: skrollaus oikealle"
 .state_text 13, 0, "C4: skrollaus vasemmalle"
 .state_text 14, 0, "C5: skrollaus ylos"
-.state_text 15, 0, "C6: skrollaus alas"
+.state_text 15, 0, "C6: kirjaimet A-Z"
 .state_text 16, 0, "C7: pienta tekstia"
 .state_text 17, 0, "C8: isoa tekstia"
 .state_text 18, 0, "C9: pacman sprite"
@@ -111,11 +111,19 @@ msg_col1:
         .dstr "C1"
 msg_col2:
         .dstr "C2"
+letters_az_b0:
+        .dstr "ABCDEFGHIJK"
+letters_az_b1:
+        .dstr "LMNOPQRSTUV"
+letters_az_b2:
+        .dstr "WXYZ"
+letters_az_c0:
+        .dstr "ABCDEFGHIJKLM"
+letters_az_c1:
+        .dstr "NOPQRSTUVWXYZ"
 
-sprite_pacman_open_8x8:
-        .db 0x3C, 0x7E, 0xEC, 0xF8, 0xF8, 0xEC, 0x7E, 0x3C
-sprite_pacman_closed_8x8:
-        .db 0x3C, 0x7E, 0xEE, 0xFF, 0xFF, 0xEE, 0x7E, 0x3C
+sprite_pacman_8x8:
+        .db 0x18, 0x3C, 0x7E, 0xF0, 0xF0, 0x7E, 0x3C, 0x1C
 sprite_ghost_8x8:
         .db 0x3C, 0x7E, 0xDB, 0xFF, 0xFF, 0xE7, 0xA5, 0x00
 
@@ -371,69 +379,6 @@ _drlb_loop:
 _drlb_done:
         RET
 
-_draw_sprite_8x8:
-        ; Sisaan: R0=x, R1=y, R2=sprite_ptr
-        PUSH  R3
-        PUSH  R4
-        PUSH  R5
-        PUSH  R6
-        PUSH  R7
-        PUSH  R8
-        PUSH  R9
-
-        CPY   R7, R0                  ; base x
-        CPY   R8, R1                  ; base y
-        CPY   R9, R2                  ; sprite ptr
-        READ  R6, 0                   ; row idx
-_dsp_row:
-        READ  R0, 8
-        CMP   R6, R0
-        JGE   _dsp_done
-
-        READ  R5, [R9]
-        READ  R0, 1
-        ADD   R9, R0
-
-        READ  R4, 0                   ; bit idx
-_dsp_bit:
-        READ  R0, 8
-        CMP   R4, R0
-        JGE   _dsp_next_row
-
-        READ  R0, 0x0080
-        SHR   R0, R4
-        CPY   R3, R5
-        AND   R3, R0
-        READ  R0, 0
-        CMP   R3, R0
-        JZ    _dsp_inc_bit
-
-        CPY   R0, R7
-        ADD   R0, R4
-        CPY   R1, R8
-        ADD   R1, R6
-        CALL  gfx_pixel
-
-_dsp_inc_bit:
-        READ  R0, 1
-        ADD   R4, R0
-        JUMP  _dsp_bit
-
-_dsp_next_row:
-        READ  R0, 1
-        ADD   R6, R0
-        JUMP  _dsp_row
-
-_dsp_done:
-        POP   R9
-        POP   R8
-        POP   R7
-        POP   R6
-        POP   R5
-        POP   R4
-        POP   R3
-        RET
-
 _update_pacman_random:
         CALL  _get_demo_bounds
         READ  R4, SPRITE_SIZE_8
@@ -557,31 +502,52 @@ _sgtp_store:
         POP   R2
         RET
 
-_check_sprite_overlap:
-        ; Sisaan: R0=ax, R1=ay, R2=bx, R3=by
-        ; Ulos:   R0=1 overlap, 0 ei overlap
-        READ  R4, SPRITE_SIZE_8
-        CPY   R5, R0
-        ADD   R5, R4                  ; ax+8
-        CPY   R6, R2
-        ADD   R6, R4                  ; bx+8
-        CMP   R5, R2
-        JLE   _cso_no
-        CMP   R6, R0
-        JLE   _cso_no
+_configure_sprite_slot:
+        ; Sisaan: R0=idx, R1=x, R2=y, R3=bitmap_ptr, R4=draw_mode, R5=visible, R6=collision_check
+        PUSH  R7
+        PUSH  R8
+        PUSH  R9
+        PUSH  R10
+        PUSH  R11
+        PUSH  R12
+        PUSH  R13
 
-        CPY   R5, R1
-        ADD   R5, R4                  ; ay+8
-        CPY   R6, R3
-        ADD   R6, R4                  ; by+8
-        CMP   R5, R3
-        JLE   _cso_no
-        CMP   R6, R1
-        JLE   _cso_no
-        READ  R0, 1
-        RET
-_cso_no:
-        READ  R0, 0
+        CPY   R7, R0
+        CPY   R8, R1
+        CPY   R9, R2
+        CPY   R10, R3
+        CPY   R11, R4
+        CPY   R12, R5
+        CPY   R13, R6
+
+        CPY   R0, R7
+        CPY   R1, R10
+        CALL  gfx_sprite8_set_bitmap
+
+        CPY   R0, R7
+        CPY   R1, R8
+        CPY   R2, R9
+        CALL  gfx_sprite8_set_pos
+
+        CPY   R0, R7
+        CPY   R1, R11
+        CALL  gfx_sprite8_set_draw_mode
+
+        CPY   R0, R7
+        CPY   R1, R12
+        CALL  gfx_sprite8_set_visible
+
+        CPY   R0, R7
+        CPY   R1, R13
+        CALL  gfx_sprite8_set_collision_check
+
+        POP   R13
+        POP   R12
+        POP   R11
+        POP   R10
+        POP   R9
+        POP   R8
+        POP   R7
         RET
 
 _reset_ghost_to_corner:
@@ -909,6 +875,37 @@ _dlgb_next_row:
 _dlgb_done:
         RET
 
+_draw_letters_az:
+        READ  R0, [current_mode]
+        READ  R1, GFX_MODE_C
+        CMP   R0, R1
+        JZ    _dlaz_mode_c
+
+        READ  R0, letters_az_b0
+        READ  R1, 1
+        READ  R2, 4
+        CALL  gfx_draw_text_big
+        READ  R0, letters_az_b1
+        READ  R1, 1
+        READ  R2, 16
+        CALL  gfx_draw_text_big
+        READ  R0, letters_az_b2
+        READ  R1, 26
+        READ  R2, 28
+        CALL  gfx_draw_text_big
+        RET
+
+_dlaz_mode_c:
+        READ  R0, letters_az_c0
+        READ  R1, 34
+        READ  R2, 24
+        CALL  gfx_draw_text_big
+        READ  R0, letters_az_c1
+        READ  R1, 34
+        READ  R2, 38
+        CALL  gfx_draw_text_big
+        RET
+
 demo_phase1_random_pixels:
         CALL  _set_mode_only
 
@@ -963,14 +960,16 @@ demo_phase5_scroll_up:
 _dp5_done:
         RET
 
-demo_phase6_scroll_down:
-        CALL  _set_mode_only
-        CALL  _init_scroll_phase_frame
+demo_phase6_letters_az:
+        CALL  _begin_seeded_phase
         READ  R1, 1
         CMP   R0, R1
-        JZ    _dp6_done
-        READ  R0, 1
-        CALL  gfx_scroll_down
+        JNZ   _dp6_done
+
+        CALL  _draw_common_mode
+        READ  R0, GFX_DRAW_FG
+        CALL  gfx_set_draw_mode
+        CALL  _draw_letters_az
         CALL  gfx_flip
 _dp6_done:
         RET
@@ -1005,30 +1004,23 @@ _dp8_done:
 
 demo_phase9_pacman:
         CALL  _draw_common_mode
-        READ  R0, GFX_DRAW_FG
-        CALL  gfx_set_draw_mode
-
-        READ  R0, [anim_step]
-        READ  R1, 1
-        AND   R0, R1
-        CMP   R0, R1
-        JZ    _dp9_closed
-        READ  R14, sprite_pacman_open_8x8
-        JUMP  _dp9_have_sprite
-_dp9_closed:
-        READ  R14, sprite_pacman_closed_8x8
-_dp9_have_sprite:
+        CALL  gfx_sprite8_reset_all
 
         CALL  _update_pacman_random
-        READ  R0, [pac_x]
-        READ  R1, [pac_y]
-        CPY   R2, R14
-        CALL  _draw_sprite_8x8
+        READ  R0, 0
+        READ  R1, [pac_x]
+        READ  R2, [pac_y]
+        READ  R3, sprite_pacman_8x8
+        READ  R4, GFX_SPRITE_DRAW_1
+        READ  R5, 1
+        READ  R6, 0
+        CALL  _configure_sprite_slot
         CALL  gfx_flip
         RET
 
 demo_phase10_collision:
         CALL  _draw_common_mode
+        CALL  gfx_sprite8_reset_all
         READ  R0, GFX_DRAW_FG
         CALL  gfx_set_draw_mode
 
@@ -1049,21 +1041,65 @@ demo_phase10_collision:
         READ  R1, ghost3_y
         CALL  _step_ghost_towards_pacman
 
-        ; Piirra pacman
+        ; Konfiguroi spritet nykyisille sijainneille
         READ  R0, [pac_x]
         READ  R1, [pac_y]
-        READ  R2, sprite_pacman_open_8x8
-        CALL  _draw_sprite_8x8
+        CPY   R8, R0
+        CPY   R9, R1
+
+        READ  R0, 0
+        CPY   R1, R8
+        CPY   R2, R9
+        READ  R3, sprite_pacman_8x8
+        READ  R4, GFX_SPRITE_DRAW_1
+        READ  R5, 1
+        READ  R6, 1
+        CALL  _configure_sprite_slot
+
+        READ  R0, 1
+        READ  R1, [ghost0_x]
+        READ  R2, [ghost0_y]
+        READ  R3, sprite_ghost_8x8
+        READ  R4, GFX_SPRITE_DRAW_1
+        READ  R5, 1
+        READ  R6, 1
+        CALL  _configure_sprite_slot
+
+        READ  R0, 2
+        READ  R1, [ghost1_x]
+        READ  R2, [ghost1_y]
+        READ  R3, sprite_ghost_8x8
+        READ  R4, GFX_SPRITE_DRAW_1
+        READ  R5, 1
+        READ  R6, 1
+        CALL  _configure_sprite_slot
+
+        READ  R0, 3
+        READ  R1, [ghost2_x]
+        READ  R2, [ghost2_y]
+        READ  R3, sprite_ghost_8x8
+        READ  R4, GFX_SPRITE_DRAW_1
+        READ  R5, 1
+        READ  R6, 1
+        CALL  _configure_sprite_slot
+
+        READ  R0, 4
+        READ  R1, [ghost3_x]
+        READ  R2, [ghost3_y]
+        READ  R3, sprite_ghost_8x8
+        READ  R4, GFX_SPRITE_DRAW_1
+        READ  R5, 1
+        READ  R6, 1
+        CALL  _configure_sprite_slot
+
+        CALL  gfx_sprite8_update_collisions
 
         ; Tormayslaskuri 0..2
         READ  R12, 0
 
         ; ghost0
-        READ  R0, [pac_x]
-        READ  R1, [pac_y]
-        READ  R2, [ghost0_x]
-        READ  R3, [ghost0_y]
-        CALL  _check_sprite_overlap
+        READ  R0, 1
+        CALL  gfx_sprite8_get_collision
         READ  R1, 0
         CMP   R0, R1
         JZ    _dp11_g0_draw
@@ -1072,17 +1108,9 @@ demo_phase10_collision:
         READ  R0, 1
         ADD   R12, R0
 _dp11_g0_draw:
-        READ  R0, [ghost0_x]
-        READ  R1, [ghost0_y]
-        READ  R2, sprite_ghost_8x8
-        CALL  _draw_sprite_8x8
-
         ; ghost1
-        READ  R0, [pac_x]
-        READ  R1, [pac_y]
-        READ  R2, [ghost1_x]
-        READ  R3, [ghost1_y]
-        CALL  _check_sprite_overlap
+        READ  R0, 2
+        CALL  gfx_sprite8_get_collision
         READ  R1, 0
         CMP   R0, R1
         JZ    _dp11_g1_draw
@@ -1091,17 +1119,9 @@ _dp11_g0_draw:
         READ  R0, 1
         ADD   R12, R0
 _dp11_g1_draw:
-        READ  R0, [ghost1_x]
-        READ  R1, [ghost1_y]
-        READ  R2, sprite_ghost_8x8
-        CALL  _draw_sprite_8x8
-
         ; ghost2
-        READ  R0, [pac_x]
-        READ  R1, [pac_y]
-        READ  R2, [ghost2_x]
-        READ  R3, [ghost2_y]
-        CALL  _check_sprite_overlap
+        READ  R0, 3
+        CALL  gfx_sprite8_get_collision
         READ  R1, 0
         CMP   R0, R1
         JZ    _dp11_g2_draw
@@ -1110,17 +1130,9 @@ _dp11_g1_draw:
         READ  R0, 1
         ADD   R12, R0
 _dp11_g2_draw:
-        READ  R0, [ghost2_x]
-        READ  R1, [ghost2_y]
-        READ  R2, sprite_ghost_8x8
-        CALL  _draw_sprite_8x8
-
         ; ghost3
-        READ  R0, [pac_x]
-        READ  R1, [pac_y]
-        READ  R2, [ghost3_x]
-        READ  R3, [ghost3_y]
-        CALL  _check_sprite_overlap
+        READ  R0, 4
+        CALL  gfx_sprite8_get_collision
         READ  R1, 0
         CMP   R0, R1
         JZ    _dp11_g3_draw
@@ -1129,10 +1141,42 @@ _dp11_g2_draw:
         READ  R0, 1
         ADD   R12, R0
 _dp11_g3_draw:
-        READ  R0, [ghost3_x]
-        READ  R1, [ghost3_y]
-        READ  R2, sprite_ghost_8x8
-        CALL  _draw_sprite_8x8
+        ; Päivitä mahdollisesti resetoidut haamut takaisin sprite-slotihin
+        READ  R0, 1
+        READ  R1, [ghost0_x]
+        READ  R2, [ghost0_y]
+        READ  R3, sprite_ghost_8x8
+        READ  R4, GFX_SPRITE_DRAW_1
+        READ  R5, 1
+        READ  R6, 1
+        CALL  _configure_sprite_slot
+
+        READ  R0, 2
+        READ  R1, [ghost1_x]
+        READ  R2, [ghost1_y]
+        READ  R3, sprite_ghost_8x8
+        READ  R4, GFX_SPRITE_DRAW_1
+        READ  R5, 1
+        READ  R6, 1
+        CALL  _configure_sprite_slot
+
+        READ  R0, 3
+        READ  R1, [ghost2_x]
+        READ  R2, [ghost2_y]
+        READ  R3, sprite_ghost_8x8
+        READ  R4, GFX_SPRITE_DRAW_1
+        READ  R5, 1
+        READ  R6, 1
+        CALL  _configure_sprite_slot
+
+        READ  R0, 4
+        READ  R1, [ghost3_x]
+        READ  R2, [ghost3_y]
+        READ  R3, sprite_ghost_8x8
+        READ  R4, GFX_SPRITE_DRAW_1
+        READ  R5, 1
+        READ  R6, 1
+        CALL  _configure_sprite_slot
 
         ; C0/C1/C2 status naytolle
         READ  R0, 2
@@ -1179,7 +1223,7 @@ _dispatch_base_phase:
         JZ    demo_phase5_scroll_up
         READ  R1, 5
         CMP   R0, R1
-        JZ    demo_phase6_scroll_down
+        JZ    demo_phase6_letters_az
         READ  R1, 6
         CMP   R0, R1
         JZ    demo_phase7_small_text
@@ -1208,6 +1252,7 @@ main:
 
         READ  R0, 1
         CALL  gfx_set_flip_enabled
+        CALL  gfx_sprite8_reset_all
 
 main_loop:
         CALL  _update_clock_state
@@ -1224,6 +1269,7 @@ main_loop:
         CALL  _set_mode_and_base_phase
         CPY   R5, R0
         CALL  _draw_common_mode
+        CALL  gfx_sprite8_reset_all
         CPY   R0, R5
         CALL  _emit_state_for_base_phase
 

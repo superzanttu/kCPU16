@@ -24,7 +24,14 @@
 ;   gfx_line          — Piirrä viiva (R0=x0, R1=y0, R2=x1, R3=y1)
 ;   gfx_draw_char_big — Piirrä yksi 6x8 BIG-merkki tavuarvosta 0x00..0xFF
 ;   gfx_draw_text_big — Piirrä 6x8 BIG-teksti (0x01..0xFF; 0x00 paattaa merkkijonon)
-;   gfx_sprite_xor_1bpp_64x32 — XOR-piirto 64x32 1bpp framebufferiin
+;   gfx_sprite8_reset_all — Tyhjennä kaikki 16 sprite-slotia
+;   gfx_sprite8_set_bitmap — Aseta 8x8 spritebitmapin osoite
+;   gfx_sprite8_set_pos — Aseta spriten sijainti [x, y]
+;   gfx_sprite8_set_draw_mode — Aseta spritepiirtotapa 0/1/XOR
+;   gfx_sprite8_set_visible — Aseta spriten näkyvyys 0/1
+;   gfx_sprite8_set_collision_check — Aseta törmäystarkistus 0/1
+;   gfx_sprite8_get_collision — Lue viimeisin bounding box -törmäystulos
+;   gfx_sprite8_update_collisions — Päivitä spritejen 8x8 bounding box -törmäykset
 ;
 ; PIIRTOTILAT (gfx_set_draw_mode:n R0-arvo):
 ;   GFX_DRAW_XOR (0) — XOR-tila: vaihtaa pikselin tilaa (oletus)
@@ -99,6 +106,11 @@
 .const GFX_DRAW_XOR, 0     ; XOR-tila: vaihtaa pikselin tilaa (oletus)
 .const GFX_DRAW_FG,  1     ; Etuväri:   asettaa pikselin päälle
 .const GFX_DRAW_BG,  2     ; Taustaväri: nollaa pikselin
+.const GFX_SPRITE8_COUNT, 16
+.const GFX_SPRITE8_SIZE, 8
+.const GFX_SPRITE_DRAW_0,   0
+.const GFX_SPRITE_DRAW_1,   1
+.const GFX_SPRITE_DRAW_XOR, 2
 .const GFX_SCROLL_DIR_UP,    0
 .const GFX_SCROLL_DIR_DOWN,  1
 .const GFX_SCROLL_DIR_LEFT,  2
@@ -119,6 +131,28 @@ gfx_draw_mode:
         .db  0
 gfx_flip_enabled:
         .db  1
+gfx_sprite8_x:
+        .dw 0, 0, 0, 0, 0, 0, 0, 0
+        .dw 0, 0, 0, 0, 0, 0, 0, 0
+gfx_sprite8_y:
+        .dw 0, 0, 0, 0, 0, 0, 0, 0
+        .dw 0, 0, 0, 0, 0, 0, 0, 0
+gfx_sprite8_bitmap:
+        .dw 0, 0, 0, 0, 0, 0, 0, 0
+        .dw 0, 0, 0, 0, 0, 0, 0, 0
+gfx_sprite8_draw_mode:
+        .dw 1, 1, 1, 1, 1, 1, 1, 1
+        .dw 1, 1, 1, 1, 1, 1, 1, 1
+gfx_sprite8_visible:
+        .dw 0, 0, 0, 0, 0, 0, 0, 0
+        .dw 0, 0, 0, 0, 0, 0, 0, 0
+gfx_sprite8_collision_check:
+        .dw 0, 0, 0, 0, 0, 0, 0, 0
+        .dw 0, 0, 0, 0, 0, 0, 0, 0
+gfx_sprite8_collision_flag:
+        .dw 0, 0, 0, 0, 0, 0, 0, 0
+        .dw 0, 0, 0, 0, 0, 0, 0, 0
+gfx_sprite8_data_end:
 
 ; =============================================================================
 ; gfx_set_draw_mode — Aseta piirtotila
@@ -157,8 +191,9 @@ _gfx_sfe_off:
 ; Clobbers: R0
 ;
 ; Kirjoittaa GFX_FLIP_REG:iin (0xFF81) arvon 1, jolloin TUI renderöi
-; nykyisen VRAMin etupuskuriin ja päivittää näytön atomisesti. Rekisteri
-; nollataan automaattisesti flipin jälkeen.
+; nykyisen VRAMin etupuskuriin ja päivittää näytön atomisesti. Ennen flipiä
+; näkyvät 8x8-spritet piirretään taustapuskuriin slot-järjestyksessä 0..15.
+; Rekisteri nollataan automaattisesti flipin jälkeen.
 ;
 ; Kutsu tämä kun koko kehys on piirretty (gfx_clear + piirtokäskyt).
 ; Ei vaikutusta tekstitilassa A — kaksoisbufferointi on vain tiloissa B ja C.
@@ -169,6 +204,7 @@ gfx_flip:
         READ  R0, 0
         CMP   R1, R0
         JZ    _gfx_flip_done
+        CALL  _gfx_sprite8_render_all
         READ  R0, 1
         STORE [GFX_FLIP_REG], R0
 _gfx_flip_done:
@@ -1483,84 +1519,500 @@ _gdt_done:
         RET
 
 ; =============================================================================
-; gfx_sprite_xor_1bpp_64x32 — XOR-piirto 64x32 1bpp framebufferiin
+; _gfx_sprite8_bbox_overlap — 8x8 bounding box -tormaystesti
 ;
-; Sisään:  R0 = fb_base (64x32, 1 sana / pikseli)
-;          R1 = x (0..63)
-;          R2 = y (0..31)
-;          R3 = sprite_ptr (N tavua / sanaa)
-;          R4 = N (rivikorkeus)
-; Ulos:    R0 = collision (0/1)
-; Clobbers: R0–R12
+; Sisään:  R0 = ax, R1 = ay, R2 = bx, R3 = by
+; Ulos:    R0 = 1 jos overlap, muuten 0
+; Clobbers: R4–R6
 ; =============================================================================
 
-gfx_sprite_xor_1bpp_64x32:
-        CPY   R12, R0                 ; fb base
-        READ  R10, 0x003F
-        AND   R1, R10
-        READ  R10, 0x001F
-        AND   R2, R10
-        READ  R0, 0                   ; collision = 0
-
-        READ  R9, 0                   ; row index
-_gcs_row:
-        CMP   R9, R4
-        JGE   _gcs_done
-
-        READ  R8, [R3]                ; sprite byte
-        READ  R11, 1
-        ADD   R3, R11
-
-        CPY   R7, R2
-        ADD   R7, R9
-        READ  R10, 0x001F
-        AND   R7, R10                 ; sy
-
-        READ  R6, 0                   ; bit index
-_gcs_bit:
-        READ  R10, 8
-        CMP   R6, R10
-        JGE   _gcs_next_row
-
-        READ  R10, 0x0080
-        SHR   R10, R6
-        CPY   R5, R8
-        AND   R5, R10
-        READ  R10, 0
-        CMP   R5, R10
-        JZ    _gcs_inc_bit
+_gfx_sprite8_bbox_overlap:
+        READ  R4, GFX_SPRITE8_SIZE
+        CPY   R5, R0
+        ADD   R5, R4
+        CPY   R6, R2
+        ADD   R6, R4
+        CMP   R5, R2
+        JLE   _gs8bo_no
+        CMP   R6, R0
+        JLE   _gs8bo_no
 
         CPY   R5, R1
-        ADD   R5, R6
-        READ  R10, 0x003F
-        AND   R5, R10                 ; sx
+        ADD   R5, R4
+        CPY   R6, R3
+        ADD   R6, R4
+        CMP   R5, R3
+        JLE   _gs8bo_no
+        CMP   R6, R1
+        JLE   _gs8bo_no
+        READ  R0, 1
+        RET
+_gs8bo_no:
+        READ  R0, 0
+        RET
 
-        CPY   R10, R7
-        READ  R11, 6
-        SHL   R10, R11
-        ADD   R10, R5
-        ADD   R10, R12                ; addr
+; =============================================================================
+; _gfx_sprite8_draw_one — Piirrä yksi 8x8 sprite nykyisellä piirtotilalla
+;
+; Sisään:  R0 = x, R1 = y, R2 = bitmap_ptr
+; Ulos:    —
+; Clobbers: R0–R9
+; =============================================================================
 
-        READ  R11, [R10]
-        READ  R5, 1
-        CMP   R11, R5
-        JNZ   _gcs_xor
-        READ  R0, 1                   ; collision = 1
+_gfx_sprite8_draw_one:
+        PUSH  R3
+        PUSH  R4
+        PUSH  R5
+        PUSH  R6
+        PUSH  R7
+        PUSH  R8
+        PUSH  R9
 
-_gcs_xor:
-        READ  R5, 1
-        XOR   R11, R5
-        STORE [R10], R11
+        CPY   R7, R0
+        CPY   R8, R1
+        CPY   R9, R2
+        READ  R6, 0
+_gs8do_row:
+        READ  R0, GFX_SPRITE8_SIZE
+        CMP   R6, R0
+        JGE   _gs8do_done
 
-_gcs_inc_bit:
-        READ  R10, 1
-        ADD   R6, R10
-        JUMP  _gcs_bit
+        READ  R5, [R9]
+        READ  R0, 1
+        ADD   R9, R0
 
-_gcs_next_row:
-        READ  R10, 1
-        ADD   R9, R10
-        JUMP  _gcs_row
+        READ  R4, 0
+_gs8do_bit:
+        READ  R0, GFX_SPRITE8_SIZE
+        CMP   R4, R0
+        JGE   _gs8do_next_row
 
-_gcs_done:
+        READ  R0, 0x0080
+        SHR   R0, R4
+        CPY   R3, R5
+        AND   R3, R0
+        READ  R0, 0
+        CMP   R3, R0
+        JZ    _gs8do_inc_bit
+
+        CPY   R0, R7
+        ADD   R0, R4
+        CPY   R1, R8
+        ADD   R1, R6
+        PUSH  R4
+        PUSH  R5
+        PUSH  R6
+        PUSH  R7
+        PUSH  R8
+        PUSH  R9
+        CALL  gfx_pixel
+        POP   R9
+        POP   R8
+        POP   R7
+        POP   R6
+        POP   R5
+        POP   R4
+
+_gs8do_inc_bit:
+        READ  R0, 1
+        ADD   R4, R0
+        JUMP  _gs8do_bit
+
+_gs8do_next_row:
+        READ  R0, 1
+        ADD   R6, R0
+        JUMP  _gs8do_row
+
+_gs8do_done:
+        POP   R9
+        POP   R8
+        POP   R7
+        POP   R6
+        POP   R5
+        POP   R4
+        POP   R3
+        RET
+
+; =============================================================================
+; _gfx_sprite8_map_draw_mode — Muunna spritepiirtotapa gfx_draw_mode-arvoksi
+;
+; Sisään:  R0 = GFX_SPRITE_DRAW_0 / _1 / _XOR
+; Ulos:    R0 = GFX_DRAW_BG / _FG / _XOR
+; Clobbers: R1
+; =============================================================================
+
+_gfx_sprite8_map_draw_mode:
+        READ  R1, GFX_SPRITE_DRAW_1
+        CMP   R0, R1
+        JZ    _gs8md_fg
+        READ  R1, GFX_SPRITE_DRAW_XOR
+        CMP   R0, R1
+        JZ    _gs8md_xor
+        READ  R0, GFX_DRAW_BG
+        RET
+_gs8md_fg:
+        READ  R0, GFX_DRAW_FG
+        RET
+_gs8md_xor:
+        READ  R0, GFX_DRAW_XOR
+        RET
+
+; =============================================================================
+; gfx_sprite8_reset_all — Tyhjennä kaikki 16 sprite-slotia
+;
+; Sisään:  —
+; Ulos:    —
+; Clobbers: R0–R2
+; =============================================================================
+
+gfx_sprite8_reset_all:
+        READ  R0, gfx_sprite8_x
+        READ  R1, gfx_sprite8_data_end
+        READ  R2, 1
+        SUB   R1, R2
+        READ  R2, 0
+        FILL  R0, R1, R2
+
+        READ  R0, gfx_sprite8_draw_mode
+        READ  R1, gfx_sprite8_visible
+        READ  R2, 1
+        SUB   R1, R2
+        READ  R2, GFX_SPRITE_DRAW_1
+        FILL  R0, R1, R2
+        RET
+
+; =============================================================================
+; gfx_sprite8_set_bitmap — Aseta 8x8 spritebitmapin osoite
+;
+; Sisään:  R0 = sprite idx (0..15), R1 = bitmap_ptr
+; Ulos:    —
+; Clobbers: R2
+; =============================================================================
+
+gfx_sprite8_set_bitmap:
+        READ  R2, GFX_SPRITE8_COUNT
+        CMP   R0, R2
+        JGE   _gs8sb_done
+        READ  R2, gfx_sprite8_bitmap
+        ADD   R2, R0
+        STORE [R2], R1
+_gs8sb_done:
+        RET
+
+; =============================================================================
+; gfx_sprite8_set_pos — Aseta spriten sijainti [x, y]
+;
+; Sisään:  R0 = sprite idx (0..15), R1 = x, R2 = y
+; Ulos:    —
+; Clobbers: R3
+; =============================================================================
+
+gfx_sprite8_set_pos:
+        READ  R3, GFX_SPRITE8_COUNT
+        CMP   R0, R3
+        JGE   _gs8sp_done
+        READ  R3, gfx_sprite8_x
+        ADD   R3, R0
+        STORE [R3], R1
+        READ  R3, gfx_sprite8_y
+        ADD   R3, R0
+        STORE [R3], R2
+_gs8sp_done:
+        RET
+
+; =============================================================================
+; gfx_sprite8_set_draw_mode — Aseta spritepiirtotapa 0/1/XOR
+;
+; Sisään:  R0 = sprite idx (0..15), R1 = GFX_SPRITE_DRAW_0 / _1 / _XOR
+; Ulos:    —
+; Clobbers: R2
+; =============================================================================
+
+gfx_sprite8_set_draw_mode:
+        READ  R2, GFX_SPRITE8_COUNT
+        CMP   R0, R2
+        JGE   _gs8sd_done
+        READ  R2, GFX_SPRITE_DRAW_1
+        CMP   R1, R2
+        JZ    _gs8sd_store
+        READ  R2, GFX_SPRITE_DRAW_XOR
+        CMP   R1, R2
+        JZ    _gs8sd_store
+        READ  R1, GFX_SPRITE_DRAW_0
+_gs8sd_store:
+        READ  R2, gfx_sprite8_draw_mode
+        ADD   R2, R0
+        STORE [R2], R1
+_gs8sd_done:
+        RET
+
+; =============================================================================
+; gfx_sprite8_set_visible — Aseta spriten näkyvyys 0/1
+;
+; Sisään:  R0 = sprite idx (0..15), R1 = 0/1
+; Ulos:    —
+; Clobbers: R2
+; =============================================================================
+
+gfx_sprite8_set_visible:
+        READ  R2, GFX_SPRITE8_COUNT
+        CMP   R0, R2
+        JGE   _gs8sv_done
+        READ  R2, 0
+        CMP   R1, R2
+        JZ    _gs8sv_store
+        READ  R1, 1
+_gs8sv_store:
+        READ  R2, gfx_sprite8_visible
+        ADD   R2, R0
+        STORE [R2], R1
+_gs8sv_done:
+        RET
+
+; =============================================================================
+; gfx_sprite8_set_collision_check — Aseta bounding box -törmäystarkistus 0/1
+;
+; Sisään:  R0 = sprite idx (0..15), R1 = 0/1
+; Ulos:    —
+; Clobbers: R2
+; =============================================================================
+
+gfx_sprite8_set_collision_check:
+        READ  R2, GFX_SPRITE8_COUNT
+        CMP   R0, R2
+        JGE   _gs8sc_done
+        READ  R2, 0
+        CMP   R1, R2
+        JZ    _gs8sc_store
+        READ  R1, 1
+_gs8sc_store:
+        READ  R2, gfx_sprite8_collision_check
+        ADD   R2, R0
+        STORE [R2], R1
+_gs8sc_done:
+        RET
+
+; =============================================================================
+; gfx_sprite8_get_collision — Lue viimeisin bounding box -törmäystulos
+;
+; Sisään:  R0 = sprite idx (0..15)
+; Ulos:    R0 = 0/1
+; Clobbers: R1
+; =============================================================================
+
+gfx_sprite8_get_collision:
+        READ  R1, GFX_SPRITE8_COUNT
+        CMP   R0, R1
+        JGE   _gs8gc_zero
+        READ  R1, gfx_sprite8_collision_flag
+        ADD   R1, R0
+        READ  R0, [R1]
+        RET
+_gs8gc_zero:
+        READ  R0, 0
+        RET
+
+; =============================================================================
+; gfx_sprite8_update_collisions — Päivitä kaikki 8x8 bounding box -törmäykset
+;
+; Sisään:  —
+; Ulos:    —
+; Clobbers: R0–R13
+; =============================================================================
+
+gfx_sprite8_update_collisions:
+        READ  R0, gfx_sprite8_collision_flag
+        READ  R1, gfx_sprite8_collision_flag
+        READ  R2, GFX_SPRITE8_COUNT
+        ADD   R1, R2
+        READ  R2, 1
+        SUB   R1, R2
+        READ  R2, 0
+        FILL  R0, R1, R2
+
+        READ  R13, 0
+_gs8uc_outer:
+        READ  R0, GFX_SPRITE8_COUNT
+        CMP   R13, R0
+        JGE   _gs8uc_done
+
+        READ  R0, gfx_sprite8_visible
+        ADD   R0, R13
+        READ  R1, [R0]
+        READ  R0, 0
+        CMP   R1, R0
+        JZ    _gs8uc_next_i
+
+        READ  R0, gfx_sprite8_collision_check
+        ADD   R0, R13
+        READ  R1, [R0]
+        READ  R0, 0
+        CMP   R1, R0
+        JZ    _gs8uc_next_i
+
+        READ  R0, gfx_sprite8_bitmap
+        ADD   R0, R13
+        READ  R1, [R0]
+        READ  R0, 0
+        CMP   R1, R0
+        JZ    _gs8uc_next_i
+
+        READ  R0, gfx_sprite8_x
+        ADD   R0, R13
+        READ  R10, [R0]
+        READ  R0, gfx_sprite8_y
+        ADD   R0, R13
+        READ  R11, [R0]
+
+        CPY   R12, R13
+        READ  R0, 1
+        ADD   R12, R0
+_gs8uc_inner:
+        READ  R0, GFX_SPRITE8_COUNT
+        CMP   R12, R0
+        JGE   _gs8uc_next_i
+
+        READ  R0, gfx_sprite8_visible
+        ADD   R0, R12
+        READ  R1, [R0]
+        READ  R0, 0
+        CMP   R1, R0
+        JZ    _gs8uc_next_j
+
+        READ  R0, gfx_sprite8_collision_check
+        ADD   R0, R12
+        READ  R1, [R0]
+        READ  R0, 0
+        CMP   R1, R0
+        JZ    _gs8uc_next_j
+
+        READ  R0, gfx_sprite8_bitmap
+        ADD   R0, R12
+        READ  R1, [R0]
+        READ  R0, 0
+        CMP   R1, R0
+        JZ    _gs8uc_next_j
+
+        READ  R0, gfx_sprite8_x
+        ADD   R0, R12
+        READ  R2, [R0]
+        READ  R0, gfx_sprite8_y
+        ADD   R0, R12
+        READ  R3, [R0]
+        CPY   R0, R10
+        CPY   R1, R11
+        CALL  _gfx_sprite8_bbox_overlap
+        READ  R1, 0
+        CMP   R0, R1
+        JZ    _gs8uc_next_j
+
+        READ  R0, gfx_sprite8_collision_flag
+        ADD   R0, R13
+        READ  R1, 1
+        STORE [R0], R1
+        READ  R0, gfx_sprite8_collision_flag
+        ADD   R0, R12
+        STORE [R0], R1
+
+_gs8uc_next_j:
+        READ  R0, 1
+        ADD   R12, R0
+        JUMP  _gs8uc_inner
+
+_gs8uc_next_i:
+        READ  R0, 1
+        ADD   R13, R0
+        JUMP  _gs8uc_outer
+
+_gs8uc_done:
+        RET
+
+; =============================================================================
+; _gfx_sprite8_render_all — Renderöi näkyvät spritet slot-järjestyksessä 0..15
+;
+; Sisään:  —
+; Ulos:    —
+; Clobbers: R0
+; =============================================================================
+
+_gfx_sprite8_render_all:
+        PUSH  R1
+        PUSH  R2
+        PUSH  R3
+        PUSH  R4
+        PUSH  R5
+        PUSH  R6
+        PUSH  R7
+        PUSH  R8
+        PUSH  R9
+        PUSH  R10
+        PUSH  R11
+        PUSH  R12
+        PUSH  R13
+        PUSH  R14
+        PUSH  R15
+
+        READ  R14, [gfx_draw_mode]
+        CALL  gfx_sprite8_update_collisions
+
+        READ  R13, 0
+_gs8r_loop:
+        READ  R0, GFX_SPRITE8_COUNT
+        CMP   R13, R0
+        JGE   _gs8r_done
+
+        READ  R0, gfx_sprite8_visible
+        ADD   R0, R13
+        READ  R1, [R0]
+        READ  R0, 0
+        CMP   R1, R0
+        JZ    _gs8r_next
+
+        READ  R0, gfx_sprite8_bitmap
+        ADD   R0, R13
+        READ  R12, [R0]
+        READ  R0, 0
+        CMP   R12, R0
+        JZ    _gs8r_next
+
+        READ  R0, gfx_sprite8_x
+        ADD   R0, R13
+        READ  R10, [R0]
+        READ  R0, gfx_sprite8_y
+        ADD   R0, R13
+        READ  R11, [R0]
+
+        READ  R0, gfx_sprite8_draw_mode
+        ADD   R0, R13
+        READ  R0, [R0]
+        CALL  _gfx_sprite8_map_draw_mode
+        STORE [gfx_draw_mode], R0
+
+        CPY   R0, R10
+        CPY   R1, R11
+        CPY   R2, R12
+        CALL  _gfx_sprite8_draw_one
+
+_gs8r_next:
+        READ  R0, 1
+        ADD   R13, R0
+        JUMP  _gs8r_loop
+
+_gs8r_done:
+        STORE [gfx_draw_mode], R14
+        POP   R15
+        POP   R14
+        POP   R13
+        POP   R12
+        POP   R11
+        POP   R10
+        POP   R9
+        POP   R8
+        POP   R7
+        POP   R6
+        POP   R5
+        POP   R4
+        POP   R3
+        POP   R2
+        POP   R1
         RET
