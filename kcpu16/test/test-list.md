@@ -287,16 +287,18 @@ Jokainen testi kuvaa yhden toiminnon tai ominaisuuden ja käyttää `.expect_reg
 
 ## 19. Grafiikkakirjasto
 
-| Tiedosto                          | Kuvaus                                                      |
-| --------------------------------- | ----------------------------------------------------------- |
-| `test_gfx_scroll_up_b_slow.asm`   | `gfx_scroll_up` toimii 1 px siirrolla tilassa B.            |
-| `test_gfx_scroll_up_b_fast.asm`   | `gfx_scroll_up` fastpath toimii 2 px siirrolla tilassa B.   |
-| `test_gfx_scroll_up_c_slow.asm`   | `gfx_scroll_up` toimii 1 px siirrolla tilassa C.            |
-| `test_gfx_scroll_up_c_fast.asm`   | `gfx_scroll_up` fastpath toimii 4 px siirrolla tilassa C.   |
-| `test_gfx_scroll_down_b_slow.asm` | `gfx_scroll_down` toimii 1 px siirrolla tilassa B.          |
-| `test_gfx_scroll_down_b_fast.asm` | `gfx_scroll_down` fastpath toimii 2 px siirrolla tilassa B. |
-| `test_gfx_scroll_down_c_slow.asm` | `gfx_scroll_down` toimii 1 px siirrolla tilassa C.          |
-| `test_gfx_scroll_down_c_fast.asm` | `gfx_scroll_down` fastpath toimii 4 px siirrolla tilassa C. |
+| Tiedosto                            | Kuvaus                                                              |
+| ----------------------------------- | ------------------------------------------------------------------- |
+| `test_gfx_scroll_up_b_slow.asm`     | `gfx_scroll_up` toimii 1 px siirrolla tilassa B.                    |
+| `test_gfx_scroll_up_b_fast.asm`     | `gfx_scroll_up` fastpath toimii 2 px siirrolla tilassa B.           |
+| `test_gfx_scroll_up_c_slow.asm`     | `gfx_scroll_up` toimii 1 px siirrolla tilassa C.                    |
+| `test_gfx_scroll_up_c_fast.asm`     | `gfx_scroll_up` fastpath toimii 4 px siirrolla tilassa C.           |
+| `test_gfx_scroll_down_b_slow.asm`   | `gfx_scroll_down` toimii 1 px siirrolla tilassa B.                  |
+| `test_gfx_scroll_down_b_fast.asm`   | `gfx_scroll_down` fastpath toimii 2 px siirrolla tilassa B.         |
+| `test_gfx_scroll_down_c_slow.asm`   | `gfx_scroll_down` toimii 1 px siirrolla tilassa C.                  |
+| `test_gfx_scroll_down_c_fast.asm`   | `gfx_scroll_down` fastpath toimii 4 px siirrolla tilassa C.         |
+| `test_gfx_sprite8_collision.asm`    | `gfx_sprite8_update_collisions` asettaa ja nollaa flagit oikein.    |
+| `test_gfx_sprite8_render_order.asm` | `gfx_flip` renderöi näkyvät 8x8-spritet slot-järjestyksessä 0...15. |
 
 ---
 
@@ -330,6 +332,6 @@ Jokainen testi kuvaa yhden toiminnon tai ominaisuuden ja käyttää `.expect_reg
 | Tallennuslaite                       | 1       |
 | Satunnaislukugeneraattori            | 3       |
 | Assembler-direktiivit                | 6       |
-| Grafiikkakirjasto                    | 8       |
+| Grafiikkakirjasto                    | 10      |
 | Algoritmiesimerkit                   | 1       |
-| **Yhteensä**                         | **160** |
+| **Yhteensä**                         | **162** |
