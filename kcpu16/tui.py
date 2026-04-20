@@ -60,6 +60,7 @@ from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual import events
 from textual.message import Message
 from textual.screen import ModalScreen
+from textual.timer import Timer
 from textual.widget import Widget
 from textual.worker import get_current_worker
 from textual._work_decorator import work
@@ -110,6 +111,7 @@ from .tui_state import (
 
 # Poistaa Rich-markup-tagit (esim. [bold], [/red], [dim]) pelkään tekstiksi
 _RICH_MARKUP_RE = re.compile(r"\[/?[^\[\]]+?\]")
+_GAME_INPUT_HOLD_S = 0.12
 
 
 # ---------------------------------------------------------------------------
@@ -878,6 +880,8 @@ class KCPU16TUI(App[None], TUIRenderMixin, TUICommandsMixin):
         self._game_input_mode: bool = (
             False  # True = emulator gets keyboard; False = TUI gets shortcuts
         )
+        self._game_input_release_timers: dict[int, Timer] = {}
+        self._auto_enabled_game_input_file: Path | None = None
         self._kbd_dbg_last_key: str = "n/a"
         self._kbd_dbg_last_code: int | None = None
         self._kbd_dbg_forwarded_count: int = 0
@@ -1574,6 +1578,7 @@ class KCPU16TUI(App[None], TUIRenderMixin, TUICommandsMixin):
                 "[cyan]Game Input Mode: ENABLED (keyboard → emulator). Toggle with Ctrl+Space.[/cyan]"
             )
         else:
+            self._release_all_game_input_keys()
             cmd_input.disabled = False
             cmd_input.focus()
             self._log("[cyan]Game Input Mode: DISABLED (keyboard → TUI)[/cyan]")
@@ -1587,6 +1592,49 @@ class KCPU16TUI(App[None], TUIRenderMixin, TUICommandsMixin):
         self._kbd_dbg_forwarded_count += 1
         self._refresh_flags()
 
+    def _release_game_input_key(self, code: int) -> None:
+        """Vapauta ajastetusti pidetty emulaattorinäppäin."""
+        self._game_input_release_timers.pop(code, None)
+        if self.machine.keyboard is not None:
+            self.machine.keyboard.push_key_release(code)
+
+    def _release_all_game_input_keys(self) -> None:
+        """Tyhjennä kaikki TUI:n hallussa olevat emulaattorinäppäimet."""
+        if not self._game_input_release_timers:
+            return
+        active_codes = list(self._game_input_release_timers)
+        for timer in self._game_input_release_timers.values():
+            timer.stop()
+        self._game_input_release_timers.clear()
+        if self.machine.keyboard is not None:
+            for code in active_codes:
+                self.machine.keyboard.push_key_release(code)
+
+    def _forward_game_input_key(self, key_label: str, code: int) -> None:
+        """Välitä näppäin emulaattorille ja pidä sitä hetki alhaalla."""
+        if self.machine.keyboard is None:
+            return
+        active_timer = self._game_input_release_timers.pop(code, None)
+        if active_timer is not None:
+            active_timer.stop()
+        self.machine.keyboard.push_key(code)
+        self._game_input_release_timers[code] = self.set_timer(
+            _GAME_INPUT_HOLD_S,
+            lambda code=code: self._release_game_input_key(code),
+            name=f"game-input-release-{code}",
+        )
+        self._record_kbd_forward(key_label, code)
+
+    def _is_chip8_program_loaded(self) -> bool:
+        """Tunnista CHIP-8 emulaattorin lähdekoodi auto-inputia varten."""
+        if self.current_file is None:
+            return False
+        try:
+            chip8_dir = (self.code_dir / "chip-8").resolve()
+            return self.current_file.resolve().is_relative_to(chip8_dir)
+        except Exception:
+            return False
+
     def on_key(self, event) -> None:
         """Välitä näppäinpainallukset emulaattorille tai TUI:lle.
 
@@ -1598,8 +1646,8 @@ class KCPU16TUI(App[None], TUIRenderMixin, TUICommandsMixin):
           ajomoodeissa (fast, max, slow, step) kun _game_input_mode=True.
         - TUI mode: näppäinpainallukset käytetään TUI:n pikakomentoihin.
 
-        Terminaali ei tue näppäimennostotapahtumia, joten painallus ja
-        vapautus lähetetään peräkkäin samasta tapahtumasta.
+                Terminaali ei tue näppäimennostotapahtumia, joten TUI simuloi
+                lyhyen painalluksen ajastetulla vapautuksella.
         """
         # Ctrl+Space is handled by Textual binding (single source of truth).
         if event.key == "ctrl+space":
@@ -1619,24 +1667,25 @@ class KCPU16TUI(App[None], TUIRenderMixin, TUICommandsMixin):
                 "enter": 13,  # CR
                 "backspace": 8,  # BS
                 "tab": 9,  # HT
+                "up": ord("w"),
+                "left": ord("a"),
+                "down": ord("s"),
+                "right": ord("d"),
             }
 
             key_name = event.key.lower()
             if key_name in special_ascii:
                 code = special_ascii[key_name]
-                self.machine.keyboard.push_key(code)
-                self.machine.keyboard.push_key_release(code)
-                self._record_kbd_forward(key_name, code)
+                self._forward_game_input_key(key_name, code)
                 event.stop()
                 return
 
             char = event.character
             if char is not None and len(char) == 1:
-                code = ord(char)
+                normalized = char.lower() if "A" <= char <= "Z" else char
+                code = ord(normalized)
                 if 32 <= code <= 126:  # printable ASCII
-                    self.machine.keyboard.push_key(code)
-                    self.machine.keyboard.push_key_release(code)
-                    self._record_kbd_forward(repr(char), code)
+                    self._forward_game_input_key(repr(normalized), code)
                     event.stop()
                     return
 
@@ -1725,7 +1774,9 @@ class KCPU16TUI(App[None], TUIRenderMixin, TUICommandsMixin):
             self._log(f"[dim]Load 3/3: assembling [bold]{path}[/bold][/dim]")
             self._update_program_title()
             if self._do_assemble():
-                self._log(f"[green]Load complete: [bold]{path}[/bold] is ready to run.[/green]")
+                self._log(
+                    f"[green]Load complete: [bold]{path}[/bold] is ready to run.[/green]"
+                )
                 return True
             self._log(
                 "[red]Load incomplete: source file is selected, but assembly failed so the program cannot run.[/red]"
@@ -1781,6 +1832,7 @@ class KCPU16TUI(App[None], TUIRenderMixin, TUICommandsMixin):
                     self.assembler.build_boot_block_words(source_path=self.current_file)
                 )
             self._log("[dim]Assemble: resetting machine and loading segments[/dim]")
+            self._release_all_game_input_keys()
             self.machine.cold_reset()
             self.machine.load_segments(segments)
             self.is_assembled = True
@@ -1877,6 +1929,11 @@ class KCPU16TUI(App[None], TUIRenderMixin, TUICommandsMixin):
             self._update_run_mode_ui()
             self._update_program_title()
             self._refresh_all(include_screen=True, force_screen=True)
+            if self._is_chip8_program_loaded():
+                if self._auto_enabled_game_input_file != self.current_file:
+                    if not self._game_input_mode:
+                        self.action_toggle_game_input()
+                    self._auto_enabled_game_input_file = self.current_file
             return True
         except Exception as e:
             self._log(f"[red]Assembly error: {e}[/red]")
@@ -2174,9 +2231,11 @@ class KCPU16TUI(App[None], TUIRenderMixin, TUICommandsMixin):
 
                     if self.dbg.breakpoints:
                         try:
-                            batch_cycles, stop_reason = cpu.run_until_breakpoint_or_cycles(
-                                max_cycles=BATCH,
-                                breakpoints=self.dbg.breakpoints,
+                            batch_cycles, stop_reason = (
+                                cpu.run_until_breakpoint_or_cycles(
+                                    max_cycles=BATCH,
+                                    breakpoints=self.dbg.breakpoints,
+                                )
                             )
                         except Exception as exc:
                             self.call_from_thread(self._show_cpu_crash, exc)
@@ -2191,9 +2250,11 @@ class KCPU16TUI(App[None], TUIRenderMixin, TUICommandsMixin):
                             return
                     else:
                         try:
-                            batch_cycles, _stop_reason = cpu.run_until_breakpoint_or_cycles(
-                                max_cycles=BATCH,
-                                breakpoints=None,
+                            batch_cycles, _stop_reason = (
+                                cpu.run_until_breakpoint_or_cycles(
+                                    max_cycles=BATCH,
+                                    breakpoints=None,
+                                )
                             )
                         except Exception as exc:
                             self.call_from_thread(self._show_cpu_crash, exc)

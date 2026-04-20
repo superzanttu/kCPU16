@@ -88,6 +88,11 @@ class KeyboardDevice:
         self._queue: deque[int] = deque()
         self._pending_interrupts: int = 0  # Odottavien keskeytysten laskuri
 
+    def reset(self) -> None:
+        """Tyhjenna nappainjono ja odottavat keskeytykset."""
+        self._queue.clear()
+        self._pending_interrupts = 0
+
     def push_key(self, key_code: int) -> None:
         """
         Lisaa nappainpainallus jonoon ja aseta keskeytyslippu.

@@ -52,9 +52,9 @@ chip8_v:
         .db 0, 0, 0, 0, 0, 0, 0, 0
         .db 0, 0, 0, 0, 0, 0, 0, 0
 chip8_i:
-        .db 0
+        .dw 0
 chip8_pc:
-        .db 0x0200
+        .dw 0x0200
 chip8_sp:
         .db 0
 chip8_dt:
@@ -62,9 +62,9 @@ chip8_dt:
 chip8_st:
         .db 0
 chip8_keymask:
-        .db 0
+        .dw 0
 chip8_wait_vx:
-        .db 0xFFFF      ; 0..15 = odottaa tähän VX:ään, 0xFFFF = ei odotusta
+        .dw 0xFFFF      ; 0..15 = odottaa tähän VX:ään, 0xFFFF = ei odotusta
 chip8_last_key:
         .db 0
 chip8_rpl:
@@ -73,11 +73,11 @@ chip8_sprite_tmp:
         .db 0, 0, 0, 0, 0, 0, 0, 0
         .db 0, 0, 0, 0, 0, 0, 0, 0
 chip8_boot_text:
-        .dstr "CHIP-8 booted"
+        .dstr "CHIP-8 EMULATOR"
 
 chip8_stack:
-        .db 0, 0, 0, 0, 0, 0, 0, 0
-        .db 0, 0, 0, 0, 0, 0, 0, 0
+        .dw 0, 0, 0, 0, 0, 0, 0, 0
+        .dw 0, 0, 0, 0, 0, 0, 0, 0
 
 chip8_font:
         .db 0xF0, 0x90, 0x90, 0x90, 0xF0
@@ -443,37 +443,39 @@ kbd_handler:
 
         READ  R3, KEYMAP
         ADD   R3, R2
-        READ  R3, [R3]                   ; R3 = key 0..15 tai 0xFF
+        READ  R2, [R3]                   ; R2 = key 0..15 tai 0xFF
         READ  R0, 0xFF
-        CMP   R3, R0
+        CMP   R2, R0
         JZ    kbd_done
 
-        READ  R2, 1
-        SHL   R2, R3                     ; R2 = 1 << key
-
-        READ  R0, [chip8_keymask]
         READ  R3, 0
         CMP   R1, R3
         JNZ   kbd_release
 
-        OR    R0, R2                     ; press
+        READ  R3, 1
+        SHL   R3, R2                     ; R3 = 1 << key
+        READ  R0, [chip8_keymask]
+        OR    R0, R3                     ; press
         STORE [chip8_keymask], R0
-        STORE [chip8_last_key], R3
+        STORE [chip8_last_key], R2
 
         READ  R0, [chip8_wait_vx]
-        READ  R3, 0xFFFF
-        CMP   R0, R3
+        READ  R1, 0xFFFF
+        CMP   R0, R1
         JZ    kbd_done
 
         READ  R1, chip8_v
         ADD   R1, R0                     ; &V[wait_vx]
-        STORE [R1], R3
+        STORE [R1], R2
         STORE [chip8_wait_vx], 0xFFFF
         JUMP  kbd_done
 
 kbd_release:
-        NOT   R2
-        AND   R0, R2                     ; clear bit
+        READ  R3, 1
+        SHL   R3, R2                     ; R3 = 1 << key
+        READ  R0, [chip8_keymask]
+        NOT   R3
+        AND   R0, R3                     ; clear bit
         STORE [chip8_keymask], R0
 
 kbd_done:
@@ -1268,8 +1270,8 @@ emu_fetch:
 
         ; PC += 2
         READ  R0, [chip8_pc]
-        READ  R2, 2
-        ADD   R0, R2
+        READ  R4, 2
+        ADD   R0, R4
         READ  R1, 0x0FFF
         AND   R0, R1
         STORE [chip8_pc], R0

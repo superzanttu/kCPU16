@@ -113,7 +113,7 @@ SR on 16-bittinen, josta bitit 0–5 ovat käytössä.
 | $0022         | 1 sana       | Satunnaisluku MMIO (RAND_MMIO, LFSR)                        |
 | $0023 – $00FF | 221 sanaa    | Käyttöjärjestelmän varattu alue                             |
 | $0100 – $01FF | 256 sanaa    | Bootloaderin latausalue                                     |
-| $0200 – $F7FF | 62 464 sanaa | Vapaa RAM (ohjelmat ja data)                                |
+| $0200 – $F7FF | 62 976 sanaa | Vapaa RAM (ohjelmat ja data)                                |
 | $F800 – $FF7F | 1920 sanaa   | Video RAM (80 × 24, MMIO)                                   |
 | $FF80 – $FFFF | 128 sanaa    | Kernel Stack                                                |
 

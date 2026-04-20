@@ -24,6 +24,92 @@ from pathlib import Path
 from .assembler import Assembler
 
 
+def _format_word_count(words: int) -> str:
+    """Muotoile sanamäärä helposti luettavaan muotoon."""
+    return f"{words:,}".replace(",", " ")
+
+
+def _collect_emitted_addresses(segments: list[tuple[int, list[int]]]) -> set[int]:
+    """Palauta kaikkien segmenttien kirjoittamat yksilölliset osoitteet."""
+    addresses: set[int] = set()
+    for seg_start, words in segments:
+        for offset in range(len(words)):
+            addresses.add((seg_start + offset) & 0xFFFF)
+    return addresses
+
+
+def _print_memory_usage_summary(segments: list[tuple[int, list[int]]]) -> None:
+    """Tulosta assembled-ohjelman muistinkäytön yhteenveto."""
+    from .constants import (
+        BOOT_RAM_END,
+        BOOT_RAM_START,
+        KERNEL_STACK_END,
+        KERNEL_STACK_START,
+        VRAM_END,
+        VRAM_START,
+    )
+
+    addresses = _collect_emitted_addresses(segments)
+    total_emitted = len(addresses)
+
+    program_ram_start = BOOT_RAM_END + 1
+    program_ram_end = VRAM_START - 1
+    program_ram_words = program_ram_end - program_ram_start + 1
+
+    counts = {
+        "program": 0,
+        "system_reserved": 0,
+        "boot": 0,
+        "vram": 0,
+        "stack_mmio": 0,
+    }
+    for addr in addresses:
+        if program_ram_start <= addr <= program_ram_end:
+            counts["program"] += 1
+        elif BOOT_RAM_START <= addr <= BOOT_RAM_END:
+            counts["boot"] += 1
+        elif VRAM_START <= addr <= VRAM_END:
+            counts["vram"] += 1
+        elif KERNEL_STACK_START <= addr <= KERNEL_STACK_END:
+            counts["stack_mmio"] += 1
+        else:
+            counts["system_reserved"] += 1
+
+    free_program_ram = program_ram_words - counts["program"]
+
+    print("; Muistiraportti")
+    print(f";   Emittoidut sanat yhteensa: {_format_word_count(total_emitted)}")
+    print(
+        f";   Ohjelma-RAM (${program_ram_start:04X}-${program_ram_end:04X}): "
+        f"{_format_word_count(counts['program'])}/{_format_word_count(program_ram_words)} kaytetty, "
+        f"{_format_word_count(free_program_ram)} vapaana"
+    )
+
+    reserved_words = total_emitted - counts["program"]
+    if reserved_words:
+        print(
+            f";   Varatuille alueille sijoitettu: {_format_word_count(reserved_words)} sanaa"
+        )
+        if counts["system_reserved"]:
+            print(
+                f";     - jarjestelma/MMIO/varattu alaosoitealue: "
+                f"{_format_word_count(counts['system_reserved'])}"
+            )
+        if counts["boot"]:
+            print(
+                f";     - boot-alue (${BOOT_RAM_START:04X}-${BOOT_RAM_END:04X}): {_format_word_count(counts['boot'])}"
+            )
+        if counts["vram"]:
+            print(
+                f";     - VRAM (${VRAM_START:04X}-${VRAM_END:04X}): {_format_word_count(counts['vram'])}"
+            )
+        if counts["stack_mmio"]:
+            print(
+                f";     - kernel stack / yla-MMIO (${KERNEL_STACK_START:04X}-${KERNEL_STACK_END:04X}): "
+                f"{_format_word_count(counts['stack_mmio'])}"
+            )
+
+
 def build_parser() -> argparse.ArgumentParser:
     """Rakenna komentoriviargumenttien parseri."""
     parser = argparse.ArgumentParser(
@@ -185,6 +271,8 @@ def _print_asm(path: Path) -> int:
             i += 1 + operand_count
             pc += 1 + operand_count
         print()
+
+    _print_memory_usage_summary(segments)
 
     return 0
 
