@@ -80,6 +80,7 @@ kCPU16/
 │   │       └── storage.py
 │   ├── storage/
 │   │   ├── demo_boot.dsk
+│   │   ├── kdos.dsk
 │   │   ├── one.dsk
 │   │   └── zero.dsk
 │   └── test/
@@ -146,7 +147,6 @@ Muut alihakemistot:
 - kcpu16/devices/: yhteensopivuuswrapperit laitteille
 - kcpu16/storage/: levykuvat testaukseen
 - kcpu16/test/: regressiotestit (test_*.asm)
-- kcpu16/code/: paketin sisäinen koodihakemisto (tällä hetkellä tyhjä)
 
 ---
 
