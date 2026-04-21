@@ -12,13 +12,15 @@ Projektin koodista vähintään 99.999% on kirjoittanut Github Copilot.
 - **16-bittinen sana-osoitettu muisti** — 65 536 sanaa (0x0000–0xFFFF)
 - **Rekisterit** — R0–R15 (GPR), FP, SP, PC, SR, MPR, TMR, CTMR
 - **Tilarekisteri (SR)** — liput Z, N, C, V, I, P (Zero / Negative / Carry / Overflow / Interrupt / Privilege)
-- **Käskykanta** — 45 käskyä (tiedonsiirto, aritmetiikka, logiikka, pino, hyppykäskyt, keskeytykset, järjestelmä)
+- **Käskykanta** — 53 käskyä (tiedonsiirto, aritmetiikka, logiikka, pino, hyppykäskyt, keskeytykset, järjestelmä)
 - **Kolmipassinen assembler** — makrotuki (`.macro`/`.endmacro`), `.origin`-direktiivi, labelit
 - **Disassembler** — konekieli → assembly-teksti
 - **Muistisuojaus** — MPR-rekisteri rajoittaa User-tilan muistinkäyttöä
-- **Keskeytykset** — 9 vektoria (INT 0–8), ohjelmallinen INT-käsky ja laitteistokeskeytykset
+- **Keskeytykset** — 10 vektoria (INT 0–9), ohjelmallinen INT-käsky ja laitteistokeskeytykset
 - **Virtuaalinen tekstinäyttö** — 80 × 24 merkkiä, 8 edustusväriä (FG) + 8 taustaVäriä (BG), bold
+- **Grafiikkatilat** — tekstitila (A), puoliblokkipikseli 80×48 (B), braille 160×96 (C); kaksoisbufferointi ja scroll
 - **Näppäimistölaite** — MMIO-luku osoitteista `KBD_DATA` ($0020) ja `KBD_STATUS` ($0021)
+- **Satunnaislukugeneraattori** — MMIO-osoite `RAND_MMIO` ($0022), 16-bittinen Galois LFSR
 - **Tallennuslaite** — lohkopohjainen levylaite (DREAD/DWRITE, boot-lataus sektorilta 0)
 - **TUI-debuggeri** — Textual-pohjainen, ammattitason käyttöliittymä
 - **CLI** — komentorivi (`python main.py`)
@@ -37,14 +39,17 @@ kCPU16/
 │       └── tut/
 ├── kcpu16/
 │   ├── hardware/
-│   │   ├── cpu.py, memory.py, registers.py, machine.py
+│   │   ├── cpu.py, cpu_core.py, cpu_exec.py, cpu_memcheck.py, cpu_mmio.py
+│   │   ├── memory.py, registers.py, machine.py
 │   │   └── devices/
 │   │       ├── screen.py, keyboard.py, storage.py
 │   ├── assembler.py, disassembler.py
-│   ├── tui.py, cli.py, debugger.py, editor.py, specs.py
+│   ├── tui.py, tui_commands.py, tui_render.py, tui_state.py
+│   ├── cli.py, debugger.py, editor.py, specs.py
 │   ├── constants.py, exceptions.py, instruction.py, testrunner.py
 │   ├── cpu.py, memory.py, registers.py, machine.py     # yhteensopivuuswrapperit
 │   ├── devices/                                         # yhteensopivuuswrapperit
+│   ├── storage/                                         # levykuvat (.dsk)
 │   └── test/         # Automaattiset testit (.asm)
 └── docs/
     ├── architecture.md
