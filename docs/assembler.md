@@ -560,7 +560,7 @@ yhteenlasku:
 
 ---
 
-Kaikki esimerkkiohjelmat löytyvät hakemistosta `kcpu16/code/`.
+Kaikki esimerkkiohjelmat löytyvät hakemistosta `code/asm/`.
 
 ---
 

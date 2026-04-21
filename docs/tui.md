@@ -116,7 +116,7 @@ TUI:n syöttökentästä (`>`) voidaan antaa seuraavat komennot:
 python main.py
 
 # Lataa .asm-tiedosto suoraan avattuna
-python main.py kcpu16/code/fibonacci.asm
+python main.py code/asm/demo/algo_fibonacci.asm
 
 # Lataa .dsk-levykuva tallennuslaitteeseen
 python main.py --dsk levykuva.dsk
@@ -427,4 +427,3 @@ Ajanyksiköt ovat **simuloitua aikaa** (ks. architecture.md luku 12):
 - TMR: mikrosekunteja (µs). `STMR R` asettaa välin rekisterin arvona.
 - CTMR: millisekunteja (ms). `SCTMR R` asettaa välin rekisterin arvona.
 - Jäljellä oleva aika lasketaan `next_fire_time − simulated_time_us`.
-

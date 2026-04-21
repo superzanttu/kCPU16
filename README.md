@@ -10,7 +10,7 @@ Projektin koodista vähintään 99.999% on kirjoittanut Github Copilot.
 
 - **CPU-ydin** — Fetch → Privilege Check → Memory Check → Execute → PC Update -sykli
 - **16-bittinen sana-osoitettu muisti** — 65 536 sanaa (0x0000–0xFFFF)
-- **Rekisterit** — R0–R3 (GPR), FP, SP, PC, SR, MPR, TMR
+- **Rekisterit** — R0–R15 (GPR), FP, SP, PC, SR, MPR, TMR, CTMR
 - **Tilarekisteri (SR)** — liput Z, N, C, V, I, P (Zero / Negative / Carry / Overflow / Interrupt / Privilege)
 - **Käskykanta** — 45 käskyä (tiedonsiirto, aritmetiikka, logiikka, pino, hyppykäskyt, keskeytykset, järjestelmä)
 - **Kolmipassinen assembler** — makrotuki (`.macro`/`.endmacro`), `.origin`-direktiivi, labelit
@@ -28,6 +28,13 @@ Projektin koodista vähintään 99.999% on kirjoittanut Github Copilot.
 ```
 kCPU16/
 ├── main.py
+├── code/
+│   └── asm/
+│       ├── chip-8/
+│       ├── demo/
+│       ├── kdos/
+│       ├── lib/
+│       └── tut/
 ├── kcpu16/
 │   ├── hardware/
 │   │   ├── cpu.py, memory.py, registers.py, machine.py
@@ -38,13 +45,12 @@ kCPU16/
 │   ├── constants.py, exceptions.py, instruction.py, testrunner.py
 │   ├── cpu.py, memory.py, registers.py, machine.py     # yhteensopivuuswrapperit
 │   ├── devices/                                         # yhteensopivuuswrapperit
-│   ├── code/         # Esimerkkiohjelmat (.asm)
 │   └── test/         # Automaattiset testit (.asm)
 └── docs/
     ├── architecture.md
     ├── assembler.md
     ├── tui.md
-    └── PROJECT_STRUCTURE.md
+    └── project_structure.md
 ```
 
 ## Käynnistys
@@ -64,7 +70,7 @@ python main.py
 ### Lataa .asm-tiedosto TUI:hin käynnistettäessä
 
 ```bash
-python main.py kcpu16/code/fibonacci.asm
+python main.py code/asm/demo/algo_fibonacci.asm
 ```
 
 ### Lataa .dsk-levykuva tallennuslaitteeseen
@@ -86,55 +92,54 @@ python main.py --check ohjelma.asm
 | [docs/architecture.md](docs/architecture.md)           | CPU-arkkitehtuurispesifikaatio: rekisterit, muistikartta, ISA, keskeytykset |
 | [docs/assembler.md](docs/assembler.md)                 | Assembly-kielen syntaksi, direktiivit, arkkitehtuurivakiot, esimerkit       |
 | [docs/tui.md](docs/tui.md)                             | TUI-debuggerin asettelu, näppäinsidonnaisuudet ja komennot                  |
-| [docs/PROJECT_STRUCTURE.md](docs/PROJECT_STRUCTURE.md) | Projektin hakemistorakenne ja moduulien kuvaukset                           |
-| [doc/grafiikkatila.md](doc/grafiikkatila.md)           | Grafiikkatila: Textual-kirjaston mahdollisuudet ja suositeltu toteutus      |
+| [docs/project_structure.md](docs/project_structure.md) | Projektin hakemistorakenne ja moduulien kuvaukset                           |
+| [docs/plans/grafiikkatila.md](docs/plans/grafiikkatila.md) | Grafiikkatila: Textual-kirjaston mahdollisuudet ja suositeltu toteutus      |
 
 ## Esimerkkiohjelmat
 
 | Tiedosto                   | Kuvaus                                                     |
 | -------------------------- | ---------------------------------------------------------- |
-| `tut_arithmetic.asm`       | Peruslaskutoimitukset: (10+5)×3−3 = 42, kirjoitus VRAM:iin |
-| `tut_loop_countdown.asm`   | Silmukka ja laskuri alaspäin                               |
-| `tut_stack.asm`            | Pinokäskyjen demonstraatio (PUSH/POP/CALL/RET)             |
-| `tut_macros.asm`           | Makrojen käyttöesimerkki                                   |
-| `tut_vram_write.asm`       | Suora VRAM-kirjoitus, värit ja attribuutit                 |
-| `tut_vram_fill.asm`        | Tekstin täyttö koko näytölle VRAM:n kautta                 |
-| `tut_conditionals.asm`     | Ehdolliset hypyt (JZ/JNZ/JLT/JGT/JLE/JGE)                  |
-| `tut_bitops.asm`           | Bittioperaatiot (AND/OR/XOR/NOT/SHL/SHR)                   |
+| `tut/arithmetic.asm`       | Peruslaskutoimitukset: (10+5)×3−3 = 42, kirjoitus VRAM:iin |
+| `tut/loop_countdown.asm`   | Silmukka ja laskuri alaspäin                               |
+| `tut/stack.asm`            | Pinokäskyjen demonstraatio (PUSH/POP/CALL/RET)             |
+| `tut/macros.asm`           | Makrojen käyttöesimerkki                                   |
+| `tut/vram_write.asm`       | Suora VRAM-kirjoitus, värit ja attribuutit                 |
+| `tut/vram_fill.asm`        | Tekstin täyttö koko näytölle VRAM:n kautta                 |
+| `tut/conditionals.asm`     | Ehdolliset hypyt (JZ/JNZ/JLT/JGT/JLE/JGE)                  |
+| `tut/bitops.asm`           | Bittioperaatiot (AND/OR/XOR/NOT/SHL/SHR)                   |
 | `algo_factorial.asm`       | Kertoman laskenta aliohjelmalla (CALL/RET)                 |
 | `algo_fibonacci.asm`       | Fibonacci-lukujen laskenta iteratiivisesti                 |
 | `algo_gcd.asm`             | Eukleideen GCD-algoritmi                                   |
-| `demo_clock_text.asm`      | Päivämäärä + kellonaika tekstimuodossa                     |
-| `demo_clock_bigfont.asm`   | Iso pikselikello BIG-fontilla                              |
-| `demo_colors.asm`          | FG/BG-väriyhdistelmien visualisointi                       |
-| `demo_keyboard.asm`        | Interaktiivinen näppäimistödemo (INT 6)                    |
-| `demo_interrupt_timer.asm` | Ajastin- ja kellokeskeytysten demo (INT 7 + INT 9)         |
-| `demo_benchmark.asm`       | Suorituskykymittaus (CPU/RAM/levy)                         |
-| `lib_font_big.asm`         | BIG-fonttidata demoja varten                               |
+| `demo/clock_text.asm`      | Päivämäärä + kellonaika tekstimuodossa                     |
+| `demo/colors.asm`          | FG/BG-väriyhdistelmien visualisointi                       |
+| `demo/keyboard.asm`        | Interaktiivinen näppäimistödemo (INT 6)                    |
+| `demo/interrupt_timer.asm` | Ajastin- ja kellokeskeytysten demo (INT 7 + INT 9)         |
+| `demo/benchmark.asm`       | Suorituskykymittaus (CPU/RAM/levy)                         |
+| `demo/algo_fibonacci.asm`  | Fibonacci-lukujen laskenta demokansiosta                   |
+| `lib/lib-font_big.asm`     | BIG-fonttidata demoja varten                               |
 
 ### Suositeltu opintopolku (ajettava)
 
 Suorita ohjelmat tässä järjestyksessä:
 
-1. `python main.py kcpu16/code/tut_arithmetic.asm`
-2. `python main.py kcpu16/code/tut_loop_countdown.asm`
-3. `python main.py kcpu16/code/tut_stack.asm`
-4. `python main.py kcpu16/code/tut_macros.asm`
-5. `python main.py kcpu16/code/tut_vram_write.asm`
-6. `python main.py kcpu16/code/tut_vram_fill.asm`
-7. `python main.py kcpu16/code/tut_conditionals.asm`
-8. `python main.py kcpu16/code/tut_bitops.asm`
-9. `python main.py kcpu16/code/algo_factorial.asm`
-10. `python main.py kcpu16/code/algo_fibonacci.asm`
-11. `python main.py kcpu16/code/algo_gcd.asm`
-12. `python main.py kcpu16/code/demo_colors.asm`
-13. `python main.py kcpu16/code/demo_clock_text.asm`
-14. `python main.py kcpu16/code/demo_clock_bigfont.asm`
-15. `python main.py kcpu16/code/demo_interrupt_timer.asm`
-16. `python main.py kcpu16/code/demo_keyboard.asm`
-17. `python main.py kcpu16/code/demo_benchmark.asm`
+1. `python main.py code/asm/tut/arithmetic.asm`
+2. `python main.py code/asm/tut/loop_countdown.asm`
+3. `python main.py code/asm/tut/stack.asm`
+4. `python main.py code/asm/tut/macros.asm`
+5. `python main.py code/asm/tut/vram_write.asm`
+6. `python main.py code/asm/tut/vram_fill.asm`
+7. `python main.py code/asm/tut/conditionals.asm`
+8. `python main.py code/asm/tut/bitops.asm`
+9. `python main.py code/asm/demo/algo_factorial.asm`
+10. `python main.py code/asm/demo/algo_fibonacci.asm`
+11. `python main.py code/asm/demo/algo_gcd.asm`
+12. `python main.py code/asm/demo/colors.asm`
+13. `python main.py code/asm/demo/clock_text.asm`
+14. `python main.py code/asm/demo/interrupt_timer.asm`
+15. `python main.py code/asm/demo/keyboard.asm`
+16. `python main.py code/asm/demo/benchmark.asm`
 
-Vinkki: voit tarkistaa syntaksin ilman ajoa komennolla `python main.py --check kcpu16/code/tiedosto.asm`.
+Vinkki: voit tarkistaa syntaksin ilman ajoa komennolla `python main.py --check code/asm/tiedosto.asm`.
 
 ## Lisenssi
 
