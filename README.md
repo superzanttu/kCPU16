@@ -4,6 +4,8 @@ kCPU16 on täysimittainen 16-bittinen CPU-emulaattori, jossa on tekstipohjainen 
 Projekti sisältää oman assembly-kielen, assemblerin, disassemblerin, virtuaalikoneen sekä
 interaktiivisen Textual-pohjaisen käyttöliittymän.
 
+Projektin koodista vähintään 99.999% on kirjoittanut Github Copilot.
+
 ## Ominaisuudet
 
 - **CPU-ydin** — Fetch → Privilege Check → Memory Check → Execute → PC Update -sykli
